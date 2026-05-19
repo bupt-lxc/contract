@@ -45,6 +45,50 @@ def test_stale_lock_can_be_replaced(app_config):
     second.release()
 
 
+def test_stale_lock_replacement_does_not_delete_fresh_racing_lock(
+    app_config, monkeypatch
+):
+    stale_owner = LeaseLock(
+        app_config.lock_dir,
+        "sc:SC001",
+        "MACHINE1",
+        ttl_seconds=-1,
+    )
+    contender = LeaseLock(
+        app_config.lock_dir,
+        "sc:SC001",
+        "MACHINE2",
+        ttl_seconds=60,
+    )
+
+    stale_owner.acquire()
+
+    original_read_text = lock_service.Path.read_text
+    read_count = 0
+
+    def race_read_text(path, *args, **kwargs):
+        nonlocal read_count
+        if path == contender.path:
+            read_count += 1
+            if read_count == 2:
+                write_lock_file(
+                    contender.path,
+                    "sc:SC001",
+                    "MACHINE3",
+                    ttl_seconds=60,
+                )
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(lock_service.Path, "read_text", race_read_text)
+
+    with pytest.raises(LockError, match="Lock is busy: sc:SC001"):
+        contender.acquire()
+
+    payload = json.loads(contender.path.read_text(encoding="utf-8"))
+    assert payload["owner"] == "MACHINE3"
+    assert payload["token"] != contender.token
+
+
 def test_acquire_losing_exclusive_create_race_raises_lock_error(
     app_config, monkeypatch
 ):
@@ -70,3 +114,35 @@ def test_acquire_verifies_final_lock_token_before_returning(app_config, monkeypa
 
     with pytest.raises(LockError, match="Failed to acquire lock: sc:SC001"):
         lock.acquire()
+
+
+def test_renew_extends_owned_lock_expiry(app_config, monkeypatch):
+    lock = LeaseLock(app_config.lock_dir, "sc:SC001", "MACHINE1", ttl_seconds=30)
+    original_now = lock_service.now()
+    later = original_now + timedelta(seconds=10)
+
+    monkeypatch.setattr(lock_service, "now", lambda: original_now)
+    lock.acquire()
+    before = json.loads(lock.path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(lock_service, "now", lambda: later)
+    lock.renew()
+
+    after = json.loads(lock.path.read_text(encoding="utf-8"))
+    assert after["token"] == lock.token
+    assert after["heartbeat_at"] == later.isoformat()
+    assert after["expires_at"] == (later + timedelta(seconds=30)).isoformat()
+    assert after["expires_at"] > before["expires_at"]
+
+
+def test_renew_requires_current_token_and_unexpired_lock(app_config):
+    lock = LeaseLock(app_config.lock_dir, "sc:SC001", "MACHINE1", ttl_seconds=30)
+    write_lock_file(lock.path, "sc:SC001", "MACHINE2", ttl_seconds=60)
+
+    with pytest.raises(LockError, match="Cannot renew lock not owned"):
+        lock.renew()
+
+    write_lock_file(lock.path, "sc:SC001", "MACHINE1", token=lock.token, ttl_seconds=-1)
+
+    with pytest.raises(LockError, match="Cannot renew expired lock"):
+        lock.renew()

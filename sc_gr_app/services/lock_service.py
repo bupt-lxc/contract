@@ -32,14 +32,16 @@ class LeaseLock:
 
         for _ in range(3):
             if self.path.exists():
-                if not self._is_stale():
+                stale_payload = self._stale_payload()
+                if stale_payload is None:
                     raise LockError(f"Lock is busy: {self.name}")
-                self.path.unlink(missing_ok=True)
+                if not self._delete_stale_payload(stale_payload):
+                    raise LockError(f"Lock is busy: {self.name}")
 
             try:
                 self._write_exclusive(payload)
             except FileExistsError:
-                if self.path.exists() and not self._is_stale():
+                if self.path.exists() and self._stale_payload() is None:
                     raise LockError(f"Lock is busy: {self.name}")
                 continue
 
@@ -88,18 +90,67 @@ class LeaseLock:
             self.path.unlink(missing_ok=True)
 
     def _is_stale(self) -> bool:
+        return self._stale_payload() is not None
+
+    def _stale_payload(self) -> str | None:
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            raw_payload = self.path.read_text(encoding="utf-8")
+            payload = json.loads(raw_payload)
+        except OSError:
+            return ""
+        except json.JSONDecodeError:
+            return raw_payload
+
+        try:
             expires_at_raw = payload.get("expires_at")
             if not expires_at_raw:
-                return True
+                return raw_payload
             expires_at = datetime.fromisoformat(expires_at_raw)
             if expires_at.tzinfo is None:
-                return True
-        except (json.JSONDecodeError, OSError, ValueError, TypeError):
-            return True
+                return raw_payload
+        except (ValueError, TypeError):
+            return raw_payload
 
-        return expires_at <= now()
+        if expires_at <= now():
+            return raw_payload
+        return None
+
+    def _delete_stale_payload(self, stale_payload: str) -> bool:
+        try:
+            if self.path.read_text(encoding="utf-8") != stale_payload:
+                return False
+            self.path.unlink()
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        return True
+
+    def renew(self) -> None:
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise LockError(f"Cannot renew lock not owned: {self.name}") from None
+        except (json.JSONDecodeError, OSError):
+            raise LockError(f"Cannot renew lock not owned: {self.name}") from None
+
+        if payload.get("token") != self.token:
+            raise LockError(f"Cannot renew lock not owned: {self.name}")
+
+        expires_at_raw = payload.get("expires_at")
+        try:
+            expires_at = datetime.fromisoformat(expires_at_raw)
+        except (TypeError, ValueError):
+            raise LockError(f"Cannot renew expired lock: {self.name}") from None
+        if expires_at.tzinfo is None or expires_at <= now():
+            raise LockError(f"Cannot renew expired lock: {self.name}")
+
+        heartbeat_at = now()
+        payload["heartbeat_at"] = heartbeat_at.isoformat()
+        payload["expires_at"] = (
+            heartbeat_at + timedelta(seconds=self.ttl_seconds)
+        ).isoformat()
+        self.path.write_text(json.dumps(payload), encoding="utf-8")
 
     def __enter__(self) -> "LeaseLock":
         self.acquire()

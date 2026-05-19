@@ -1,13 +1,21 @@
+from decimal import Decimal
+
 from sc_gr_app.db.connection import connect
 from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import ConflictError, NotFound
 
 
-def _float_or_zero(value) -> float:
-    return float(value or 0)
+def _decimal_or_zero(value) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
 
 
-def compute_sc_budget(config: AppConfig, sc_id: str) -> dict[str, float]:
+def _decimal_budget_to_float(budget: dict[str, Decimal]) -> dict[str, float]:
+    return {key: float(value) for key, value in budget.items()}
+
+
+def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decimal]:
     with connect(config) as conn:
         sc = conn.execute(
             "select sc_amount from sc_records where sc_id = ?",
@@ -56,10 +64,10 @@ def compute_sc_budget(config: AppConfig, sc_id: str) -> dict[str, float]:
             (sc_id,),
         ).fetchone()
 
-    sc_amount = float(sc["sc_amount"])
-    sc_pending_total = _float_or_zero(gr_totals["pending_total"])
-    sc_con_value_total = _float_or_zero(gr_totals["con_value_total"])
-    allocated_po_amount = _float_or_zero(po_totals["allocated_po_amount"])
+    sc_amount = _decimal_or_zero(sc["sc_amount"])
+    sc_pending_total = _decimal_or_zero(gr_totals["pending_total"])
+    sc_con_value_total = _decimal_or_zero(gr_totals["con_value_total"])
+    allocated_po_amount = _decimal_or_zero(po_totals["allocated_po_amount"])
 
     return {
         "sc_amount": sc_amount,
@@ -71,7 +79,11 @@ def compute_sc_budget(config: AppConfig, sc_id: str) -> dict[str, float]:
     }
 
 
-def compute_po_budget(config: AppConfig, po_id: str) -> dict[str, float]:
+def compute_sc_budget(config: AppConfig, sc_id: str) -> dict[str, float]:
+    return _decimal_budget_to_float(compute_sc_budget_decimal(config, sc_id))
+
+
+def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decimal]:
     with connect(config) as conn:
         po = conn.execute(
             "select po_amount from pos where po_id = ?",
@@ -110,9 +122,9 @@ def compute_po_budget(config: AppConfig, po_id: str) -> dict[str, float]:
             (po_id,),
         ).fetchone()
 
-    po_amount = float(po["po_amount"])
-    po_pending_total = _float_or_zero(gr_totals["pending_total"])
-    po_con_value_total = _float_or_zero(gr_totals["con_value_total"])
+    po_amount = _decimal_or_zero(po["po_amount"])
+    po_pending_total = _decimal_or_zero(gr_totals["pending_total"])
+    po_con_value_total = _decimal_or_zero(gr_totals["con_value_total"])
 
     return {
         "po_amount": po_amount,
@@ -120,3 +132,7 @@ def compute_po_budget(config: AppConfig, po_id: str) -> dict[str, float]:
         "po_con_value_total": po_con_value_total,
         "open_po_amount": po_amount - po_pending_total - po_con_value_total,
     }
+
+
+def compute_po_budget(config: AppConfig, po_id: str) -> dict[str, float]:
+    return _decimal_budget_to_float(compute_po_budget_decimal(config, po_id))

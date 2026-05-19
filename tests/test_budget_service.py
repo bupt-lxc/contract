@@ -3,7 +3,12 @@ import pytest
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound
-from sc_gr_app.services.budget_service import compute_po_budget, compute_sc_budget
+from sc_gr_app.services.budget_service import (
+    compute_po_budget,
+    compute_po_budget_decimal,
+    compute_sc_budget,
+    compute_sc_budget_decimal,
+)
 
 
 TIMESTAMP = "2026-05-19T00:00:00+00:00"
@@ -388,3 +393,52 @@ def test_compute_sc_budget_counts_grs_once_across_multiple_pos(app_config):
         "allocated_po_amount": 1000.0,
         "unallocated_sc_amount": 0.0,
     }
+
+
+def test_decimal_sc_budget_uses_exact_decimal_arithmetic(app_config):
+    migrate(app_config)
+    with connect(app_config) as conn:
+        seed_user(conn)
+        seed_sc(conn, sc_amount="0.3")
+        seed_vendor(conn)
+        seed_po(conn, po_amount="0.3")
+        seed_gr(conn, "GR1", estimated_amount="0.1", status="pending")
+        seed_gr(
+            conn,
+            "GR2",
+            estimated_amount="0.2",
+            con_value="0.2",
+            status="approved",
+        )
+        conn.commit()
+
+    decimal_budget = compute_sc_budget_decimal(app_config, "SC1")
+    float_budget = compute_sc_budget(app_config, "SC1")
+
+    assert decimal_budget["sc_available_amount"] == 0
+    assert decimal_budget["unallocated_sc_amount"] == 0
+    assert float_budget["sc_available_amount"] == 0.0
+
+
+def test_decimal_po_budget_uses_exact_decimal_arithmetic(app_config):
+    migrate(app_config)
+    with connect(app_config) as conn:
+        seed_user(conn)
+        seed_sc(conn, sc_amount="0.3")
+        seed_vendor(conn)
+        seed_po(conn, po_amount="0.3")
+        seed_gr(conn, "GR1", estimated_amount="0.1", status="pending")
+        seed_gr(
+            conn,
+            "GR2",
+            estimated_amount="0.2",
+            con_value="0.2",
+            status="approved",
+        )
+        conn.commit()
+
+    decimal_budget = compute_po_budget_decimal(app_config, "PO1")
+    float_budget = compute_po_budget(app_config, "PO1")
+
+    assert decimal_budget["open_po_amount"] == 0
+    assert float_budget["open_po_amount"] == 0.0
