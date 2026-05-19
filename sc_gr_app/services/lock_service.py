@@ -55,7 +55,7 @@ class LeaseLock:
             return
 
         if payload.get("token") == self.token:
-            self.path.unlink()
+            self.path.unlink(missing_ok=True)
 
     def _is_stale(self) -> bool:
         try:
