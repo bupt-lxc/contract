@@ -26,6 +26,13 @@ def seed_default_admin(config: AppConfig) -> None:
         if existing:
             return
 
+        existing_default_admin = conn.execute(
+            "select user_id from users where user_id = ?",
+            (DEFAULT_ADMIN_USER_ID,),
+        ).fetchone()
+        if existing_default_admin:
+            return
+
         timestamp = now()
         conn.execute(
             """
