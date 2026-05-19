@@ -558,3 +558,61 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
         "create_gr",
         "approve_gr",
     ]
+
+
+def test_create_po_allows_exact_decimal_budget_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.1)
+
+    created = create_po(
+        app_config,
+        USER,
+        {
+            "po_id": "PO2",
+            "sc_id": "SC1",
+            "vendor_id": "V1",
+            "po_amount": 0.2,
+            "status": "po_approved",
+        },
+    )
+
+    assert created["po_id"] == "PO2"
+
+
+def test_create_gr_allows_exact_decimal_budget_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1},
+    )
+
+    created = create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 0.2},
+    )
+
+    assert created["gr_id"] == "GR2"
+
+
+def test_approve_gr_allows_exact_decimal_extra_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1},
+    )
+
+    approved = approve_gr(app_config, ADMIN, "GR1", con_value=0.3)
+
+    assert approved["status"] == "approved"
+    assert approved["con_value"] == 0.3

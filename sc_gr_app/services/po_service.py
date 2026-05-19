@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, ValidationError
 from sc_gr_app.rbac import require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
-from sc_gr_app.services.budget_service import compute_sc_budget
+from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
 
 
@@ -23,10 +24,10 @@ def _require_fields(data: dict, fields: tuple[str, ...]) -> None:
             raise ValidationError(f"{field} is required")
 
 
-def _positive_number(value, field: str) -> float:
+def _positive_number(value, field: str) -> Decimal:
     try:
-        number = float(value)
-    except (TypeError, ValueError):
+        number = Decimal(str(value))
+    except Exception:
         raise ValidationError(f"{field} must be positive") from None
     if number <= 0:
         raise ValidationError(f"{field} must be positive")
@@ -75,9 +76,9 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 if vendor is None:
                     raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
-                budget = compute_sc_budget(config, sc_id)
-                if budget["allocated_po_amount"] + po_amount > float(
-                    sc["sc_amount"]
+                budget = compute_sc_budget_decimal(config, sc_id)
+                if budget["allocated_po_amount"] + po_amount > Decimal(
+                    str(sc["sc_amount"])
                 ):
                     raise ConflictError("PO total would exceed SC amount")
 
@@ -103,7 +104,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         sc_id,
                         data["vendor_id"],
                         data.get("po_no"),
-                        po_amount,
+                        float(po_amount),
                         status,
                         data.get("contract_from"),
                         data.get("contract_to"),

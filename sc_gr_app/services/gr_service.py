@@ -1,11 +1,15 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
-from sc_gr_app.services.budget_service import compute_po_budget, compute_sc_budget
+from sc_gr_app.services.budget_service import (
+    compute_po_budget_decimal,
+    compute_sc_budget_decimal,
+)
 from sc_gr_app.services.lock_service import LeaseLock
 
 
@@ -22,20 +26,20 @@ def _require_fields(data: dict, fields: tuple[str, ...]) -> None:
             raise ValidationError(f"{field} is required")
 
 
-def _positive_number(value, field: str) -> float:
+def _positive_number(value, field: str) -> Decimal:
     try:
-        number = float(value)
-    except (TypeError, ValueError):
+        number = Decimal(str(value))
+    except Exception:
         raise ValidationError(f"{field} must be positive") from None
     if number <= 0:
         raise ValidationError(f"{field} must be positive")
     return number
 
 
-def _non_negative_number(value, field: str) -> float:
+def _non_negative_number(value, field: str) -> Decimal:
     try:
-        number = float(value)
-    except (TypeError, ValueError):
+        number = Decimal(str(value))
+    except Exception:
         raise ValidationError(f"{field} must be non-negative") from None
     if number < 0:
         raise ValidationError(f"{field} must be non-negative")
@@ -80,7 +84,7 @@ def _get_po_sc(conn, po_id: str):
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
-    amount: float,
+    amount: Decimal,
 ) -> None:
     if po_sc["sc_status"] != "approved":
         raise ConflictError("SC must be approved")
@@ -90,8 +94,8 @@ def _validate_gr_creation_context(
         raise ConflictError("PO No is required")
     if po_sc["status"] != "po_approved":
         raise ConflictError("PO must be approved")
-    sc_budget = compute_sc_budget(config, po_sc["sc_id"])
-    po_budget = compute_po_budget(config, po_sc["po_id"])
+    sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
+    po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
     if sc_budget["sc_available_amount"] < amount:
         raise ConflictError("SC available amount is insufficient")
     if po_budget["open_po_amount"] < amount:
@@ -147,7 +151,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         gr_id,
                         po_id,
                         current_user["user_id"],
-                        estimated_amount,
+                        float(estimated_amount),
                         None,
                         "pending",
                         data.get("remark"),
@@ -210,10 +214,12 @@ def approve_gr(
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
 
-                extra_amount = con_value_amount - float(before["estimated_amount"])
+                extra_amount = con_value_amount - Decimal(
+                    str(before["estimated_amount"])
+                )
                 if extra_amount > 0:
-                    sc_budget = compute_sc_budget(config, sc_id)
-                    po_budget = compute_po_budget(config, before["po_id"])
+                    sc_budget = compute_sc_budget_decimal(config, sc_id)
+                    po_budget = compute_po_budget_decimal(config, before["po_id"])
                     if sc_budget["sc_available_amount"] < extra_amount:
                         raise ConflictError(
                             "SC available amount is insufficient"
@@ -231,7 +237,7 @@ def approve_gr(
                         approved_at = ?
                     where gr_id = ?
                     """,
-                    (con_value_amount, current_user["user_id"], timestamp, gr_id),
+                    (float(con_value_amount), current_user["user_id"], timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_audit_log(
