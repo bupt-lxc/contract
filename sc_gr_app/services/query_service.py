@@ -131,6 +131,8 @@ def search_scs(
           requester.user_name as requester_name
         from sc_records sc
         join users requester on requester.user_id = sc.requester_id
+        left join pos po on po.sc_id = sc.sc_id
+        left join vendors vendor on vendor.vendor_id = po.vendor_id
         """,
         text=text,
         text_columns=(
@@ -139,6 +141,9 @@ def search_scs(
             "sc.request_type",
             "cast(sc.cost_center as text)",
             "requester.user_name",
+            "po.po_no",
+            "vendor.vendor_name",
+            "vendor.ksrm_vendor_code",
         ),
         filters=filters,
         allowed_filters={
@@ -271,6 +276,7 @@ def search_pos(
             "vendor_name": "vendor.vendor_name",
             "po_amount": "po.po_amount",
             "status": "po.status",
+            "contract_to": "po.contract_to",
             "created_at": "po.created_at",
             "updated_at": "po.updated_at",
         },

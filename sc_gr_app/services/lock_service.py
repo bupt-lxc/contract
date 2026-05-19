@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,7 +13,9 @@ def now() -> datetime:
 
 
 def encode_name(name: str) -> str:
-    return name.replace(":", "__") + ".lock"
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "__", name)
+    safe_name = safe_name.replace("..", "__").strip("._")
+    return (safe_name or "lock") + ".lock"
 
 
 class LeaseLock:

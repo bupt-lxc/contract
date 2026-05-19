@@ -73,6 +73,7 @@ def test_query_service_searches_seeded_sc_vendor_and_po(app_config):
     seed_query_data(app_config)
 
     assert search_scs(app_config, text="alpha")[0]["sc_no"] == "SC-ALPHA"
+    assert search_scs(app_config, text="Alpha Vendor")[0]["sc_no"] == "SC-ALPHA"
     assert search_vendors(app_config, text="KV-1")[0]["vendor_name"] == "Alpha Vendor"
     assert search_pos(app_config, text="PO-ALPHA")[0]["po_no"] == "PO-ALPHA"
 
@@ -92,6 +93,14 @@ def test_search_pos_returns_zero_for_fully_consumed_po(app_config):
     row = search_pos(app_config, filters={"po_id": "PO1"})[0]
 
     assert row["open_po_amount"] == 0
+
+
+def test_search_pos_can_sort_by_contract_to(app_config):
+    seed_query_data(app_config)
+
+    rows = search_pos(app_config, sort="contract_to", direction="asc")
+
+    assert rows[0]["po_no"] == "PO-ALPHA"
 
 
 def test_invalid_sort_field_raises_validation_error(app_config):

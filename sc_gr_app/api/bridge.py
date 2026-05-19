@@ -24,9 +24,14 @@ class ApiBridge:
             raise ValidationError("payload must be an object")
         return payload
 
+    def _require_current_user(self) -> dict:
+        machine_id = get_7_digit_id()
+        return get_user_by_machine_id(self.config, machine_id)
+
     def search_scs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
+            self._require_current_user()
             return ok(query_service.search_scs(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -34,6 +39,7 @@ class ApiBridge:
     def search_vendors(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
+            self._require_current_user()
             return ok(query_service.search_vendors(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -41,6 +47,7 @@ class ApiBridge:
     def search_pos(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
+            self._require_current_user()
             return ok(query_service.search_pos(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -48,6 +55,7 @@ class ApiBridge:
     def search_grs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
+            self._require_current_user()
             return ok(query_service.search_grs(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -55,6 +63,7 @@ class ApiBridge:
     def search_audit_logs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
+            self._require_current_user()
             return ok(query_service.search_audit_logs(self.config, **payload))
         except Exception as exc:
             return fail(exc)

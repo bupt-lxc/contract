@@ -2,7 +2,7 @@ import types
 from pathlib import Path
 
 from sc_gr_app.config import AppConfig
-from sc_gr_app.errors import ValidationError
+from sc_gr_app.errors import PermissionDenied, ValidationError
 
 
 def test_response_schemas_wrap_success_and_app_errors():
@@ -74,6 +74,12 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
 
         return _search
 
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda config, machine_id: {"user_id": "U1"},
+    )
     monkeypatch.setattr(bridge.query_service, "search_scs", fake_search("sc"))
     monkeypatch.setattr(bridge.query_service, "search_vendors", fake_search("vendor"))
     monkeypatch.setattr(bridge.query_service, "search_pos", fake_search("po"))
@@ -104,6 +110,29 @@ def test_bridge_rejects_non_mapping_payload(app_config):
     assert response == {
         "ok": False,
         "error": {"code": "VALIDATION_ERROR", "message": "payload must be an object"},
+    }
+
+
+def test_bridge_search_requires_authorized_current_user(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+
+    def fake_get_user(config, machine_id):
+        raise PermissionDenied("This machine is not authorized")
+
+    def fake_search(config, **payload):
+        raise AssertionError("search must not run for unauthorized machine")
+
+    monkeypatch.setattr(bridge, "get_user_by_machine_id", fake_get_user)
+    monkeypatch.setattr(bridge.query_service, "search_scs", fake_search)
+
+    assert bridge.ApiBridge(app_config).search_scs({}) == {
+        "ok": False,
+        "error": {
+            "code": "PERMISSION_DENIED",
+            "message": "This machine is not authorized",
+        },
     }
 
 

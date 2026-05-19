@@ -121,4 +121,4 @@ elements.drawer.close.addEventListener("click", () => {
 renderNavigation();
 renderUserPanel();
 await loadCurrentUser();
-await routeTo("sc");
+await routeTo(state.user ? "sc" : "system");

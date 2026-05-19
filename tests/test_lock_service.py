@@ -35,6 +35,14 @@ def test_lease_lock_blocks_second_owner(app_config):
         first.release()
 
 
+def test_lock_name_encoding_keeps_path_inside_lock_directory(app_config):
+    lock = LeaseLock(app_config.lock_dir, r"sc:..\SC/001", "MACHINE1")
+
+    assert lock.path.parent == app_config.lock_dir
+    assert "/" not in lock.path.name
+    assert "\\" not in lock.path.name
+
+
 def test_stale_lock_can_be_replaced(app_config):
     first = LeaseLock(app_config.lock_dir, "sc:SC001", "MACHINE1", ttl_seconds=-1)
     second = LeaseLock(app_config.lock_dir, "sc:SC001", "MACHINE2", ttl_seconds=60)
