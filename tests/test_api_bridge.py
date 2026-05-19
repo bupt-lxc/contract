@@ -21,7 +21,10 @@ def test_response_schemas_wrap_unexpected_errors():
 
     assert schemas.fail(RuntimeError("boom")) == {
         "ok": False,
-        "error": {"code": "UNEXPECTED_ERROR", "message": "boom"},
+        "error": {
+            "code": "UNEXPECTED_ERROR",
+            "message": "Unexpected application error",
+        },
     }
 
 
@@ -85,6 +88,17 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
         ("vendor", app_config, {}),
         ("po", app_config, {}),
     ]
+
+
+def test_bridge_rejects_non_mapping_payload(app_config):
+    from sc_gr_app.api import bridge
+
+    response = bridge.ApiBridge(app_config).search_scs(["not", "a", "dict"])
+
+    assert response == {
+        "ok": False,
+        "error": {"code": "VALIDATION_ERROR", "message": "payload must be an object"},
+    }
 
 
 def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path):

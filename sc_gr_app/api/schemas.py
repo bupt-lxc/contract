@@ -11,7 +11,7 @@ def fail(exc: Exception) -> dict:
         message = exc.message
     else:
         code = "UNEXPECTED_ERROR"
-        message = str(exc)
+        message = "Unexpected application error"
 
     return {
         "ok": False,
