@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from math import isfinite
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -36,7 +37,7 @@ def _positive_number(value, field: str) -> float:
         number = float(value)
     except (TypeError, ValueError):
         raise ValidationError(f"{field} must be positive") from None
-    if number <= 0:
+    if not isfinite(number) or number <= 0:
         raise ValidationError(f"{field} must be positive")
     return number
 

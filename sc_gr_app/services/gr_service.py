@@ -31,7 +31,7 @@ def _positive_number(value, field: str) -> Decimal:
         number = Decimal(str(value))
     except Exception:
         raise ValidationError(f"{field} must be positive") from None
-    if number <= 0:
+    if not number.is_finite() or number <= 0:
         raise ValidationError(f"{field} must be positive")
     return number
 
@@ -41,7 +41,7 @@ def _non_negative_number(value, field: str) -> Decimal:
         number = Decimal(str(value))
     except Exception:
         raise ValidationError(f"{field} must be non-negative") from None
-    if number < 0:
+    if not number.is_finite() or number < 0:
         raise ValidationError(f"{field} must be non-negative")
     return number
 

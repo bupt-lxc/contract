@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from sc_gr_app.db.connection import connect
@@ -236,6 +238,27 @@ def test_create_sc_validates_request_type(app_config):
         )
 
 
+@pytest.mark.parametrize("sc_amount", [float("nan"), float("inf")])
+def test_create_sc_rejects_non_finite_sc_amount(app_config, sc_amount):
+    migrate(app_config)
+    seed_users(app_config)
+
+    with pytest.raises(ValidationError, match="sc_amount must be positive"):
+        create_sc(
+            app_config,
+            USER,
+            {
+                "sc_id": "SC1",
+                "requester_id": "U1",
+                "request_type": "service",
+                "cost_center": 1001,
+                "sc_amount": sc_amount,
+                "service_period_start": "2026-01-01",
+                "service_period_end": "2026-12-31",
+            },
+        )
+
+
 def test_create_po_cannot_exceed_sc_amount(app_config):
     migrate(app_config)
     seed_users(app_config)
@@ -283,6 +306,25 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
                 "sc_id": "SC1",
                 "vendor_id": "V1",
                 "po_amount": 30,
+            },
+        )
+
+
+@pytest.mark.parametrize("po_amount", [Decimal("NaN"), Decimal("Infinity")])
+def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_amount=100)
+
+    with pytest.raises(ValidationError, match="po_amount must be positive"):
+        create_po(
+            app_config,
+            USER,
+            {
+                "po_id": "PO2",
+                "sc_id": "SC1",
+                "vendor_id": "V1",
+                "po_amount": po_amount,
             },
         )
 
@@ -452,6 +494,33 @@ def test_create_gr_requires_enough_sc_available(app_config):
         )
 
 
+@pytest.mark.parametrize(
+    "estimated_amount",
+    [Decimal("NaN"), Decimal("Infinity")],
+)
+def test_create_gr_rejects_non_finite_estimated_amount(
+    app_config,
+    estimated_amount,
+):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+
+    with pytest.raises(
+        ValidationError,
+        match="estimated_amount must be positive",
+    ):
+        create_gr(
+            app_config,
+            USER,
+            {
+                "gr_id": "GR1",
+                "po_id": "PO1",
+                "estimated_amount": estimated_amount,
+            },
+        )
+
+
 def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
@@ -528,6 +597,21 @@ def test_approve_gr_validates_con_value(app_config):
 
     with pytest.raises(ValidationError, match="con_value must be non-negative"):
         approve_gr(app_config, ADMIN, "GR1", con_value=-1)
+
+
+@pytest.mark.parametrize("con_value", [Decimal("NaN"), Decimal("Infinity")])
+def test_approve_gr_rejects_non_finite_con_value(app_config, con_value):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    with pytest.raises(ValidationError, match="con_value must be non-negative"):
+        approve_gr(app_config, ADMIN, "GR1", con_value=con_value)
 
 
 def test_sc_vendor_po_gr_writes_are_audited(app_config):
