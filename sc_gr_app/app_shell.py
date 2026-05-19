@@ -12,11 +12,13 @@ def run_app() -> None:
     config = default_config()
     migrate(config)
     seed_default_admin(config)
+    html_path = Path(__file__).parent / "web" / "index.html"
+    bridge = ApiBridge(config)
 
     webview.create_window(
-        title="SC GR Management",
-        url=str(Path(__file__).parent / "web" / "index.html"),
-        js_api=ApiBridge(config),
+        "SC GR Management",
+        url=str(html_path),
+        js_api=bridge,
         width=1280,
         height=820,
         min_size=(1100, 700),

@@ -1,4 +1,4 @@
-from sc_gr_app.api import schemas
+from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import query_service
@@ -12,24 +12,27 @@ class ApiBridge:
     def current_user(self) -> dict:
         try:
             machine_id = get_7_digit_id()
-            return schemas.ok(get_user_by_machine_id(self.config, machine_id))
+            return ok(get_user_by_machine_id(self.config, machine_id))
         except Exception as exc:
-            return schemas.fail(exc)
+            return fail(exc)
 
     def search_scs(self, payload=None) -> dict:
         try:
-            return schemas.ok(query_service.search_scs(self.config, **(payload or {})))
+            payload = payload or {}
+            return ok(query_service.search_scs(self.config, **payload))
         except Exception as exc:
-            return schemas.fail(exc)
+            return fail(exc)
 
     def search_vendors(self, payload=None) -> dict:
         try:
-            return schemas.ok(query_service.search_vendors(self.config, **(payload or {})))
+            payload = payload or {}
+            return ok(query_service.search_vendors(self.config, **payload))
         except Exception as exc:
-            return schemas.fail(exc)
+            return fail(exc)
 
     def search_pos(self, payload=None) -> dict:
         try:
-            return schemas.ok(query_service.search_pos(self.config, **(payload or {})))
+            payload = payload or {}
+            return ok(query_service.search_pos(self.config, **payload))
         except Exception as exc:
-            return schemas.fail(exc)
+            return fail(exc)

@@ -1,1 +1,0 @@
-"""pywebview API bridge package."""
