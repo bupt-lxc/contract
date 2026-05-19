@@ -1,0 +1,13 @@
+[project]
+name = "sc-gr-management"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pywebview>=6.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.20.0",
+    "pytest>=9.0.3",
+]
