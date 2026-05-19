@@ -1,0 +1,100 @@
+import { escapeHtml, text } from "./format.js";
+
+function renderCell(column, row) {
+  const rawValue = column.value ? column.value(row) : row[column.key];
+  if (column.render) {
+    return column.render(rawValue, row);
+  }
+  return escapeHtml(text(rawValue));
+}
+
+function renderState(kind, title, message) {
+  return `
+    <div class="state-panel ${kind}">
+      <div>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(message)}</p>
+      </div>
+    </div>
+  `;
+}
+
+export function renderTable(container, options) {
+  const {
+    title,
+    columns,
+    rows,
+    sortKey,
+    sortDirection,
+    loading,
+    error,
+    emptyMessage = "No records match the current criteria.",
+  } = options;
+
+  if (loading) {
+    container.innerHTML = renderState("loading", "Loading records", "Fetching the latest table data from the desktop bridge.");
+    return;
+  }
+
+  if (error) {
+    container.innerHTML = renderState("error", "Unable to load records", error);
+    return;
+  }
+
+  if (!rows.length) {
+    container.innerHTML = renderState("empty", "No records found", emptyMessage);
+    return;
+  }
+
+  const headers = columns.map((column) => {
+    const active = column.sortKey && column.sortKey === sortKey;
+    const mark = active ? (sortDirection === "asc" ? "up" : "down") : "";
+    const width = column.width ? ` style="width:${column.width}"` : "";
+    const label = escapeHtml(column.label);
+    if (!column.sortKey) {
+      return `<th${width}>${label}</th>`;
+    }
+    return `
+      <th${width}>
+        <button type="button" class="sortable-header" data-sort-key="${escapeHtml(column.sortKey)}">
+          <span>${label}</span>
+          <span class="sort-mark">${mark}</span>
+        </button>
+      </th>
+    `;
+  }).join("");
+
+  const body = rows.map((row, index) => {
+    const cells = columns.map((column) => {
+      const className = column.className ? ` class="${escapeHtml(column.className)}"` : "";
+      return `<td${className}>${renderCell(column, row)}</td>`;
+    }).join("");
+    return `<tr data-row-index="${index}">${cells}</tr>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="table-shell">
+      <div class="table-caption">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${rows.length} record${rows.length === 1 ? "" : "s"}</span>
+      </div>
+      <table class="data-table">
+        <thead><tr>${headers}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-sort-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      options.onSort(button.dataset.sortKey);
+    });
+  });
+
+  container.querySelectorAll("tbody tr").forEach((rowElement) => {
+    rowElement.addEventListener("click", () => {
+      const row = rows[Number(rowElement.dataset.rowIndex)];
+      options.onRowClick?.(row);
+    });
+  });
+}
