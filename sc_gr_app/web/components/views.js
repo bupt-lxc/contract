@@ -118,6 +118,8 @@ const VIEW_DEFINITIONS = {
   },
 };
 
+let requestSequence = 0;
+
 export function getViewTitle(viewKey) {
   if (viewKey === "home") {
     return "Home";
@@ -148,6 +150,7 @@ export async function renderView(viewKey, regions, callbacks) {
 }
 
 async function loadAndRenderTable(viewKey, definition, tableRegion, callbacks) {
+  const requestId = ++requestSequence;
   const viewState = getViewState(viewKey);
   viewState.loading = true;
   viewState.error = null;
@@ -169,14 +172,24 @@ async function loadAndRenderTable(viewKey, definition, tableRegion, callbacks) {
       limit: 100,
       offset: 0,
     };
-    viewState.rows = await callApi(definition.api, payload);
+    const rows = await callApi(definition.api, payload);
+    if (requestId !== requestSequence || state.currentView !== viewKey) {
+      return;
+    }
+    viewState.rows = rows;
     viewState.rows = applyLocalFilters(viewState.rows, viewState.filters);
   } catch (error) {
+    if (requestId !== requestSequence || state.currentView !== viewKey) {
+      return;
+    }
     viewState.rows = [];
     viewState.error = definition.unavailable && error.message.startsWith("API not available")
       ? definition.unavailable
       : error.message;
   } finally {
+    if (requestId !== requestSequence || state.currentView !== viewKey) {
+      return;
+    }
     viewState.loading = false;
     renderRows(viewKey, definition, tableRegion, callbacks);
   }
@@ -276,8 +289,8 @@ function renderHome(regions) {
     </div>
     <div class="summary-grid">
       <div class="metric-card"><div class="metric-label">Default Queue</div><div class="metric-value">SC</div><div class="metric-note">Approved, pending, denied, closed</div></div>
-      <div class="metric-card"><div class="metric-label">Bridge Ready</div><div class="metric-value">3</div><div class="metric-note">SC, Vendor, PO APIs</div></div>
-      <div class="metric-card"><div class="metric-label">Pending APIs</div><div class="metric-value">2</div><div class="metric-note">GR and Logs</div></div>
+      <div class="metric-card"><div class="metric-label">Bridge Ready</div><div class="metric-value">5</div><div class="metric-note">SC, Vendor, PO, GR, Logs APIs</div></div>
+      <div class="metric-card"><div class="metric-label">Pending APIs</div><div class="metric-value">0</div><div class="metric-note">Core search surfaces exposed</div></div>
       <div class="metric-card"><div class="metric-label">Mode</div><div class="metric-value">Desktop</div><div class="metric-note">pywebview static UI</div></div>
     </div>
   `;

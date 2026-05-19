@@ -11,7 +11,7 @@ export function money(value) {
   }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return text(value);
+    return escapeHtml(text(value));
   }
   return numeric.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -23,7 +23,7 @@ export function date(value) {
   if (!value) {
     return "-";
   }
-  return String(value).slice(0, 10);
+  return escapeHtml(String(value).slice(0, 10));
 }
 
 export function statusLabel(value) {

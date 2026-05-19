@@ -93,7 +93,7 @@ export function renderTable(container, options) {
       const className = column.className ? ` class="${escapeHtml(column.className)}"` : "";
       return `<td${className}>${renderCell(column, row)}</td>`;
     }).join("");
-    return `<tr data-row-index="${index}">${cells}</tr>`;
+    return `<tr data-row-index="${index}" tabindex="0" role="button">${cells}</tr>`;
   }).join("");
 
   container.innerHTML = `
@@ -116,9 +116,16 @@ export function renderTable(container, options) {
   });
 
   container.querySelectorAll("tbody tr").forEach((rowElement) => {
-    rowElement.addEventListener("click", () => {
+    const openRow = () => {
       const row = rows[Number(rowElement.dataset.rowIndex)];
       options.onRowClick?.(row);
+    };
+    rowElement.addEventListener("click", openRow);
+    rowElement.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openRow();
+      }
     });
   });
 }
