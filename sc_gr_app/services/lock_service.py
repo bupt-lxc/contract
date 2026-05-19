@@ -28,12 +28,31 @@ class LeaseLock:
 
     def acquire(self) -> None:
         self.lock_dir.mkdir(parents=True, exist_ok=True)
-        if self.path.exists() and not self._is_stale():
-            raise LockError(f"Lock is busy: {self.name}")
+        payload = self._payload()
 
+        for _ in range(3):
+            if self.path.exists():
+                if not self._is_stale():
+                    raise LockError(f"Lock is busy: {self.name}")
+                self.path.unlink(missing_ok=True)
+
+            try:
+                self._write_exclusive(payload)
+            except FileExistsError:
+                if self.path.exists() and not self._is_stale():
+                    raise LockError(f"Lock is busy: {self.name}")
+                continue
+
+            if self._owns_lock():
+                return
+            raise LockError(f"Failed to acquire lock: {self.name}")
+
+        raise LockError(f"Lock is busy: {self.name}")
+
+    def _payload(self) -> dict[str, str]:
         acquired_at = now()
         expires_at = acquired_at + timedelta(seconds=self.ttl_seconds)
-        payload = {
+        return {
             "name": self.name,
             "owner": self.owner,
             "token": self.token,
@@ -41,9 +60,20 @@ class LeaseLock:
             "heartbeat_at": acquired_at.isoformat(),
             "expires_at": expires_at.isoformat(),
         }
-        temp_path = self.path.with_name(f"{self.path.name}.{self.token}.tmp")
-        temp_path.write_text(json.dumps(payload), encoding="utf-8")
-        os.replace(temp_path, self.path)
+
+    def _write_exclusive(self, payload: dict[str, str]) -> None:
+        fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            os.write(fd, json.dumps(payload).encode("utf-8"))
+        finally:
+            os.close(fd)
+
+    def _owns_lock(self) -> bool:
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return False
+        return payload.get("token") == self.token
 
     def release(self) -> None:
         if not self.path.exists():
