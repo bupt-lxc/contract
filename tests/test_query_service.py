@@ -77,6 +77,23 @@ def test_query_service_searches_seeded_sc_vendor_and_po(app_config):
     assert search_pos(app_config, text="PO-ALPHA")[0]["po_no"] == "PO-ALPHA"
 
 
+def test_search_pos_returns_derived_open_po_amount(app_config):
+    seed_query_data(app_config)
+
+    row = search_pos(app_config, text="PO-ALPHA")[0]
+
+    assert row["open_po_amount"] == 700
+
+
+def test_search_pos_returns_zero_for_fully_consumed_po(app_config):
+    seed_query_data(app_config)
+    approve_gr(app_config, ADMIN, "GR1", con_value=800)
+
+    row = search_pos(app_config, filters={"po_id": "PO1"})[0]
+
+    assert row["open_po_amount"] == 0
+
+
 def test_invalid_sort_field_raises_validation_error(app_config):
     seed_query_data(app_config)
 

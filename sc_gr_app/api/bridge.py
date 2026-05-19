@@ -44,3 +44,17 @@ class ApiBridge:
             return ok(query_service.search_pos(self.config, **payload))
         except Exception as exc:
             return fail(exc)
+
+    def search_grs(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            return ok(query_service.search_grs(self.config, **payload))
+        except Exception as exc:
+            return fail(exc)
+
+    def search_audit_logs(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            return ok(query_service.search_audit_logs(self.config, **payload))
+        except Exception as exc:
+            return fail(exc)

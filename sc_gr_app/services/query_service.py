@@ -229,10 +229,20 @@ def search_pos(
           po.*,
           sc.sc_no,
           vendor.vendor_name,
-          vendor.ksrm_vendor_code
+          vendor.ksrm_vendor_code,
+          po.po_amount - coalesce(gr_totals.pending_total, 0)
+            - coalesce(gr_totals.con_value_total, 0) as open_po_amount
         from pos po
         join sc_records sc on sc.sc_id = po.sc_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
+        left join (
+          select
+            po_id,
+            sum(case when status = 'pending' then estimated_amount else 0 end) as pending_total,
+            sum(case when status = 'approved' then con_value else 0 end) as con_value_total
+          from gr_requests
+          group by po_id
+        ) gr_totals on gr_totals.po_id = po.po_id
         """,
         text=text,
         text_columns=(

@@ -157,7 +157,7 @@ button {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(340px, 520px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(300px, 460px) minmax(220px, 290px);
   align-items: center;
   gap: 16px;
   min-height: 78px;
@@ -264,6 +264,8 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  justify-self: end;
+  width: 100%;
   min-width: 210px;
   max-width: 290px;
   min-height: 36px;
@@ -274,6 +276,13 @@ button:focus-visible {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.user-panel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .auth-dot {
@@ -309,6 +318,7 @@ button:focus-visible {
 }
 
 .metric-card {
+  min-width: 0;
   min-height: 88px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -326,12 +336,14 @@ button:focus-visible {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .metric-note {
   margin-top: 5px;
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .filter-region {
@@ -459,13 +471,15 @@ button:focus-visible {
 
 .status-approved,
 .status-finished,
+.status-closed,
 .status-active {
   background: #dff5eb;
   color: var(--success);
 }
 
 .status-pending,
-.status-po_pending {
+.status-po_pending,
+.status-created {
   background: #fff1d9;
   color: var(--warning);
 }
@@ -478,6 +492,11 @@ button:focus-visible {
 }
 
 .status-po_approved {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.status-submitted {
   background: var(--primary-soft);
   color: var(--primary);
 }

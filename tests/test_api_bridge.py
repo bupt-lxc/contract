@@ -77,16 +77,22 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
     monkeypatch.setattr(bridge.query_service, "search_scs", fake_search("sc"))
     monkeypatch.setattr(bridge.query_service, "search_vendors", fake_search("vendor"))
     monkeypatch.setattr(bridge.query_service, "search_pos", fake_search("po"))
+    monkeypatch.setattr(bridge.query_service, "search_grs", fake_search("gr"))
+    monkeypatch.setattr(bridge.query_service, "search_audit_logs", fake_search("logs"))
 
     api = bridge.ApiBridge(app_config)
 
     assert api.search_scs({"text": "alpha"}) == {"ok": True, "data": ["sc"]}
     assert api.search_vendors(None) == {"ok": True, "data": ["vendor"]}
     assert api.search_pos() == {"ok": True, "data": ["po"]}
+    assert api.search_grs({"filters": {"status": "pending"}}) == {"ok": True, "data": ["gr"]}
+    assert api.search_audit_logs({"text": "approve"}) == {"ok": True, "data": ["logs"]}
     assert calls == [
         ("sc", app_config, {"text": "alpha"}),
         ("vendor", app_config, {}),
         ("po", app_config, {}),
+        ("gr", app_config, {"filters": {"status": "pending"}}),
+        ("logs", app_config, {"text": "approve"}),
     ]
 
 
