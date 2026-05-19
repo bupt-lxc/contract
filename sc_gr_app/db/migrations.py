@@ -18,13 +18,8 @@ def migrate(config: AppConfig) -> None:
 
     with connect(config) as conn:
         conn.executescript(schema_sql)
-        exists = conn.execute(
-            "select 1 from schema_migrations where version = ?",
-            (SCHEMA_VERSION,),
-        ).fetchone()
-        if not exists:
-            conn.execute(
-                "insert into schema_migrations(version, applied_at) values (?, ?)",
-                (SCHEMA_VERSION, utc_now()),
-            )
+        conn.execute(
+            "insert or ignore into schema_migrations(version, applied_at) values (?, ?)",
+            (SCHEMA_VERSION, utc_now()),
+        )
         conn.commit()
