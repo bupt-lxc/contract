@@ -32,23 +32,47 @@ export function renderTable(container, options) {
   } = options;
 
   if (loading) {
-    container.innerHTML = renderState("loading", "Loading records", "Fetching the latest table data from the desktop bridge.");
+    container.innerHTML = `
+      <div class="table-shell">
+        <div class="table-caption">
+          <strong>${escapeHtml(title)}</strong>
+          <span>Loading</span>
+        </div>
+        ${renderState("loading", "Loading records", "Fetching the latest table data from the desktop bridge.")}
+      </div>
+    `;
     return;
   }
 
   if (error) {
-    container.innerHTML = renderState("error", "Unable to load records", error);
+    container.innerHTML = `
+      <div class="table-shell">
+        <div class="table-caption">
+          <strong>${escapeHtml(title)}</strong>
+          <span>Error</span>
+        </div>
+        ${renderState("error", "Unable to load records", error)}
+      </div>
+    `;
     return;
   }
 
   if (!rows.length) {
-    container.innerHTML = renderState("empty", "No records found", emptyMessage);
+    container.innerHTML = `
+      <div class="table-shell">
+        <div class="table-caption">
+          <strong>${escapeHtml(title)}</strong>
+          <span>0 records</span>
+        </div>
+        ${renderState("empty", "No records found", emptyMessage)}
+      </div>
+    `;
     return;
   }
 
   const headers = columns.map((column) => {
     const active = column.sortKey && column.sortKey === sortKey;
-    const mark = active ? (sortDirection === "asc" ? "up" : "down") : "";
+    const mark = active ? sortDirection.toUpperCase() : "";
     const width = column.width ? ` style="width:${column.width}"` : "";
     const label = escapeHtml(column.label);
     if (!column.sortKey) {

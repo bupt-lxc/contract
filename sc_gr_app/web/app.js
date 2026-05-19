@@ -76,8 +76,12 @@ async function loadCurrentUser() {
 }
 
 async function routeTo(viewKey) {
+  if (!NAV_ITEMS.some((item) => item.key === viewKey)) {
+    viewKey = "sc";
+  }
   setCurrentView(viewKey);
   elements.title.textContent = getViewTitle(viewKey);
+  elements.searchInput.value = state.globalSearch;
   elements.searchInput.disabled = viewKey === "home" || viewKey === "system";
   elements.searchInput.placeholder = elements.searchInput.disabled ? "Search unavailable for this view" : "Search current view";
   renderNavigation();

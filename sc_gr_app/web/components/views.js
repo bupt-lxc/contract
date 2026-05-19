@@ -79,8 +79,9 @@ const VIEW_DEFINITIONS = {
   },
   gr: {
     title: "GR List",
-    api: null,
-    empty: "GR search is not exposed by the bridge yet.",
+    api: "search_grs",
+    unavailable: "GR search is not exposed by the desktop bridge yet.",
+    empty: "No GR requests match the status, amount, or search filters.",
     filters: [
       { name: "status", label: "GR status", type: "select", options: ["pending", "approved", "cancelled"] },
       { name: "amount_min", label: "Amount min", type: "number", localOnly: true },
@@ -98,8 +99,9 @@ const VIEW_DEFINITIONS = {
   },
   logs: {
     title: "Logs List",
-    api: null,
-    empty: "Audit log search is not exposed by the bridge yet.",
+    api: "search_audit_logs",
+    unavailable: "Audit log search is not exposed by the desktop bridge yet.",
+    empty: "No audit logs match the date, action type, or search filters.",
     filters: [
       { name: "created_at", label: "Date", type: "date", localOnly: true },
       { name: "action_type", label: "Action type", type: "text", placeholder: "approve_gr" },
@@ -151,14 +153,6 @@ async function loadAndRenderTable(viewKey, definition, tableRegion, callbacks) {
   viewState.error = null;
   renderRows(viewKey, definition, tableRegion, callbacks);
 
-  if (!definition.api) {
-    viewState.loading = false;
-    viewState.error = "The desktop bridge does not provide this API yet.";
-    viewState.rows = [];
-    renderRows(viewKey, definition, tableRegion, callbacks);
-    return;
-  }
-
   try {
     const remoteFilters = {};
     for (const [key, value] of Object.entries(viewState.filters)) {
@@ -179,7 +173,9 @@ async function loadAndRenderTable(viewKey, definition, tableRegion, callbacks) {
     viewState.rows = applyLocalFilters(viewState.rows, viewState.filters);
   } catch (error) {
     viewState.rows = [];
-    viewState.error = error.message;
+    viewState.error = definition.unavailable && error.message.startsWith("API not available")
+      ? definition.unavailable
+      : error.message;
   } finally {
     viewState.loading = false;
     renderRows(viewKey, definition, tableRegion, callbacks);
@@ -249,14 +245,11 @@ function applyLocalFilters(rows, filters) {
     if (filters.contract_to && date(row.contract_to) !== filters.contract_to) {
       return false;
     }
-    const hasOpenPo = row.open_po_amount !== undefined && row.open_po_amount !== null;
-    if (filters.open_po && !hasOpenPo) {
-      return true;
-    }
-    if (filters.open_po === "open" && Number(row.open_po_amount ?? 0) <= 0) {
+    const openPoAmount = Number(row.open_po_amount ?? row.po_amount ?? 0);
+    if (filters.open_po === "open" && openPoAmount <= 0) {
       return false;
     }
-    if (filters.open_po === "closed" && Number(row.open_po_amount ?? 0) > 0) {
+    if (filters.open_po === "closed" && openPoAmount > 0) {
       return false;
     }
     const amount = Number(row.estimated_amount ?? row.con_value ?? 0);
