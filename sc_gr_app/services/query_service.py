@@ -12,27 +12,33 @@ def _row_to_dict(row) -> dict:
 
 
 def _normalize_direction(direction: str) -> str:
+    if not isinstance(direction, str):
+        raise ValidationError("sort direction is invalid")
     normalized = direction.lower()
     if normalized not in {"asc", "desc"}:
         raise ValidationError("sort direction is invalid")
     return normalized
 
 
+def _normalize_integer(value, message: str) -> int:
+    if isinstance(value, bool):
+        raise ValidationError(message)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdecimal() and str(int(value)) == value:
+        return int(value)
+    raise ValidationError(message)
+
+
 def _normalize_limit(limit: int) -> int:
-    try:
-        normalized = int(limit)
-    except (TypeError, ValueError):
-        raise ValidationError("limit is invalid") from None
+    normalized = _normalize_integer(limit, "limit is invalid")
     if normalized < 1:
         raise ValidationError("limit is invalid")
     return min(normalized, MAX_LIMIT)
 
 
 def _normalize_offset(offset: int) -> int:
-    try:
-        normalized = int(offset)
-    except (TypeError, ValueError):
-        raise ValidationError("offset is invalid") from None
+    normalized = _normalize_integer(offset, "offset is invalid")
     if normalized < 0:
         raise ValidationError("offset is invalid")
     return normalized
@@ -326,6 +332,7 @@ def search_grs(
 
 def search_audit_logs(
     config: AppConfig,
+    text: str | None = None,
     filters: dict | None = None,
     sort: str = "created_at",
     direction: str = "desc",
@@ -335,8 +342,17 @@ def search_audit_logs(
     return _search(
         config,
         select_sql="select * from audit_logs",
-        text=None,
-        text_columns=(),
+        text=text,
+        text_columns=(
+            "action_type",
+            "object_type",
+            "object_id",
+            "sc_id",
+            "operator_id",
+            "machine_id",
+            "before_json",
+            "after_json",
+        ),
         filters=filters,
         allowed_filters={
             "action_type": "action_type",

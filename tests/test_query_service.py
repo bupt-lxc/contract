@@ -84,6 +84,23 @@ def test_invalid_sort_field_raises_validation_error(app_config):
         search_scs(app_config, sort="created_at; drop table sc_records")
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"direction": None}, "sort direction is invalid"),
+        ({"direction": "desc; drop table users"}, "sort direction is invalid"),
+        ({"filters": {"unknown": "value"}}, "filter field is invalid"),
+        ({"limit": 0}, "limit is invalid"),
+        ({"offset": -1}, "offset is invalid"),
+    ],
+)
+def test_invalid_query_controls_raise_validation_error(app_config, kwargs, message):
+    seed_query_data(app_config)
+
+    with pytest.raises(ValidationError, match=message):
+        search_scs(app_config, **kwargs)
+
+
 def test_filters_and_pagination_work_for_scs(app_config):
     seed_query_data(app_config)
     create_sc(
@@ -136,3 +153,93 @@ def test_search_audit_logs_returns_audit_rows(app_config):
     )
 
     assert [row["action_type"] for row in rows] == ["approve_gr", "create_gr"]
+
+
+def test_search_audit_logs_searches_text_fields(app_config):
+    seed_query_data(app_config)
+    approve_gr(app_config, ADMIN, "GR1", con_value=90)
+
+    assert search_audit_logs(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
+    assert search_audit_logs(app_config, text="gr1")[0]["object_id"] == "GR1"
+    assert search_audit_logs(app_config, text="90")[0]["action_type"] == "approve_gr"
+
+
+@pytest.mark.parametrize(
+    ("search_func", "filters"),
+    [
+        (search_scs, {"created_at; drop table sc_records": "2026-01-01"}),
+        (search_vendors, {"unknown": "Alpha Vendor"}),
+        (search_pos, {"bad_filter": "PO1"}),
+        (search_grs, {"vendor_name": "Alpha Vendor"}),
+        (search_audit_logs, {"before_json": "{}"}),
+    ],
+)
+def test_invalid_filter_name_raises_validation_error(app_config, search_func, filters):
+    seed_query_data(app_config)
+
+    with pytest.raises(ValidationError, match="filter field is invalid"):
+        search_func(app_config, filters=filters)
+
+
+@pytest.mark.parametrize("direction", ["sideways", "", None, 1])
+def test_invalid_sort_direction_raises_validation_error(app_config, direction):
+    seed_query_data(app_config)
+
+    with pytest.raises(ValidationError, match="sort direction is invalid"):
+        search_scs(app_config, direction=direction)
+
+
+def test_text_search_keeps_sql_looking_input_bound(app_config):
+    seed_query_data(app_config)
+
+    rows = search_scs(app_config, text="alpha%' OR 1=1 --")
+
+    assert rows == []
+    assert search_scs(app_config, text="alpha")[0]["sc_no"] == "SC-ALPHA"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("limit", 0, "limit is invalid"),
+        ("limit", -1, "limit is invalid"),
+        ("limit", 1.9, "limit is invalid"),
+        ("limit", True, "limit is invalid"),
+        ("limit", "1.9", "limit is invalid"),
+        ("limit", "01", "limit is invalid"),
+        ("limit", " 1", "limit is invalid"),
+        ("offset", -1, "offset is invalid"),
+        ("offset", 1.9, "offset is invalid"),
+        ("offset", False, "offset is invalid"),
+        ("offset", "1.9", "offset is invalid"),
+        ("offset", "01", "offset is invalid"),
+        ("offset", " 1", "offset is invalid"),
+    ],
+)
+def test_invalid_pagination_values_raise_validation_error(
+    app_config,
+    field,
+    value,
+    message,
+):
+    seed_query_data(app_config)
+
+    kwargs = {field: value}
+    with pytest.raises(ValidationError, match=message):
+        search_scs(app_config, **kwargs)
+
+
+def test_pagination_accepts_ints_and_canonical_digit_strings(app_config):
+    seed_query_data(app_config)
+
+    rows = search_scs(app_config, limit="10", offset="0")
+
+    assert [row["sc_id"] for row in rows] == ["SC1"]
+
+
+def test_limit_is_clamped_to_max_limit(app_config):
+    seed_query_data(app_config)
+
+    rows = search_scs(app_config, limit=501)
+
+    assert [row["sc_id"] for row in rows] == ["SC1"]
