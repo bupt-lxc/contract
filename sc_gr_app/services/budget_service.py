@@ -1,12 +1,13 @@
 from sc_gr_app.db.connection import connect
-from sc_gr_app.errors import NotFound
+from sc_gr_app.config import AppConfig
+from sc_gr_app.errors import ConflictError, NotFound
 
 
 def _float_or_zero(value) -> float:
     return float(value or 0)
 
 
-def compute_sc_budget(config, sc_id: str) -> dict[str, float]:
+def compute_sc_budget(config: AppConfig, sc_id: str) -> dict[str, float]:
     with connect(config) as conn:
         sc = conn.execute(
             "select sc_amount from sc_records where sc_id = ?",
@@ -14,6 +15,24 @@ def compute_sc_budget(config, sc_id: str) -> dict[str, float]:
         ).fetchone()
         if sc is None:
             raise NotFound(f"SC not found: {sc_id}")
+
+        null_con_value_gr = conn.execute(
+            """
+            select gr.gr_id
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            where po.sc_id = ?
+              and gr.status = 'approved'
+              and gr.con_value is null
+            limit 1
+            """,
+            (sc_id,),
+        ).fetchone()
+        if null_con_value_gr is not None:
+            raise ConflictError(
+                f"Approved GR has NULL con_value for SC {sc_id}: "
+                f"{null_con_value_gr['gr_id']}"
+            )
 
         gr_totals = conn.execute(
             """
@@ -52,7 +71,7 @@ def compute_sc_budget(config, sc_id: str) -> dict[str, float]:
     }
 
 
-def compute_po_budget(config, po_id: str) -> dict[str, float]:
+def compute_po_budget(config: AppConfig, po_id: str) -> dict[str, float]:
     with connect(config) as conn:
         po = conn.execute(
             "select po_amount from pos where po_id = ?",
@@ -60,6 +79,23 @@ def compute_po_budget(config, po_id: str) -> dict[str, float]:
         ).fetchone()
         if po is None:
             raise NotFound(f"PO not found: {po_id}")
+
+        null_con_value_gr = conn.execute(
+            """
+            select gr_id
+            from gr_requests
+            where po_id = ?
+              and status = 'approved'
+              and con_value is null
+            limit 1
+            """,
+            (po_id,),
+        ).fetchone()
+        if null_con_value_gr is not None:
+            raise ConflictError(
+                f"Approved GR has NULL con_value for PO {po_id}: "
+                f"{null_con_value_gr['gr_id']}"
+            )
 
         gr_totals = conn.execute(
             """
