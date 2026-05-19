@@ -17,6 +17,7 @@ REQUIRED_FIELDS = (
     "service_period_start",
     "service_period_end",
 )
+SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
 SUPPORTED_STATUSES = {"pending", "approved", "denied", "closed"}
 
 
@@ -66,6 +67,8 @@ def create_sc(
 ) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
+    if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
+        raise ValidationError("request_type is invalid")
     sc_amount = _positive_number(data["sc_amount"], "sc_amount")
 
     if operation_mode == "normal":

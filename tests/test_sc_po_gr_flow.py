@@ -216,6 +216,26 @@ def test_normal_sc_creation_ignores_supplied_status(app_config):
     assert created["status"] == "pending"
 
 
+def test_create_sc_validates_request_type(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    with pytest.raises(ValidationError, match="request_type is invalid"):
+        create_sc(
+            app_config,
+            USER,
+            {
+                "sc_id": "SC1",
+                "requester_id": "U1",
+                "request_type": "unsupported",
+                "cost_center": 1001,
+                "sc_amount": 1000,
+                "service_period_start": "2026-01-01",
+                "service_period_end": "2026-12-31",
+            },
+        )
+
+
 def test_create_po_cannot_exceed_sc_amount(app_config):
     migrate(app_config)
     seed_users(app_config)
@@ -302,7 +322,7 @@ def test_create_gr_requires_complete_approved_sc_and_po(
         )
 
 
-def test_create_gr_requires_approved_sc(app_config):
+def test_create_po_requires_approved_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
 
@@ -340,6 +360,77 @@ def test_create_gr_requires_approved_sc(app_config):
                 "vendor_id": "V1",
                 "po_amount": 800,
             },
+        )
+
+
+def test_create_gr_requires_approved_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    create_sc(
+        app_config,
+        USER,
+        {
+            "sc_id": "SC1",
+            "sc_no": "SC001",
+            "requester_id": "U1",
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    create_vendor(
+        app_config,
+        USER,
+        {
+            "vendor_id": "V1",
+            "vendor_name": "Vendor",
+            "service_scope": "General Service",
+        },
+    )
+
+    with connect(app_config) as conn:
+        conn.execute(
+            """
+            insert into pos (
+              po_id,
+              sc_id,
+              vendor_id,
+              po_no,
+              po_amount,
+              status,
+              contract_from,
+              contract_to,
+              contract_no,
+              payment_frequency,
+              created_at,
+              updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "PO1",
+                "SC1",
+                "V1",
+                "PO001",
+                800,
+                "po_approved",
+                None,
+                None,
+                None,
+                None,
+                "2026-05-19T00:00:00+00:00",
+                "2026-05-19T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    with pytest.raises(ConflictError, match="SC must be approved"):
+        create_gr(
+            app_config,
+            USER,
+            {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
         )
 
 

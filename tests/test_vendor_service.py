@@ -90,6 +90,22 @@ def test_vendor_creation_validates_required_fields(app_config):
         )
 
 
+def test_vendor_creation_validates_service_scope(app_config):
+    migrate(app_config)
+    seed_user(app_config)
+
+    with pytest.raises(ValidationError, match="service_scope is invalid"):
+        create_vendor(
+            app_config,
+            current_user=USER,
+            data={
+                "vendor_id": "V1",
+                "vendor_name": "Alpha Logistics",
+                "service_scope": "Unsupported Scope",
+            },
+        )
+
+
 def test_vendor_write_is_audited(app_config):
     migrate(app_config)
     seed_user(app_config)

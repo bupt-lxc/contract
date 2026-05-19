@@ -9,6 +9,23 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("vendor_id", "vendor_name", "service_scope")
+SUPPORTED_SERVICE_SCOPES = {
+    "Transportation",
+    "engineering Service",
+    "Equipment",
+    "Parts",
+    "Driver",
+    "Test car rental",
+    "General Service",
+    "Dealers",
+    "Import&Export&cusoms clearance",
+    "Insurance",
+    "Harness",
+    "Maintenance",
+    "Security",
+    "Testing support",
+    "Others",
+}
 OPTIONAL_FIELDS = (
     "ksrm_vendor_code",
     "contact_person",
@@ -45,6 +62,8 @@ def _get_vendor(conn, vendor_id: str) -> dict:
 def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
+    if data["service_scope"] not in SUPPORTED_SERVICE_SCOPES:
+        raise ValidationError("service_scope is invalid")
 
     timestamp = utc_now()
     vendor_id = data["vendor_id"]
