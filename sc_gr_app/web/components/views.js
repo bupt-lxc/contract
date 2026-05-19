@@ -74,7 +74,7 @@ const VIEW_DEFINITIONS = {
       { key: "po_amount", label: "PO Amount", sortKey: "po_amount", width: "13%", className: "amount", render: (value) => money(value) },
       { key: "open_po_amount", label: "OPEN PO", sortKey: null, width: "12%", className: "amount", render: (value) => money(value) },
       { key: "status", label: "Status", sortKey: "status", width: "12%", render: statusBadge },
-      { key: "contract_to", label: "Contract To", sortKey: null, render: (value) => date(value) },
+      { key: "contract_to", label: "Contract To", sortKey: "contract_to", render: (value) => date(value) },
     ],
   },
   gr: {
