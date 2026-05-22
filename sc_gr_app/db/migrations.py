@@ -189,6 +189,27 @@ def _sc_records_has_v2_constraints(conn) -> bool:
     )
 
 
+def _invalid_non_draft_sc_ids(conn) -> list[str]:
+    return [
+        row["sc_id"]
+        for row in conn.execute(
+            """
+            select sc_id
+            from sc_records
+            where status != 'draft'
+              and (
+                request_type is null
+                or cost_center is null
+                or sc_amount is null
+                or service_period_start is null
+                or service_period_end is null
+              )
+            order by sc_id
+            """
+        )
+    ]
+
+
 def _migrate_v1(conn) -> None:
     conn.executescript(V1_SCHEMA_SQL)
     _record(conn, 1)
@@ -198,6 +219,12 @@ def _migrate_v2(conn) -> None:
     if _sc_records_has_v2_constraints(conn):
         _record(conn, 2)
         return
+
+    invalid_sc_ids = _invalid_non_draft_sc_ids(conn)
+    if invalid_sc_ids:
+        raise RuntimeError(
+            "Invalid SC records cannot be migrated: " + ", ".join(invalid_sc_ids)
+        )
 
     conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
     conn.execute(
