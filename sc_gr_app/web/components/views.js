@@ -298,7 +298,7 @@ function statusBadge(value) {
 }
 
 function renderOpenDetailAction() {
-  return `<button type="button" class="icon-button row-action" data-action="open-detail" title="Open SC detail">Open</button>`;
+  return `<button type="button" class="icon-button row-action" data-action="open-detail" title="Open SC detail">&gt;</button>`;
 }
 
 function renderScDetail(regions) {

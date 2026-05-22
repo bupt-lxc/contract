@@ -19,6 +19,19 @@ function renderState(kind, title, message) {
   `;
 }
 
+export function shouldOpenRowFromKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return false;
+  }
+
+  const target = event.target;
+  const tagName = target?.tagName?.toLowerCase();
+  if (["button", "input", "select", "textarea", "a"].includes(tagName)) {
+    return false;
+  }
+  return !target?.closest?.("[data-action]");
+}
+
 export function renderTable(container, options) {
   const {
     title,
@@ -131,7 +144,7 @@ export function renderTable(container, options) {
     };
     rowElement.addEventListener("click", openRow);
     rowElement.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+      if (shouldOpenRowFromKeydown(event)) {
         event.preventDefault();
         openRow();
       }
