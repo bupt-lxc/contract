@@ -166,6 +166,118 @@ def test_sc_records_requires_business_fields_after_draft(app_config):
             raise AssertionError("pending SC with null request_type should fail")
 
 
+def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
+    with connect(app_config) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_migrations (
+              version INTEGER PRIMARY KEY,
+              applied_at TEXT NOT NULL
+            );
+
+            CREATE TABLE users (
+              user_id TEXT PRIMARY KEY,
+              machine_id TEXT NOT NULL UNIQUE,
+              user_name TEXT NOT NULL,
+              role TEXT NOT NULL CHECK (role IN ('admin', 'requester')),
+              email TEXT,
+              status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'pending', 'approved', 'denied', 'closed')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              closed_at TEXT
+            );
+            """
+        )
+        conn.execute(
+            "insert into schema_migrations(version, applied_at) values (?, ?)",
+            (1, "2026-05-22T00:00:00+00:00"),
+        )
+        conn.execute(
+            "insert into schema_migrations(version, applied_at) values (?, ?)",
+            (2, "2026-05-22T00:00:00+00:00"),
+        )
+        conn.execute(
+            """
+            insert into users (
+              user_id, machine_id, user_name, role, email, status, created_at, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "U1",
+                "M1",
+                "Requester",
+                "requester",
+                None,
+                "active",
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        versions = [
+            row[0]
+            for row in conn.execute(
+                "select version from schema_migrations order by version"
+            )
+        ]
+        try:
+            conn.execute(
+                """
+                insert into sc_records (
+                  sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+                  service_period_start, service_period_end, status, description,
+                  created_by, created_at, updated_at, approved_by, approved_at, closed_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "SC_PENDING",
+                    None,
+                    "U1",
+                    None,
+                    1001,
+                    1000,
+                    "2026-01-01",
+                    "2026-12-31",
+                    "pending",
+                    None,
+                    "U1",
+                    "2026-05-22T00:00:00+00:00",
+                    "2026-05-22T00:00:00+00:00",
+                    None,
+                    None,
+                    None,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("repaired v2 should reject missing business fields")
+
+    assert versions == [1, 2]
+
+
 def test_migration_v2_preserves_dependent_foreign_keys_and_indexes(app_config):
     with connect(app_config) as conn:
         conn.executescript(

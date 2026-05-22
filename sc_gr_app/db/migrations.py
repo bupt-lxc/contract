@@ -164,22 +164,38 @@ def _record(conn, version: int) -> None:
     )
 
 
+def _sc_records_sql(conn) -> str:
+    row = conn.execute(
+        "select sql from sqlite_master where type = 'table' and name = 'sc_records'"
+    ).fetchone()
+    return row["sql"] if row else ""
+
+
+def _sc_records_has_v2_constraints(conn) -> bool:
+    columns = {
+        row["name"]: row
+        for row in conn.execute("PRAGMA table_info(sc_records)")
+    }
+    status_sql = _sc_records_sql(conn)
+    return (
+        "draft" in status_sql
+        and columns.get("request_type", {})["notnull"] == 0
+        and "status = 'draft'" in status_sql
+        and "request_type IS NOT NULL" in status_sql
+        and "cost_center IS NOT NULL" in status_sql
+        and "sc_amount IS NOT NULL" in status_sql
+        and "service_period_start IS NOT NULL" in status_sql
+        and "service_period_end IS NOT NULL" in status_sql
+    )
+
+
 def _migrate_v1(conn) -> None:
     conn.executescript(V1_SCHEMA_SQL)
     _record(conn, 1)
 
 
 def _migrate_v2(conn) -> None:
-    columns = {
-        row["name"]: row
-        for row in conn.execute("PRAGMA table_info(sc_records)")
-    }
-    status_row = conn.execute(
-        "select sql from sqlite_master where type = 'table' and name = 'sc_records'"
-    ).fetchone()
-    status_sql = status_row["sql"] if status_row else ""
-
-    if "draft" in status_sql and columns["request_type"]["notnull"] == 0:
+    if _sc_records_has_v2_constraints(conn):
         _record(conn, 2)
         return
 
@@ -249,6 +265,14 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v1(conn)
                 conn.commit()
             if 2 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("PRAGMA legacy_alter_table = ON")
+                conn.execute("BEGIN")
+                _migrate_v2(conn)
+                conn.commit()
+                conn.execute("PRAGMA legacy_alter_table = OFF")
+                conn.execute("PRAGMA foreign_keys = ON")
+            elif not _sc_records_has_v2_constraints(conn):
                 conn.execute("PRAGMA foreign_keys = OFF")
                 conn.execute("PRAGMA legacy_alter_table = ON")
                 conn.execute("BEGIN")
