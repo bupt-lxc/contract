@@ -1,5 +1,6 @@
 import { escapeHtml } from "./components/format.js";
 import { loadCurrentUserState } from "./components/auth.js";
+import { callApi } from "./components/api.js";
 import { NAV_ITEMS, setCurrentView, setScDetailTarget, state, toggleSort } from "./components/state.js";
 import { getViewTitle, renderDetail, renderView } from "./components/views.js";
 
@@ -63,17 +64,21 @@ async function loadCurrentUser() {
 }
 
 async function routeTo(viewKey) {
-  if (!NAV_ITEMS.some((item) => item.key === viewKey) && viewKey !== "sc-detail") {
+  if (!NAV_ITEMS.some((item) => item.key === viewKey) && viewKey !== "sc-detail" && viewKey !== "sc-new") {
     viewKey = "sc";
   }
   setCurrentView(viewKey);
   elements.title.textContent = getViewTitle(viewKey);
   elements.searchInput.value = state.globalSearch;
-  elements.searchInput.disabled = viewKey === "home" || viewKey === "system" || viewKey === "sc-detail";
+  elements.searchInput.disabled = viewKey === "home" || viewKey === "system" || viewKey === "sc-detail" || viewKey === "sc-new";
   elements.searchInput.placeholder = elements.searchInput.disabled ? "Search unavailable for this view" : "Search current view";
   renderNavigation();
   if (viewKey === "system") {
     await loadCurrentUser();
+  }
+  if (viewKey === "sc-detail") {
+    await refreshScDetail();
+    return;
   }
   await renderActiveView();
 }
@@ -83,12 +88,84 @@ async function routeToScDetail(scId, target = {}) {
   await routeTo("sc-detail");
 }
 
+async function loadScDetail() {
+  if (!state.scDetail.scId) {
+    state.scDetail.record = null;
+    state.scDetail.loading = false;
+    state.scDetail.error = null;
+    return;
+  }
+
+  state.scDetail.loading = true;
+  state.scDetail.error = null;
+  state.scDetail.record = null;
+  await renderActiveView();
+
+  try {
+    state.scDetail.record = await callApi("get_sc_detail", { sc_id: state.scDetail.scId });
+  } catch (error) {
+    state.scDetail.record = null;
+    state.scDetail.error = error.message;
+  } finally {
+    state.scDetail.loading = false;
+  }
+}
+
+async function refreshScDetail() {
+  await loadScDetail();
+  await renderActiveView();
+}
+
+async function createSc(mode, data) {
+  const created = await callApi("create_sc_draft", { data });
+  const scId = created.sc_id ?? data.sc_id;
+  if (mode === "submit") {
+    await callApi("submit_sc", { sc_id: scId, data: {} });
+  }
+  await routeToScDetail(scId);
+}
+
+async function handleScAction(action) {
+  const scId = state.scDetail.record?.sc?.sc_id ?? state.scDetail.scId;
+  if (!scId) {
+    return;
+  }
+  if (action === "deny" && !window.confirm("Deny this SC?")) {
+    return;
+  }
+  if (action === "close" && !window.confirm("Close this SC?")) {
+    return;
+  }
+
+  if (action === "submit") {
+    await callApi("submit_sc", { sc_id: scId, data: {} });
+  } else if (action === "edit") {
+    await callApi("update_sc", { sc_id: scId, data: buildScUpdateData(state.scDetail.record?.sc ?? {}) });
+  } else if (action === "approve") {
+    await callApi("approve_sc", { sc_id: scId });
+  } else if (action === "deny") {
+    await callApi("deny_sc", { sc_id: scId });
+  } else if (action === "close") {
+    await callApi("close_sc", { sc_id: scId });
+  }
+  await refreshScDetail();
+}
+
+function buildScUpdateData(sc) {
+  const keys = ["sc_no", "request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end", "description"];
+  return Object.fromEntries(keys.filter((key) => sc[key] !== null && sc[key] !== undefined).map((key) => [key, sc[key]]));
+}
+
 async function renderActiveView() {
   await renderView(
     state.currentView,
     { home: elements.home, filters: elements.filters, table: elements.table },
     {
       onRefresh: renderActiveView,
+      onNewSc: () => routeTo("sc-new"),
+      onCancel: () => routeTo("sc"),
+      onCreateSc: createSc,
+      onScAction: handleScAction,
       onSort: async (viewKey, sortKey) => {
         toggleSort(viewKey, sortKey);
         await renderActiveView();
@@ -130,4 +207,8 @@ elements.drawer.close.addEventListener("click", () => {
 renderNavigation();
 renderUserPanel();
 await loadCurrentUser();
-await routeTo(state.user ? "sc" : "system");
+if (state.user) {
+  await routeTo("sc");
+} else {
+  await routeTo("system");
+}

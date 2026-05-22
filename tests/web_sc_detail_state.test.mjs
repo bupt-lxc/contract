@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { clearScDetailTarget, setScDetailTarget, state } from "../sc_gr_app/web/components/state.js";
+import { collectFormData } from "../sc_gr_app/web/components/forms.js";
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {
   clearScDetailTarget();
@@ -35,4 +36,22 @@ test("clearScDetailTarget resets target, record, loading, and error", () => {
     loading: false,
     error: null,
   });
+});
+
+test("collectFormData omits empty optional fields and preserves numeric strings", () => {
+  const controls = [
+    { name: "sc_id", value: "SC1" },
+    { name: "request_type", value: "service" },
+    { name: "cost_center", value: "1001" },
+    { name: "description", value: "" },
+  ];
+
+  const data = collectFormData(controls);
+
+  assert.deepEqual(data, {
+    sc_id: "SC1",
+    request_type: "service",
+    cost_center: "1001",
+  });
+  assert.equal(Object.hasOwn(data, "description"), false);
 });

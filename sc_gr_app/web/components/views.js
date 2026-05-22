@@ -1,5 +1,6 @@
 import { callApi } from "./api.js";
 import { date, escapeHtml, money, statusLabel, text } from "./format.js";
+import { collectFormData, field } from "./forms.js";
 import { getViewState, resetFilters, setFilter, state } from "./state.js";
 import { renderTable } from "./tables.js";
 
@@ -133,6 +134,9 @@ export function getViewTitle(viewKey) {
   if (viewKey === "sc-detail") {
     return "SC Detail";
   }
+  if (viewKey === "sc-new") {
+    return "New SC";
+  }
   return VIEW_DEFINITIONS[viewKey]?.title ?? "SC List";
 }
 
@@ -155,7 +159,12 @@ export async function renderView(viewKey, regions, callbacks) {
   }
 
   if (viewKey === "sc-detail") {
-    renderScDetail(regions);
+    renderScDetail(regions, callbacks);
+    return;
+  }
+
+  if (viewKey === "sc-new") {
+    renderNewSc(regions, callbacks);
     return;
   }
 
@@ -225,6 +234,19 @@ function renderRows(viewKey, definition, tableRegion, callbacks) {
     onRowClick: callbacks.onRowClick,
     onAction: callbacks.onAction,
   });
+
+  if (viewKey === "sc") {
+    const caption = tableRegion.querySelector(".table-caption");
+    if (caption && !caption.querySelector("[data-new-sc]")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button primary";
+      button.dataset.newSc = "";
+      button.textContent = "New SC";
+      button.addEventListener("click", () => callbacks.onNewSc?.());
+      caption.append(button);
+    }
+  }
 }
 
 function renderFilters(viewKey, definition, container, callbacks) {
@@ -301,14 +323,170 @@ function renderOpenDetailAction() {
   return `<button type="button" class="icon-button row-action" data-action="open-detail" title="Open SC detail">&gt;</button>`;
 }
 
-function renderScDetail(regions) {
+function renderNewSc(regions, callbacks) {
+  regions.filters.innerHTML = "";
+  regions.table.innerHTML = "";
   regions.home.innerHTML = `
-    <div class="home-intro">
-      <h2>SC Detail</h2>
-      <p>SC detail routing is ready. The full detail workspace will load here in the next task.</p>
+    <section class="detail-section">
+      <div class="detail-page-header">
+        <div>
+          <p class="eyebrow">SC</p>
+          <h2>New SC</h2>
+        </div>
+        <div class="actions">
+          <button type="button" class="button" data-cancel>Cancel</button>
+        </div>
+      </div>
+      <form class="sc-form" data-new-sc-form>
+        <div class="form-grid">
+          ${field("requester_id", "Requester", state.user?.user_id ?? "", "text", { readonly: true, required: true })}
+          ${field("sc_id", "SC ID", "", "text", { required: true })}
+          ${field("sc_no", "SC No")}
+          ${field("request_type", "Request Type")}
+          ${field("cost_center", "Cost Center")}
+          ${field("sc_amount", "SC Amount", "", "number")}
+          ${field("service_period_start", "Service Period Start", "", "date")}
+          ${field("service_period_end", "Service Period End", "", "date")}
+          <label class="form-field full">
+            <span>Description</span>
+            <textarea name="description"></textarea>
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit" class="button" data-mode="draft">Save Draft</button>
+          <button type="submit" class="button primary" data-mode="submit">Submit</button>
+          <button type="button" class="button" data-cancel>Cancel</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  const formElement = regions.home.querySelector("[data-new-sc-form]");
+  formElement.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = event.submitter?.dataset.mode ?? "draft";
+    callbacks.onCreateSc?.(mode, collectFormData(formElement.elements));
+  });
+  regions.home.querySelectorAll("[data-cancel]").forEach((button) => {
+    button.addEventListener("click", () => callbacks.onCancel?.());
+  });
+}
+
+export function renderScDetail(regions, callbacks = {}) {
+  regions.filters.innerHTML = "";
+  regions.table.innerHTML = "";
+  const detail = state.scDetail.record;
+
+  if (state.scDetail.loading) {
+    regions.home.innerHTML = detailState("loading", "Loading SC detail", "Fetching SC, PO, GR, and audit data.");
+    return;
+  }
+
+  if (state.scDetail.error) {
+    regions.home.innerHTML = detailState("error", "Unable to load SC detail", state.scDetail.error);
+    return;
+  }
+
+  if (!detail?.sc) {
+    regions.home.innerHTML = detailState("empty", "No SC selected", "Open an SC from the list to view the detail workspace.");
+    return;
+  }
+
+  const permissions = detail.permissions ?? {};
+  const sc = detail.sc;
+  regions.home.innerHTML = `
+    <div class="detail-page">
+      <div class="detail-page-header">
+        <div>
+          <p class="eyebrow">SC Detail</p>
+          <h2>${escapeHtml(text(sc.sc_no ?? sc.sc_id))}</h2>
+          <p>${statusBadge(sc.status)} <span class="muted-text">${escapeHtml(text(sc.request_type))}</span></p>
+        </div>
+        <div class="actions">
+          ${scActionButton("edit", "Edit", permissions.can_edit_sc)}
+          ${scActionButton("submit", "Submit", permissions.can_submit_sc)}
+          ${scActionButton("approve", "Approve", permissions.can_approve_sc, true)}
+          ${scActionButton("deny", "Deny", permissions.can_deny_sc)}
+          ${scActionButton("close", "Close", permissions.can_close_sc)}
+        </div>
+      </div>
+      <section class="detail-section sc-section">
+        <div class="section-toolbar"><h3>SC</h3></div>
+        <div class="detail-grid">${detailFields(sc, ["sc_id", "sc_no", "requester_id", "request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end", "description", "created_at", "updated_at"])}</div>
+      </section>
+      <section class="detail-section po-section">
+        <div class="section-toolbar"><h3>PO</h3></div>
+        ${simpleTable(detail.pos ?? [], ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"])}
+      </section>
+      <section class="detail-section gr-section">
+        <div class="section-toolbar"><h3>GR</h3></div>
+        ${simpleTable(detail.grs ?? [], ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "created_at"])}
+      </section>
+      <section class="detail-section audit-section">
+        <div class="section-toolbar"><h3>Audit</h3></div>
+        ${simpleTable(detail.audit_logs ?? [], ["created_at", "action_type", "object_type", "object_id", "operator_id", "machine_id"])}
+      </section>
     </div>
   `;
-  regions.table.innerHTML = "";
+
+  regions.home.querySelectorAll("[data-sc-action]").forEach((button) => {
+    button.addEventListener("click", () => callbacks.onScAction?.(button.dataset.scAction));
+  });
+}
+
+function detailState(kind, title, message) {
+  return `
+    <div class="detail-section">
+      <div class="state-panel ${kind}">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function scActionButton(action, label, enabled, primary = false) {
+  if (!enabled) {
+    return "";
+  }
+  return `<button type="button" class="button${primary ? " primary" : ""}" data-sc-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
+}
+
+function detailFields(record, keys) {
+  return keys.map((key) => `
+    <div class="detail-row">
+      <div class="detail-label">${escapeHtml(key)}</div>
+      <div class="detail-value">${formatDetailValue(key, record?.[key])}</div>
+    </div>
+  `).join("");
+}
+
+function formatDetailValue(key, value) {
+  if (key.includes("amount") || key === "con_value") {
+    return money(value);
+  }
+  if (key.endsWith("_at") || key.includes("period") || key.includes("contract_")) {
+    return date(value);
+  }
+  return escapeHtml(text(value));
+}
+
+function simpleTable(rows, keys) {
+  if (!rows.length) {
+    return `<p class="empty-note">No records.</p>`;
+  }
+  const headers = keys.map((key) => `<th>${escapeHtml(key)}</th>`).join("");
+  const body = rows.map((row) => `
+    <tr>${keys.map((key) => `<td>${formatDetailValue(key, row?.[key])}</td>`).join("")}</tr>
+  `).join("");
+  return `
+    <table class="data-table detail-table">
+      <thead><tr>${headers}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
 }
 
 function renderHome(regions) {
