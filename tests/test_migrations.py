@@ -110,6 +110,62 @@ def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
     assert row == ("draft", None, None)
 
 
+def test_sc_records_requires_business_fields_after_draft(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        conn.execute(
+            """
+            insert into users (
+              user_id, machine_id, user_name, role, email, status, created_at, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "U1",
+                "M1",
+                "Requester",
+                "requester",
+                None,
+                "active",
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+            ),
+        )
+
+        try:
+            conn.execute(
+                """
+                insert into sc_records (
+                  sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+                  service_period_start, service_period_end, status, description,
+                  created_by, created_at, updated_at, approved_by, approved_at, closed_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "SC_PENDING",
+                    None,
+                    "U1",
+                    None,
+                    1001,
+                    1000,
+                    "2026-01-01",
+                    "2026-12-31",
+                    "pending",
+                    None,
+                    "U1",
+                    "2026-05-22T00:00:00+00:00",
+                    "2026-05-22T00:00:00+00:00",
+                    None,
+                    None,
+                    None,
+                ),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("pending SC with null request_type should fail")
+
+
 def test_migration_v2_preserves_dependent_foreign_keys_and_indexes(app_config):
     with connect(app_config) as conn:
         conn.executescript(

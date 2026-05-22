@@ -202,7 +202,17 @@ def _migrate_v2(conn) -> None:
           updated_at TEXT NOT NULL,
           approved_by TEXT REFERENCES users(user_id),
           approved_at TEXT,
-          closed_at TEXT
+          closed_at TEXT,
+          CHECK (
+            status = 'draft'
+            OR (
+              request_type IS NOT NULL
+              AND cost_center IS NOT NULL
+              AND sc_amount IS NOT NULL
+              AND service_period_start IS NOT NULL
+              AND service_period_end IS NOT NULL
+            )
+          )
         )
         """
     )
