@@ -13,6 +13,7 @@ from sc_gr_app.services.vendor_service import create_vendor
 
 USER = {"user_id": "U1", "role": "requester", "machine_id": "M1"}
 ADMIN = {"user_id": "A1", "role": "admin", "machine_id": "M2"}
+OTHER_USER = {"user_id": "U2", "role": "requester", "machine_id": "M3"}
 
 
 def seed_users(app_config):
@@ -46,6 +47,24 @@ def seed_users(app_config):
         conn.commit()
 
 
+def seed_other_user(app_config):
+    with connect(app_config) as conn:
+        conn.execute(
+            "insert into users values (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "U2",
+                "M3",
+                "Other Requester",
+                "requester",
+                None,
+                "active",
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+
 def seed_approved_sc_vendor_po(
     app_config,
     *,
@@ -55,12 +74,13 @@ def seed_approved_sc_vendor_po(
     sc_amount=1000,
     po_amount=800,
 ):
+    sc_no_for_approval = sc_no or "SC-TEMP"
     create_sc(
         app_config,
         USER,
         {
             "sc_id": "SC1",
-            "sc_no": sc_no,
+            "sc_no": sc_no_for_approval,
             "requester_id": "U1",
             "request_type": "service",
             "cost_center": 1001,
@@ -70,6 +90,13 @@ def seed_approved_sc_vendor_po(
         },
     )
     approve_sc(app_config, ADMIN, "SC1")
+    if sc_no != sc_no_for_approval:
+        with connect(app_config) as conn:
+            conn.execute(
+                "update sc_records set sc_no = ? where sc_id = ?",
+                (sc_no, "SC1"),
+            )
+            conn.commit()
     create_vendor(
         app_config,
         USER,
@@ -205,6 +232,7 @@ def test_normal_sc_creation_ignores_supplied_status(app_config):
         USER,
         {
             "sc_id": "SC1",
+            "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
             "cost_center": 1001,
@@ -268,6 +296,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
         USER,
         {
             "sc_id": "SC1",
+            "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
             "cost_center": 1001,
@@ -700,3 +729,205 @@ def test_approve_gr_allows_exact_decimal_extra_boundary(app_config):
 
     assert approved["status"] == "approved"
     assert approved["con_value"] == 0.3
+
+
+def test_requester_creates_minimal_draft_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft
+
+    created = create_sc_draft(
+        app_config,
+        USER,
+        {"sc_id": "SC_DRAFT", "requester_id": "U1"},
+    )
+
+    assert created["status"] == "draft"
+    assert created["requester_id"] == "U1"
+    assert created["request_type"] is None
+    assert created["sc_amount"] is None
+
+
+def test_requester_cannot_create_draft_for_another_owner(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft
+
+    with pytest.raises(PermissionDenied):
+        create_sc_draft(
+            app_config,
+            USER,
+            {"sc_id": "SC_DRAFT", "requester_id": "U2"},
+        )
+
+
+def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    with pytest.raises(ValidationError, match="request_type is required"):
+        submit_sc(app_config, USER, "SC_DRAFT", {})
+
+    submitted = submit_sc(
+        app_config,
+        USER,
+        "SC_DRAFT",
+        {
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+
+    assert submitted["status"] == "pending"
+    assert submitted["sc_no"] is None
+
+
+def test_owner_cannot_edit_pending_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    submit_sc(
+        app_config,
+        USER,
+        "SC_DRAFT",
+        {
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+
+    with pytest.raises(PermissionDenied):
+        update_sc(app_config, USER, "SC_DRAFT", {"description": "late change"})
+
+
+def test_admin_cannot_approve_sc_without_sc_no(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    submit_sc(
+        app_config,
+        USER,
+        "SC_DRAFT",
+        {
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+
+    with pytest.raises(ConflictError, match="SC No is required"):
+        approve_sc(app_config, ADMIN, "SC_DRAFT")
+
+
+def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import (
+        close_sc,
+        create_sc_draft,
+        deny_sc,
+        submit_sc,
+        update_sc,
+    )
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    submit_sc(
+        app_config,
+        USER,
+        "SC_DRAFT",
+        {
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    updated = update_sc(app_config, ADMIN, "SC_DRAFT", {"sc_no": "SC001"})
+    approved = approve_sc(app_config, ADMIN, "SC_DRAFT")
+    closed = close_sc(app_config, ADMIN, "SC_DRAFT")
+
+    assert updated["sc_no"] == "SC001"
+    assert approved["status"] == "approved"
+    assert closed["status"] == "closed"
+
+    create_sc(
+        app_config,
+        USER,
+        {
+            "sc_id": "SC_DENY",
+            "requester_id": "U1",
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 100,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    denied = deny_sc(app_config, ADMIN, "SC_DENY")
+    assert denied["status"] == "denied"
+
+
+def test_get_sc_detail_returns_related_data_and_permissions(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import get_sc_detail
+
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    detail = get_sc_detail(app_config, ADMIN, "SC1")
+
+    assert detail["sc"]["sc_id"] == "SC1"
+    assert detail["budget"]["sc_amount"] == 1000
+    assert [po["po_id"] for po in detail["pos"]] == ["PO1"]
+    assert [gr["gr_id"] for gr in detail["grs"]] == ["GR1"]
+    assert "create_sc" in [log["action_type"] for log in detail["audit_logs"]]
+    assert detail["permissions"] == {
+        "can_edit_sc": True,
+        "can_submit_sc": False,
+        "can_approve_sc": False,
+        "can_deny_sc": False,
+        "can_close_sc": True,
+        "can_manage_po": True,
+        "can_manage_gr": True,
+    }
+
+
+def test_admin_cannot_view_draft_sc_detail(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, get_sc_detail
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    with pytest.raises(PermissionDenied, match="SC is not visible"):
+        get_sc_detail(app_config, ADMIN, "SC_DRAFT")

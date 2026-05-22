@@ -13,7 +13,7 @@ from sc_gr_app.services.query_service import (
 )
 from sc_gr_app.services.sc_service import approve_sc, create_sc
 from sc_gr_app.services.vendor_service import create_vendor
-from tests.test_sc_po_gr_flow import ADMIN, USER, seed_users
+from tests.test_sc_po_gr_flow import ADMIN, OTHER_USER, USER, seed_other_user, seed_users
 
 
 def seed_query_data(app_config):
@@ -269,3 +269,26 @@ def test_limit_is_clamped_to_max_limit(app_config):
     rows = search_scs(app_config, limit=501)
 
     assert [row["sc_id"] for row in rows] == ["SC1"]
+
+
+def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft
+    from sc_gr_app.services import query_service
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    admin_rows = query_service.search_scs(app_config, current_user=ADMIN, limit=100)
+    owner_rows = query_service.search_scs(app_config, current_user=USER, limit=100)
+    other_rows = query_service.search_scs(
+        app_config,
+        current_user=OTHER_USER,
+        limit=100,
+    )
+
+    assert [row["sc_id"] for row in admin_rows] == []
+    assert [row["sc_id"] for row in owner_rows] == ["SC_DRAFT"]
+    assert [row["sc_id"] for row in other_rows] == []

@@ -90,13 +90,15 @@ def _search(
     direction: str,
     limit: int,
     offset: int,
+    base_clauses: list[str] | None = None,
+    base_params: list | None = None,
 ) -> list[dict]:
     sort_column = allowed_sorts.get(sort)
     if sort_column is None:
         raise ValidationError("sort field is invalid")
 
-    clauses: list[str] = []
-    params: list = []
+    clauses: list[str] = list(base_clauses or [])
+    params: list = list(base_params or [])
     _append_text_search(clauses, params, text, text_columns)
     _append_filters(clauses, params, filters, allowed_filters)
 
@@ -122,7 +124,19 @@ def search_scs(
     direction: str = "desc",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    current_user: dict | None = None,
 ) -> list[dict]:
+    base_clauses: list[str] = []
+    base_params: list = []
+    if current_user:
+        if current_user.get("role") == "admin":
+            base_clauses.append("sc.status != 'draft'")
+        elif current_user.get("role") == "requester":
+            base_clauses.append("sc.requester_id = ?")
+            base_params.append(current_user["user_id"])
+        else:
+            raise ValidationError("current_user is invalid")
+
     return _search(
         config,
         select_sql="""
@@ -171,6 +185,8 @@ def search_scs(
         direction=direction,
         limit=limit,
         offset=offset,
+        base_clauses=base_clauses,
+        base_params=base_params,
     )
 
 
@@ -226,6 +242,7 @@ def search_pos(
     direction: str = "desc",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    current_user: dict | None = None,
 ) -> list[dict]:
     return _search(
         config,
@@ -283,6 +300,7 @@ def search_pos(
         direction=direction,
         limit=limit,
         offset=offset,
+        base_clauses=["sc.status != 'draft'"],
     )
 
 
@@ -294,6 +312,7 @@ def search_grs(
     direction: str = "desc",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    current_user: dict | None = None,
 ) -> list[dict]:
     return _search(
         config,
@@ -343,6 +362,7 @@ def search_grs(
         direction=direction,
         limit=limit,
         offset=offset,
+        base_clauses=["sc.status != 'draft'"],
     )
 
 
