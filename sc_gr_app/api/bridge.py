@@ -31,13 +31,18 @@ class ApiBridge:
             raise ValidationError("payload must be an object")
         return payload
 
+    def _required_payload(self, payload) -> dict:
+        if not isinstance(payload, dict):
+            raise ValidationError("payload must be an object")
+        return payload
+
     def _require_current_user(self) -> dict:
         machine_id = get_7_digit_id()
         return get_user_by_machine_id(self.config, machine_id)
 
     def get_sc_detail(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             return ok(sc_service.get_sc_detail(self.config, current_user, sc_id))
@@ -46,7 +51,7 @@ class ApiBridge:
 
     def create_sc_draft(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             return ok(sc_service.create_sc_draft(self.config, current_user, data))
@@ -55,7 +60,7 @@ class ApiBridge:
 
     def submit_sc(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
@@ -65,7 +70,7 @@ class ApiBridge:
 
     def update_sc(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
@@ -75,7 +80,7 @@ class ApiBridge:
 
     def approve_sc(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             return ok(sc_service.approve_sc(self.config, current_user, sc_id))
@@ -84,7 +89,7 @@ class ApiBridge:
 
     def deny_sc(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             return ok(sc_service.deny_sc(self.config, current_user, sc_id))
@@ -93,7 +98,7 @@ class ApiBridge:
 
     def close_sc(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             return ok(sc_service.close_sc(self.config, current_user, sc_id))
@@ -102,7 +107,7 @@ class ApiBridge:
 
     def create_po(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             return ok(po_service.create_po(self.config, current_user, data))
@@ -111,7 +116,7 @@ class ApiBridge:
 
     def update_po(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             data = _require_payload_field(payload, "data")
@@ -121,7 +126,7 @@ class ApiBridge:
 
     def approve_po(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             return ok(po_service.approve_po(self.config, current_user, po_id))
@@ -130,7 +135,7 @@ class ApiBridge:
 
     def finish_po(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             return ok(po_service.finish_po(self.config, current_user, po_id))
@@ -139,7 +144,7 @@ class ApiBridge:
 
     def create_gr(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             return ok(gr_service.create_gr(self.config, current_user, data))
@@ -148,7 +153,7 @@ class ApiBridge:
 
     def update_gr(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             data = _require_payload_field(payload, "data")
@@ -158,7 +163,7 @@ class ApiBridge:
 
     def approve_gr(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             con_value = _require_payload_field(payload, "con_value")
@@ -168,7 +173,7 @@ class ApiBridge:
 
     def cancel_gr(self, payload) -> dict:
         try:
-            payload = self._payload(payload)
+            payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.cancel_gr(self.config, current_user, gr_id))

@@ -319,6 +319,24 @@ def test_bridge_write_methods_reject_non_mapping_payload(app_config):
     }
 
 
+def test_bridge_write_methods_reject_none_payload(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda config, machine_id: {"user_id": "U1"},
+    )
+
+    response = bridge.ApiBridge(app_config).get_sc_detail(None)
+
+    assert response == {
+        "ok": False,
+        "error": {"code": "VALIDATION_ERROR", "message": "payload must be an object"},
+    }
+
+
 def test_bridge_write_methods_require_payload_fields(monkeypatch, app_config):
     from sc_gr_app.api import bridge
 
