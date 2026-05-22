@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  visibleDetailActions,
+} from "../sc_gr_app/web/components/views.js";
+
+import {
   applyScDetailFailure,
   applyScDetailRecord,
   beginScDetailRequest,
@@ -12,6 +16,23 @@ import {
   state,
 } from "../sc_gr_app/web/components/state.js";
 import { collectFormData } from "../sc_gr_app/web/components/forms.js";
+
+test("visibleDetailActions includes PO and GR management actions from permissions", () => {
+  const actions = visibleDetailActions({
+    permissions: {
+      can_manage_po: true,
+      can_manage_gr: true,
+      can_approve_sc: false,
+      can_close_sc: true,
+    },
+  });
+
+  assert.deepEqual(actions, ["close-sc", "add-po", "add-gr"]);
+  assert.equal(actions.includes("add-po"), true);
+  assert.equal(actions.includes("add-gr"), true);
+  assert.equal(actions.includes("close-sc"), true);
+  assert.equal(actions.includes("approve-sc"), false);
+});
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {
   clearScDetailTarget();

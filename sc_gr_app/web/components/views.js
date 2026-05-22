@@ -323,6 +323,21 @@ function renderOpenDetailAction() {
   return `<button type="button" class="icon-button row-action" data-action="open-detail" title="Open SC detail">&gt;</button>`;
 }
 
+export function visibleDetailActions(detail) {
+  const permissions = detail?.permissions ?? {};
+  return [
+    ["can_submit_sc", "submit-sc"],
+    ["can_edit_sc", "edit-sc"],
+    ["can_approve_sc", "approve-sc"],
+    ["can_deny_sc", "deny-sc"],
+    ["can_close_sc", "close-sc"],
+    ["can_manage_po", "add-po"],
+    ["can_manage_gr", "add-gr"],
+  ]
+    .filter(([permission]) => permissions[permission])
+    .map(([, action]) => action);
+}
+
 function renderNewSc(regions, callbacks) {
   regions.filters.innerHTML = "";
   regions.table.innerHTML = "";
@@ -428,14 +443,8 @@ export function renderScDetail(regions, callbacks = {}) {
         <div class="section-toolbar"><h3>SC</h3></div>
         ${scContent}
       </section>
-      <section class="detail-section po-section">
-        <div class="section-toolbar"><h3>PO</h3></div>
-        ${simpleTable(detail.pos ?? [], ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"])}
-      </section>
-      <section class="detail-section gr-section">
-        <div class="section-toolbar"><h3>GR</h3></div>
-        ${simpleTable(detail.grs ?? [], ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "created_at"])}
-      </section>
+      ${renderPoSection(detail, callbacks.poForm, pending)}
+      ${renderGrSection(detail, callbacks.grForm, pending)}
       <section class="detail-section audit-section">
         <div class="section-toolbar"><h3>Audit</h3></div>
         ${simpleTable(detail.audit_logs ?? [], ["created_at", "action_type", "object_type", "object_id", "operator_id", "machine_id"])}
@@ -455,6 +464,42 @@ export function renderScDetail(regions, callbacks = {}) {
   });
   regions.home.querySelector("[data-sc-cancel-edit]")?.addEventListener("click", async () => {
     await callbacks.onScCancelEdit?.();
+  });
+  regions.home.querySelectorAll("[data-po-form-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await callbacks.onPoFormOpen?.(button.dataset.poFormOpen, findPo(detail, button.dataset.poId));
+    });
+  });
+  regions.home.querySelectorAll("[data-po-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await callbacks.onPoStatusAction?.(button.dataset.poAction, findPo(detail, button.dataset.poId));
+    });
+  });
+  const poForm = regions.home.querySelector("[data-po-form]");
+  poForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await callbacks.onPoSave?.(poForm.dataset.mode, collectFormData(poForm.elements));
+  });
+  regions.home.querySelector("[data-po-form-cancel]")?.addEventListener("click", async () => {
+    await callbacks.onPoFormCancel?.();
+  });
+  regions.home.querySelectorAll("[data-gr-form-open]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await callbacks.onGrFormOpen?.(button.dataset.grFormOpen, findGr(detail, button.dataset.grId));
+    });
+  });
+  regions.home.querySelectorAll("[data-gr-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await callbacks.onGrStatusAction?.(button.dataset.grAction, findGr(detail, button.dataset.grId));
+    });
+  });
+  const grForm = regions.home.querySelector("[data-gr-form]");
+  grForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await callbacks.onGrSave?.(grForm.dataset.mode, collectFormData(grForm.elements));
+  });
+  regions.home.querySelector("[data-gr-form-cancel]")?.addEventListener("click", async () => {
+    await callbacks.onGrFormCancel?.();
   });
 }
 
@@ -504,6 +549,134 @@ function renderScEditForm(sc, pending) {
   `;
 }
 
+function renderPoSection(detail, formState, pending) {
+  const canManage = Boolean(detail.permissions?.can_manage_po);
+  const rows = detail.pos ?? [];
+  const form = formState ? renderPoForm(detail.sc, formState, pending) : "";
+  return `
+    <section class="detail-section po-section">
+      <div class="section-toolbar">
+        <h3>PO</h3>
+        ${canManage && !formState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
+      </div>
+      ${form}
+      ${simpleTable(rows, ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"], (row) => renderPoRowActions(row, canManage, pending))}
+    </section>
+  `;
+}
+
+function renderPoRowActions(row, canManage, pending) {
+  const disabled = pending ? " disabled" : "";
+  const buttons = [];
+  if (canManage) {
+    buttons.push(`<button type="button" class="button compact" data-po-form-open="edit" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Edit</button>`);
+  }
+  if (row.status === "po_pending") {
+    buttons.push(`<button type="button" class="button compact" data-po-action="approve" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Approve${pending === `po-approve-${row.po_id}` ? "..." : ""}</button>`);
+  }
+  if (row.status === "po_approved") {
+    buttons.push(`<button type="button" class="button compact" data-po-action="finish" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Finish${pending === `po-finish-${row.po_id}` ? "..." : ""}</button>`);
+  }
+  return buttons.join("");
+}
+
+function renderPoForm(sc, formState, pending) {
+  const record = formState.record ?? {};
+  const disabled = pending ? " disabled" : "";
+  return `
+    <form class="inline-record-form po-form" data-po-form data-mode="${escapeHtml(formState.mode)}">
+      <div class="form-grid">
+        ${field("sc_id", "SC ID", sc.sc_id ?? "", "hidden")}
+        ${field("po_id", "PO ID", record.po_id ?? "", "text", { readonly: formState.mode === "edit", required: true })}
+        ${field("vendor_id", "Vendor ID", record.vendor_id ?? "", "text", { required: true })}
+        ${field("po_no", "PO No", record.po_no ?? "")}
+        ${field("po_amount", "PO Amount", record.po_amount ?? "", "number")}
+        ${field("contract_from", "Contract From", record.contract_from ?? "", "date")}
+        ${field("contract_to", "Contract To", record.contract_to ?? "", "date")}
+        ${field("contract_no", "Contract No", record.contract_no ?? "")}
+        ${field("payment_frequency", "Payment Frequency", record.payment_frequency ?? "")}
+      </div>
+      <div class="actions">
+        <button type="submit" class="button primary"${disabled}>Save${pending === "po-save" ? "..." : ""}</button>
+        <button type="button" class="button" data-po-form-cancel${disabled}>Cancel</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderGrSection(detail, formState, pending) {
+  const canManage = Boolean(detail.permissions?.can_manage_gr);
+  const rows = detail.grs ?? [];
+  const form = formState ? renderGrForm(detail, formState, pending) : "";
+  return `
+    <section class="detail-section gr-section">
+      <div class="section-toolbar">
+        <h3>GR</h3>
+        ${canManage && !formState ? `<button type="button" class="button" data-gr-form-open="create"${pending ? " disabled" : ""}>Add GR</button>` : ""}
+      </div>
+      ${form}
+      ${simpleTable(rows, ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "remark", "created_at"], (row) => renderGrRowActions(row, canManage, pending))}
+    </section>
+  `;
+}
+
+function renderGrRowActions(row, canManage, pending) {
+  const disabled = pending ? " disabled" : "";
+  const buttons = [];
+  if (canManage) {
+    buttons.push(`<button type="button" class="button compact" data-gr-form-open="edit" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Edit</button>`);
+  }
+  if (row.status === "pending") {
+    buttons.push(`<button type="button" class="button compact" data-gr-action="approve" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Approve${pending === `gr-approve-${row.gr_id}` ? "..." : ""}</button>`);
+    buttons.push(`<button type="button" class="button compact" data-gr-action="cancel" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Cancel${pending === `gr-cancel-${row.gr_id}` ? "..." : ""}</button>`);
+  }
+  return buttons.join("");
+}
+
+function renderGrForm(detail, formState, pending) {
+  const record = formState.record ?? {};
+  const defaultPoId = formState.mode === "create"
+    ? (formState.poId ?? state.scDetail.poId ?? detail.pos?.[0]?.po_id ?? "")
+    : (record.po_id ?? "");
+  const disabled = pending ? " disabled" : "";
+  return `
+    <form class="inline-record-form gr-form" data-gr-form data-mode="${escapeHtml(formState.mode)}">
+      <div class="form-grid">
+        ${field("gr_id", "GR ID", record.gr_id ?? "", "text", { readonly: formState.mode === "edit", required: true })}
+        ${renderPoIdControl(detail.pos ?? [], defaultPoId)}
+        ${field("requester_id", "Requester ID", record.requester_id ?? state.user?.user_id ?? "")}
+        ${field("estimated_amount", "Estimated Amount", record.estimated_amount ?? "", "number")}
+        ${field("con_value", "Con Value", record.con_value ?? "", "number")}
+        <label class="form-field full">
+          <span>Remark</span>
+          <textarea name="remark">${escapeHtml(text(record.remark))}</textarea>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" class="button primary"${disabled}>Save${pending === "gr-save" ? "..." : ""}</button>
+        <button type="button" class="button" data-gr-form-cancel${disabled}>Cancel</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderPoIdControl(pos, value) {
+  if (!pos.length) {
+    return field("po_id", "PO ID", value);
+  }
+  const options = pos.map((po) => {
+    const poId = text(po.po_id);
+    const label = text(po.po_no ?? po.po_id);
+    return `<option value="${escapeHtml(poId)}"${poId === value ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+  return `
+    <label class="form-field">
+      <span>PO ID</span>
+      <select name="po_id">${options}</select>
+    </label>
+  `;
+}
+
 function detailFields(record, keys) {
   return keys.map((key) => `
     <div class="detail-row">
@@ -523,13 +696,13 @@ function formatDetailValue(key, value) {
   return escapeHtml(text(value));
 }
 
-function simpleTable(rows, keys) {
+function simpleTable(rows, keys, actionsRenderer = null) {
   if (!rows.length) {
     return `<p class="empty-note">No records.</p>`;
   }
-  const headers = keys.map((key) => `<th>${escapeHtml(key)}</th>`).join("");
+  const headers = keys.map((key) => `<th>${escapeHtml(key)}</th>`).join("") + (actionsRenderer ? "<th>actions</th>" : "");
   const body = rows.map((row) => `
-    <tr>${keys.map((key) => `<td>${formatDetailValue(key, row?.[key])}</td>`).join("")}</tr>
+    <tr>${keys.map((key) => `<td>${formatDetailValue(key, row?.[key])}</td>`).join("")}${actionsRenderer ? `<td><div class="row-actions">${actionsRenderer(row)}</div></td>` : ""}</tr>
   `).join("");
   return `
     <table class="data-table detail-table">
@@ -537,6 +710,14 @@ function simpleTable(rows, keys) {
       <tbody>${body}</tbody>
     </table>
   `;
+}
+
+function findPo(detail, poId) {
+  return (detail.pos ?? []).find((po) => String(po.po_id) === String(poId)) ?? null;
+}
+
+function findGr(detail, grId) {
+  return (detail.grs ?? []).find((gr) => String(gr.gr_id) === String(grId)) ?? null;
 }
 
 function renderHome(regions) {

@@ -34,6 +34,11 @@ const elements = {
   },
 };
 
+const scDetailUi = {
+  poForm: null,
+  grForm: null,
+};
+
 function renderNavigation() {
   elements.nav.innerHTML = NAV_ITEMS.map((item) => `
     <button type="button" class="nav-button ${item.key === state.currentView ? "active" : ""}" data-view="${escapeHtml(item.key)}">
@@ -97,6 +102,7 @@ async function routeTo(viewKey) {
 
 async function routeToScDetail(scId, target = {}) {
   setScDetailTarget(scId, target);
+  resetScDetailForms();
   await routeTo("sc-detail");
 }
 
@@ -126,6 +132,11 @@ async function refreshScDetail() {
   await renderActiveView();
 }
 
+function resetScDetailForms() {
+  scDetailUi.poForm = null;
+  scDetailUi.grForm = null;
+}
+
 async function createSc(mode, data) {
   const action = mode === "submit" ? "create-submit" : "create";
   await runScDetailAction(action, async () => {
@@ -153,6 +164,7 @@ async function handleScAction(action) {
 
   const resolved = resolveScAction(action, scId, buildScUpdateData(state.scDetail.record?.sc ?? {}));
   if (resolved.mode === "edit") {
+    resetScDetailForms();
     state.scDetail.editMode = true;
     state.scDetail.actionError = null;
     await renderActiveView();
@@ -189,6 +201,109 @@ async function handleScCancelEdit() {
   await renderActiveView();
 }
 
+async function openPoForm(mode, row = null) {
+  state.scDetail.editMode = false;
+  state.scDetail.actionError = null;
+  scDetailUi.grForm = null;
+  scDetailUi.poForm = { mode, record: mode === "edit" ? row ?? {} : {} };
+  await renderActiveView();
+}
+
+async function savePo(mode, payload) {
+  const data = { ...payload };
+  if (mode === "create") {
+    data.sc_id = data.sc_id ?? state.scDetail.record?.sc?.sc_id ?? state.scDetail.scId;
+  }
+  const poId = data.po_id;
+  await runScDetailAction("po-save", async () => {
+    if (mode === "edit") {
+      delete data.po_id;
+      delete data.sc_id;
+      await callApi("update_po", { po_id: poId, data });
+    } else {
+      await callApi("create_po", { data });
+    }
+    scDetailUi.poForm = null;
+    await refreshScDetail();
+  });
+  await renderActiveView();
+}
+
+async function handlePoStatusAction(action, row) {
+  if (!row?.po_id) {
+    return;
+  }
+  if (action === "finish" && !window.confirm("Finish this PO?")) {
+    return;
+  }
+  const api = action === "approve" ? "approve_po" : action === "finish" ? "finish_po" : null;
+  if (!api) {
+    return;
+  }
+  await runScDetailAction(`po-${action}-${row.po_id}`, async () => {
+    await callApi(api, { po_id: row.po_id });
+    await refreshScDetail();
+  });
+  await renderActiveView();
+}
+
+async function openGrForm(mode, row = null) {
+  state.scDetail.editMode = false;
+  state.scDetail.actionError = null;
+  scDetailUi.poForm = null;
+  scDetailUi.grForm = {
+    mode,
+    record: mode === "edit" ? row ?? {} : {},
+    poId: state.scDetail.poId ?? state.scDetail.record?.pos?.[0]?.po_id ?? null,
+  };
+  await renderActiveView();
+}
+
+async function saveGr(mode, payload) {
+  const data = { ...payload };
+  const grId = data.gr_id;
+  await runScDetailAction("gr-save", async () => {
+    if (mode === "edit") {
+      delete data.gr_id;
+      await callApi("update_gr", { gr_id: grId, data });
+    } else {
+      await callApi("create_gr", { data });
+    }
+    scDetailUi.grForm = null;
+    await refreshScDetail();
+  });
+  await renderActiveView();
+}
+
+async function handleGrStatusAction(action, row) {
+  if (!row?.gr_id) {
+    return;
+  }
+  if (action === "cancel" && !window.confirm("Cancel this GR?")) {
+    return;
+  }
+  if (action === "approve") {
+    const defaultValue = row.con_value ?? row.estimated_amount ?? "";
+    const conValue = window.prompt("Con Value", defaultValue);
+    if (conValue === null || String(conValue).trim() === "") {
+      return;
+    }
+    await runScDetailAction(`gr-approve-${row.gr_id}`, async () => {
+      await callApi("approve_gr", { gr_id: row.gr_id, con_value: conValue });
+      await refreshScDetail();
+    });
+    await renderActiveView();
+    return;
+  }
+  if (action === "cancel") {
+    await runScDetailAction(`gr-cancel-${row.gr_id}`, async () => {
+      await callApi("cancel_gr", { gr_id: row.gr_id });
+      await refreshScDetail();
+    });
+    await renderActiveView();
+  }
+}
+
 function buildScUpdateData(sc) {
   const keys = ["sc_no", "request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end", "description"];
   return Object.fromEntries(keys.filter((key) => sc[key] !== null && sc[key] !== undefined).map((key) => [key, sc[key]]));
@@ -206,6 +321,22 @@ async function renderActiveView() {
       onScAction: handleScAction,
       onScSave: handleScSave,
       onScCancelEdit: handleScCancelEdit,
+      poForm: scDetailUi.poForm,
+      grForm: scDetailUi.grForm,
+      onPoFormOpen: openPoForm,
+      onPoFormCancel: async () => {
+        scDetailUi.poForm = null;
+        await renderActiveView();
+      },
+      onPoSave: savePo,
+      onPoStatusAction: handlePoStatusAction,
+      onGrFormOpen: openGrForm,
+      onGrFormCancel: async () => {
+        scDetailUi.grForm = null;
+        await renderActiveView();
+      },
+      onGrSave: saveGr,
+      onGrStatusAction: handleGrStatusAction,
       onSort: async (viewKey, sortKey) => {
         toggleSort(viewKey, sortKey);
         await renderActiveView();
