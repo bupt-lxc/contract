@@ -13,7 +13,7 @@ from sc_gr_app.services.budget_service import (
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("gr_id", "po_id", "estimated_amount")
+REQUIRED_FIELDS = ("gr_id", "po_id", "requester_id", "estimated_amount")
 
 
 def utc_now() -> str:
@@ -136,6 +136,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
         "estimated_amount",
     )
     po_id = data["po_id"]
+    requester_id = data["requester_id"]
 
     with connect(config) as lookup_conn:
         lookup = lookup_conn.execute(
@@ -153,6 +154,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                _validate_user_exists(conn, requester_id)
                 po_sc = _get_po_sc(conn, po_id)
                 _validate_gr_creation_context(config, po_sc, estimated_amount)
                 conn.execute(
@@ -176,7 +178,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     (
                         gr_id,
                         po_id,
-                        current_user["user_id"],
+                        requester_id,
                         float(estimated_amount),
                         None,
                         "pending",

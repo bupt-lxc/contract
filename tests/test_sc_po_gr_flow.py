@@ -131,6 +131,7 @@ def test_sc_po_gr_happy_path(app_config):
         {
             "gr_id": "GR1",
             "po_id": "PO1",
+            "requester_id": "U1",
             "estimated_amount": 100,
             "remark": "monthly service",
         },
@@ -194,7 +195,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     with pytest.raises(PermissionDenied):
@@ -389,7 +390,7 @@ def test_create_gr_requires_complete_approved_sc_and_po(
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": amount},
+            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": amount},
         )
 
 
@@ -501,7 +502,7 @@ def test_create_gr_requires_approved_sc(app_config):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
         )
 
 
@@ -512,14 +513,14 @@ def test_create_gr_requires_enough_sc_available(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 900},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 900},
     )
 
     with pytest.raises(ConflictError, match="SC available amount is insufficient"):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 101},
+            {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 101},
         )
 
 
@@ -545,6 +546,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
             {
                 "gr_id": "GR1",
                 "po_id": "PO1",
+                "requester_id": "U1",
                 "estimated_amount": estimated_amount,
             },
         )
@@ -596,7 +598,7 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
         )
 
 
@@ -607,7 +609,7 @@ def test_approve_gr_rechecks_extra_con_value(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 900},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 900},
     )
 
     with pytest.raises(ConflictError, match="SC available amount is insufficient"):
@@ -621,7 +623,7 @@ def test_approve_gr_validates_con_value(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     with pytest.raises(ValidationError, match="con_value must be non-negative"):
@@ -636,7 +638,7 @@ def test_approve_gr_rejects_non_finite_con_value(app_config, con_value):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     with pytest.raises(ValidationError, match="con_value must be non-negative"):
@@ -651,7 +653,7 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
     approve_gr(app_config, ADMIN, "GR1", con_value=90)
 
@@ -702,13 +704,13 @@ def test_create_gr_allows_exact_decimal_budget_boundary(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1},
     )
 
     created = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 0.2},
+        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.2},
     )
 
     assert created["gr_id"] == "GR2"
@@ -722,7 +724,7 @@ def test_approve_gr_allows_exact_decimal_extra_boundary(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1},
     )
 
     approved = approve_gr(app_config, ADMIN, "GR1", con_value=0.3)
@@ -900,7 +902,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     detail = get_sc_detail(app_config, ADMIN, "SC1")
@@ -928,7 +930,7 @@ def test_get_sc_detail_includes_po_budget_data(app_config):
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.sc_service import get_sc_detail
@@ -969,7 +971,7 @@ def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
     seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 300})
+        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 300})
     approve_gr(app_config, ADMIN, "GR1", con_value=900)
     with connect(app_config) as conn:
         conn.execute("update pos set po_amount = ? where po_id = ?", (100, "PO1"))
@@ -1107,7 +1109,7 @@ def test_admin_updates_po_with_budget_validation(app_config):
     seed_approved_sc_vendor_po(app_config, po_amount=800)
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 300})
+        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 300})
 
     from sc_gr_app.services.po_service import update_po
 
@@ -1204,10 +1206,10 @@ def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
     seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1})
+        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1})
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 0.2})
+        ADMIN, {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.2})
     approve_gr(app_config, ADMIN, "GR2", con_value=0.2)
 
     from sc_gr_app.services.po_service import update_po
@@ -1266,19 +1268,39 @@ def test_gr_writes_require_admin(app_config):
         create_gr(
             app_config,
             USER,
-            {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
         )
 
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     with pytest.raises(PermissionDenied):
         update_gr(app_config, USER, "GR1", {"remark": "changed"})
     with pytest.raises(PermissionDenied):
         cancel_gr(app_config, USER, "GR1")
+
+
+def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+
+    created = create_gr(
+        app_config,
+        ADMIN,
+        {
+            "gr_id": "GR1",
+            "po_id": "PO1",
+            "requester_id": "U1",
+            "estimated_amount": 100,
+        },
+    )
+
+    assert created["requester_id"] == "U1"
+    assert created["created_by"] == "A1"
 
 
 def test_admin_updates_pending_gr_with_budget_validation(app_config):
@@ -1288,7 +1310,7 @@ def test_admin_updates_pending_gr_with_budget_validation(app_config):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1348,12 +1370,12 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 150},
+        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 150},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1403,7 +1425,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1434,7 +1456,7 @@ def test_update_pending_gr_rejects_blank_requester_id(app_config, requester_id):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1450,7 +1472,7 @@ def test_update_pending_gr_rejects_unknown_requester_id(app_config):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1466,13 +1488,13 @@ def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
     )
     approve_gr(app_config, ADMIN, "GR1", con_value=90)
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 50},
+        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 50},
     )
 
     from sc_gr_app.services.gr_service import cancel_gr, update_gr

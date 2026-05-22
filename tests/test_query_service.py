@@ -63,6 +63,7 @@ def seed_query_data(app_config):
         {
             "gr_id": "GR1",
             "po_id": "PO1",
+            "requester_id": "U1",
             "estimated_amount": 100,
             "remark": "alpha remark",
         },
@@ -341,6 +342,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
         {
             "gr_id": "GR2",
             "po_id": "PO2",
+            "requester_id": "U2",
             "estimated_amount": 50,
             "remark": "beta remark",
         },
