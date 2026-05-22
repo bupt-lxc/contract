@@ -1,6 +1,6 @@
 import { escapeHtml } from "./components/format.js";
 import { loadCurrentUserState } from "./components/auth.js";
-import { NAV_ITEMS, setCurrentView, state, toggleSort } from "./components/state.js";
+import { NAV_ITEMS, setCurrentView, setScDetailTarget, state, toggleSort } from "./components/state.js";
 import { getViewTitle, renderDetail, renderView } from "./components/views.js";
 
 const elements = {
@@ -63,19 +63,24 @@ async function loadCurrentUser() {
 }
 
 async function routeTo(viewKey) {
-  if (!NAV_ITEMS.some((item) => item.key === viewKey)) {
+  if (!NAV_ITEMS.some((item) => item.key === viewKey) && viewKey !== "sc-detail") {
     viewKey = "sc";
   }
   setCurrentView(viewKey);
   elements.title.textContent = getViewTitle(viewKey);
   elements.searchInput.value = state.globalSearch;
-  elements.searchInput.disabled = viewKey === "home" || viewKey === "system";
+  elements.searchInput.disabled = viewKey === "home" || viewKey === "system" || viewKey === "sc-detail";
   elements.searchInput.placeholder = elements.searchInput.disabled ? "Search unavailable for this view" : "Search current view";
   renderNavigation();
   if (viewKey === "system") {
     await loadCurrentUser();
   }
   await renderActiveView();
+}
+
+async function routeToScDetail(scId, target = {}) {
+  setScDetailTarget(scId, target);
+  await routeTo("sc-detail");
 }
 
 async function renderActiveView() {
@@ -89,6 +94,20 @@ async function renderActiveView() {
         await renderActiveView();
       },
       onRowClick: (row) => renderDetail(row, elements.drawer),
+      onAction: (action, row) => {
+        if (action !== "open-detail" || !row?.sc_id) {
+          return;
+        }
+        if (state.currentView === "po") {
+          void routeToScDetail(row.sc_id, { poId: row.po_id });
+          return;
+        }
+        if (state.currentView === "gr") {
+          void routeToScDetail(row.sc_id, { grId: row.gr_id });
+          return;
+        }
+        void routeToScDetail(row.sc_id);
+      },
     },
   );
 }

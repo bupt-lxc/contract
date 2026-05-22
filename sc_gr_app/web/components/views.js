@@ -32,14 +32,15 @@ const VIEW_DEFINITIONS = {
       { name: "cost_center", label: "Cost center", type: "text", placeholder: "1001" },
     ],
     columns: [
+      { key: "status", label: "Status", sortKey: "status", width: "12%", render: statusBadge },
       { key: "sc_no", label: "SC No", sortKey: "sc_no", width: "13%" },
       { key: "requester_name", label: "Requester", sortKey: "requester_name", width: "13%" },
       { key: "request_type", label: "Type", sortKey: "request_type", width: "12%" },
       { key: "cost_center", label: "Cost Center", sortKey: "cost_center", width: "11%" },
       { key: "sc_amount", label: "SC Amount", sortKey: "sc_amount", width: "13%", className: "amount", render: (value) => money(value) },
-      { key: "status", label: "Status", sortKey: "status", width: "12%", render: statusBadge },
       { key: "created_at", label: "Created", sortKey: "created_at", width: "12%", render: (value) => date(value) },
       { key: "description", label: "Description", sortKey: null },
+      { key: "actions", label: "Actions", sortKey: null, width: "7%", render: renderOpenDetailAction },
     ],
   },
   vendor: {
@@ -68,13 +69,14 @@ const VIEW_DEFINITIONS = {
       { name: "open_po", label: "OPEN PO", type: "select", localOnly: true, options: ["open", "closed"] },
     ],
     columns: [
+      { key: "status", label: "Status", sortKey: "status", width: "12%", render: statusBadge },
       { key: "po_no", label: "PO No", sortKey: "po_no", width: "13%" },
       { key: "sc_no", label: "SC No", sortKey: "sc_no", width: "13%" },
       { key: "vendor_name", label: "Vendor", sortKey: "vendor_name", width: "20%" },
       { key: "po_amount", label: "PO Amount", sortKey: "po_amount", width: "13%", className: "amount", render: (value) => money(value) },
       { key: "open_po_amount", label: "OPEN PO", sortKey: null, width: "12%", className: "amount", render: (value) => money(value) },
-      { key: "status", label: "Status", sortKey: "status", width: "12%", render: statusBadge },
       { key: "contract_to", label: "Contract To", sortKey: "contract_to", render: (value) => date(value) },
+      { key: "actions", label: "Actions", sortKey: null, width: "7%", render: renderOpenDetailAction },
     ],
   },
   gr: {
@@ -88,13 +90,14 @@ const VIEW_DEFINITIONS = {
       { name: "amount_max", label: "Amount max", type: "number", localOnly: true },
     ],
     columns: [
+      { key: "status", label: "Status", sortKey: "status", render: statusBadge },
       { key: "gr_id", label: "GR ID", sortKey: "gr_id", width: "13%" },
       { key: "po_no", label: "PO No", sortKey: "po_no", width: "13%" },
       { key: "sc_no", label: "SC No", sortKey: "sc_no", width: "13%" },
       { key: "vendor_name", label: "Vendor", sortKey: "vendor_name", width: "18%" },
       { key: "estimated_amount", label: "Estimated", sortKey: "estimated_amount", className: "amount", render: (value) => money(value) },
       { key: "con_value", label: "Con Value", sortKey: "con_value", className: "amount", render: (value) => money(value) },
-      { key: "status", label: "Status", sortKey: "status", render: statusBadge },
+      { key: "actions", label: "Actions", sortKey: null, width: "7%", render: renderOpenDetailAction },
     ],
   },
   logs: {
@@ -127,7 +130,14 @@ export function getViewTitle(viewKey) {
   if (viewKey === "system") {
     return "System";
   }
+  if (viewKey === "sc-detail") {
+    return "SC Detail";
+  }
   return VIEW_DEFINITIONS[viewKey]?.title ?? "SC List";
+}
+
+export function getColumnsForView(viewKey) {
+  return VIEW_DEFINITIONS[viewKey]?.columns ?? [];
 }
 
 export async function renderView(viewKey, regions, callbacks) {
@@ -141,6 +151,11 @@ export async function renderView(viewKey, regions, callbacks) {
 
   if (viewKey === "system") {
     renderSystem(regions);
+    return;
+  }
+
+  if (viewKey === "sc-detail") {
+    renderScDetail(regions);
     return;
   }
 
@@ -208,6 +223,7 @@ function renderRows(viewKey, definition, tableRegion, callbacks) {
     emptyMessage: definition.empty,
     onSort: (sortKey) => callbacks.onSort(viewKey, sortKey),
     onRowClick: callbacks.onRowClick,
+    onAction: callbacks.onAction,
   });
 }
 
@@ -279,6 +295,20 @@ function applyLocalFilters(rows, filters) {
 function statusBadge(value) {
   const raw = text(value);
   return `<span class="status-badge status-${escapeHtml(raw)}">${escapeHtml(statusLabel(raw))}</span>`;
+}
+
+function renderOpenDetailAction() {
+  return `<button type="button" class="icon-button row-action" data-action="open-detail" title="Open SC detail">Open</button>`;
+}
+
+function renderScDetail(regions) {
+  regions.home.innerHTML = `
+    <div class="home-intro">
+      <h2>SC Detail</h2>
+      <p>SC detail routing is ready. The full detail workspace will load here in the next task.</p>
+    </div>
+  `;
+  regions.table.innerHTML = "";
 }
 
 function renderHome(regions) {

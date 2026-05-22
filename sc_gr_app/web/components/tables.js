@@ -115,6 +115,15 @@ export function renderTable(container, options) {
     });
   });
 
+  container.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const rowElement = button.closest("tr");
+      const row = rows[Number(rowElement?.dataset.rowIndex)];
+      options.onAction?.(button.dataset.action, row);
+    });
+  });
+
   container.querySelectorAll("tbody tr").forEach((rowElement) => {
     const openRow = () => {
       const row = rows[Number(rowElement.dataset.rowIndex)];

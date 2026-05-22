@@ -13,6 +13,14 @@ export const state = {
   user: null,
   userError: null,
   globalSearch: "",
+  scDetail: {
+    scId: null,
+    poId: null,
+    grId: null,
+    record: null,
+    loading: false,
+    error: null,
+  },
   views: {
     sc: { rows: [], loading: false, error: null, sort: "created_at", direction: "desc", filters: {} },
     vendor: { rows: [], loading: false, error: null, sort: "vendor_name", direction: "asc", filters: {} },
@@ -28,6 +36,24 @@ export function getViewState(viewKey) {
 
 export function setCurrentView(viewKey) {
   state.currentView = viewKey;
+}
+
+export function setScDetailTarget(scId, target = {}) {
+  state.scDetail.scId = scId;
+  state.scDetail.poId = target.poId ?? null;
+  state.scDetail.grId = target.grId ?? null;
+  state.scDetail.record = null;
+  state.scDetail.loading = false;
+  state.scDetail.error = null;
+}
+
+export function clearScDetailTarget() {
+  state.scDetail.scId = null;
+  state.scDetail.poId = null;
+  state.scDetail.grId = null;
+  state.scDetail.record = null;
+  state.scDetail.loading = false;
+  state.scDetail.error = null;
 }
 
 export function toggleSort(viewKey, sortKey) {
