@@ -1,4 +1,5 @@
 import { escapeHtml } from "./components/format.js";
+import { loadCurrentUserState } from "./components/auth.js";
 import { NAV_ITEMS, setCurrentView, state, toggleSort } from "./components/state.js";
 import { getViewTitle, renderDetail, renderView } from "./components/views.js";
 
@@ -57,21 +58,7 @@ function renderUserPanel() {
 }
 
 async function loadCurrentUser() {
-  try {
-    const api = window.pywebview?.api;
-    if (!api?.current_user) {
-      throw new Error("API not available: current_user");
-    }
-    const result = await api.current_user();
-    if (!result.ok) {
-      throw new Error(result.error?.message || "Unknown API error");
-    }
-    state.user = result.data;
-    state.userError = null;
-  } catch (error) {
-    state.user = null;
-    state.userError = error.message;
-  }
+  await loadCurrentUserState(state, window.pywebview?.api);
   renderUserPanel();
 }
 
@@ -85,6 +72,9 @@ async function routeTo(viewKey) {
   elements.searchInput.disabled = viewKey === "home" || viewKey === "system";
   elements.searchInput.placeholder = elements.searchInput.disabled ? "Search unavailable for this view" : "Search current view";
   renderNavigation();
+  if (viewKey === "system") {
+    await loadCurrentUser();
+  }
   await renderActiveView();
 }
 
