@@ -4,7 +4,7 @@ from decimal import Decimal
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, ValidationError
-from sc_gr_app.rbac import require_admin, require_requester_or_admin
+from sc_gr_app.rbac import require_admin
 from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services.budget_service import (
     compute_po_budget_decimal,
@@ -81,6 +81,21 @@ def _get_po_sc(conn, po_id: str):
     return row
 
 
+def _get_gr_sc_id(conn, gr_id: str) -> str:
+    lookup = conn.execute(
+        """
+        select po.sc_id
+        from gr_requests gr
+        join pos po on po.po_id = gr.po_id
+        where gr.gr_id = ?
+        """,
+        (gr_id,),
+    ).fetchone()
+    if lookup is None:
+        raise NotFound(f"GR not found: {gr_id}")
+    return lookup["sc_id"]
+
+
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
@@ -103,7 +118,7 @@ def _validate_gr_creation_context(
 
 
 def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
-    require_requester_or_admin(current_user)
+    require_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     estimated_amount = _positive_number(
         data["estimated_amount"],
@@ -243,6 +258,169 @@ def approve_gr(
                 write_audit_log(
                     conn,
                     action_type="approve_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def update_gr(
+    config: AppConfig,
+    current_user: dict,
+    gr_id: str,
+    data: dict,
+) -> dict:
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_gr(conn, gr_id)
+                if before["status"] == "cancelled":
+                    raise ConflictError("Cancelled GR cannot be edited")
+
+                updates = dict(data)
+                if before["status"] == "pending":
+                    allowed = {
+                        key: updates[key]
+                        for key in (
+                            "po_id",
+                            "requester_id",
+                            "estimated_amount",
+                            "remark",
+                        )
+                        if key in updates
+                    }
+                    if not allowed:
+                        raise ValidationError("No GR fields to update")
+
+                    merged = {**before, **allowed}
+                    amount = _positive_number(
+                        merged["estimated_amount"],
+                        "estimated_amount",
+                    )
+                    budget_amount = amount
+                    if merged["po_id"] == before["po_id"]:
+                        budget_amount -= Decimal(str(before["estimated_amount"]))
+
+                    po_sc = _get_po_sc(conn, merged["po_id"])
+                    _validate_gr_creation_context(config, po_sc, budget_amount)
+
+                    conn.execute(
+                        """
+                        update gr_requests
+                        set po_id = ?,
+                            requester_id = ?,
+                            estimated_amount = ?,
+                            remark = ?
+                        where gr_id = ?
+                        """,
+                        (
+                            merged["po_id"],
+                            merged["requester_id"],
+                            float(amount),
+                            merged.get("remark"),
+                            gr_id,
+                        ),
+                    )
+                else:
+                    allowed = {
+                        key: updates[key]
+                        for key in ("con_value", "remark")
+                        if key in updates
+                    }
+                    if not allowed:
+                        raise ValidationError("No GR fields to update")
+
+                    merged = {**before, **allowed}
+                    con_value = _non_negative_number(
+                        merged["con_value"],
+                        "con_value",
+                    )
+                    extra_amount = con_value - Decimal(str(before["con_value"]))
+                    if extra_amount > 0:
+                        sc_budget = compute_sc_budget_decimal(config, sc_id)
+                        po_budget = compute_po_budget_decimal(config, before["po_id"])
+                        if sc_budget["sc_available_amount"] < extra_amount:
+                            raise ConflictError(
+                                "SC available amount is insufficient"
+                            )
+                        if po_budget["open_po_amount"] < extra_amount:
+                            raise ConflictError("PO open amount is insufficient")
+
+                    conn.execute(
+                        """
+                        update gr_requests
+                        set con_value = ?,
+                            remark = ?
+                        where gr_id = ?
+                        """,
+                        (float(con_value), merged.get("remark"), gr_id),
+                    )
+
+                after = _get_gr(conn, gr_id)
+                write_audit_log(
+                    conn,
+                    action_type="update_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_gr(conn, gr_id)
+                if before["status"] != "pending":
+                    raise ConflictError("GR must be pending")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update gr_requests
+                    set status = 'cancelled',
+                        cancelled_by = ?,
+                        cancelled_at = ?
+                    where gr_id = ?
+                    """,
+                    (current_user["user_id"], timestamp, gr_id),
+                )
+                after = _get_gr(conn, gr_id)
+                write_audit_log(
+                    conn,
+                    action_type="cancel_gr",
                     object_type="gr",
                     object_id=gr_id,
                     sc_id=sc_id,
