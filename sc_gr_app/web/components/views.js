@@ -356,11 +356,13 @@ export function visibleGrActions(row, detail) {
   if (!detail?.permissions?.can_manage_gr) {
     return [];
   }
-  const actions = ["edit"];
   if (row?.status === "pending") {
-    actions.push("approve", "cancel");
+    return ["edit", "approve", "cancel"];
   }
-  return actions;
+  if (row?.status === "approved") {
+    return ["edit"];
+  }
+  return [];
 }
 
 function renderNewSc(regions, callbacks) {

@@ -62,6 +62,7 @@ test("visibleGrActions shows GR row actions only when status and permission matc
 
   assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "pending" }, detail), ["edit", "approve", "cancel"]);
   assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "approved" }, detail), ["edit"]);
+  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "cancelled" }, detail), []);
 });
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {
