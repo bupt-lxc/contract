@@ -27,18 +27,87 @@ def test_migration_creates_core_tables(app_config):
     }.issubset(tables)
 
 
-def test_migration_records_version_once(app_config):
+def test_migration_records_versions_once(app_config):
     migrate(app_config)
     migrate(app_config)
 
     with sqlite3.connect(app_config.db_path) as conn:
         rows = conn.execute(
-            "select version, applied_at from schema_migrations"
+            "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert len(rows) == 1
-    assert rows[0][0] == 1
+    assert [row[0] for row in rows] == [1, 2]
     assert rows[0][1]
+    assert rows[1][1]
+
+
+def test_migration_records_version_two(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        versions = [
+            row[0]
+            for row in conn.execute(
+                "select version from schema_migrations order by version"
+            )
+        ]
+
+    assert versions == [1, 2]
+
+
+def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        conn.execute(
+            """
+            insert into users (
+              user_id, machine_id, user_name, role, email, status, created_at, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "U1",
+                "M1",
+                "Requester",
+                "requester",
+                None,
+                "active",
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+            ),
+        )
+        conn.execute(
+            """
+            insert into sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end, status, description,
+              created_by, created_at, updated_at, approved_by, approved_at, closed_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "SC_DRAFT",
+                None,
+                "U1",
+                None,
+                None,
+                None,
+                None,
+                None,
+                "draft",
+                None,
+                "U1",
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+                None,
+                None,
+                None,
+            ),
+        )
+        row = conn.execute(
+            "select status, request_type, sc_amount from sc_records where sc_id = 'SC_DRAFT'"
+        ).fetchone()
+
+    assert row == ("draft", None, None)
 
 
 def test_connection_enables_required_pragmas(app_config):
