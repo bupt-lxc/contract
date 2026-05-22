@@ -931,3 +931,75 @@ def test_admin_cannot_view_draft_sc_detail(app_config):
 
     with pytest.raises(PermissionDenied, match="SC is not visible"):
         get_sc_detail(app_config, ADMIN, "SC_DRAFT")
+
+
+def test_update_sc_rejects_amount_below_allocated_po_amount(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+
+    from sc_gr_app.services.sc_service import update_sc
+
+    with pytest.raises(ConflictError, match="below allocated PO amount"):
+        update_sc(app_config, ADMIN, "SC1", {"sc_amount": 799})
+
+
+def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    create_gr(app_config, USER, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 300})
+    approve_gr(app_config, ADMIN, "GR1", con_value=900)
+    with connect(app_config) as conn:
+        conn.execute("update pos set po_amount = ? where po_id = ?", (100, "PO1"))
+        conn.commit()
+
+    from sc_gr_app.services.sc_service import update_sc
+
+    with pytest.raises(ConflictError, match="below GR usage"):
+        update_sc(app_config, ADMIN, "SC1", {"sc_amount": 899})
+
+
+def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    with pytest.raises(ValidationError, match="service period is invalid"):
+        update_sc(
+            app_config,
+            USER,
+            "SC_DRAFT",
+            {
+                "service_period_start": "2026-12-31",
+                "service_period_end": "2026-01-01",
+            },
+        )
+
+    submit_sc(
+        app_config,
+        USER,
+        "SC_DRAFT",
+        {
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+            "sc_no": "SC001",
+        },
+    )
+
+    with pytest.raises(ValidationError, match="service period is invalid"):
+        update_sc(
+            app_config,
+            ADMIN,
+            "SC_DRAFT",
+            {
+                "service_period_start": "2027-01-01",
+                "service_period_end": "2026-12-31",
+            },
+        )

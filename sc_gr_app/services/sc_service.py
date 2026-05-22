@@ -84,8 +84,7 @@ def _require_submit_fields(data: dict) -> None:
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
     _positive_number(data["sc_amount"], "sc_amount")
-    if data["service_period_start"] > data["service_period_end"]:
-        raise ValidationError("service period is invalid")
+    _validate_service_period(data)
 
 
 def _assert_can_view_sc(user: dict, sc: dict) -> None:
@@ -128,6 +127,43 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_manage_po": is_admin and is_approved,
         "can_manage_gr": (is_owner or is_admin) and is_approved,
     }
+
+
+def _validate_service_period(data: dict) -> None:
+    start = data.get("service_period_start")
+    end = data.get("service_period_end")
+    if start not in (None, "") and end not in (None, "") and start > end:
+        raise ValidationError("service period is invalid")
+
+
+def _validate_sc_amount_not_below_usage(conn, sc_id: str, sc_amount: float) -> None:
+    row = conn.execute(
+        """
+        select coalesce(sum(po_amount), 0) as allocated_po_amount
+        from pos
+        where sc_id = ?
+        """,
+        (sc_id,),
+    ).fetchone()
+    if sc_amount < float(row["allocated_po_amount"]):
+        raise ConflictError("SC amount cannot be below allocated PO amount")
+
+    row = conn.execute(
+        """
+        select
+          coalesce(sum(case when gr.status = 'pending' then gr.estimated_amount else 0 end), 0)
+            as pending_total,
+          coalesce(sum(case when gr.status = 'approved' then gr.con_value else 0 end), 0)
+            as con_value_total
+        from gr_requests gr
+        join pos po on po.po_id = gr.po_id
+        where po.sc_id = ?
+        """,
+        (sc_id,),
+    ).fetchone()
+    gr_usage = float(row["pending_total"]) + float(row["con_value_total"])
+    if sc_amount < gr_usage:
+        raise ConflictError("SC amount cannot be below GR usage")
 
 
 def create_sc(
@@ -385,6 +421,13 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     raise ValidationError("request_type is invalid")
                 if merged.get("sc_amount") not in (None, ""):
                     _positive_number(merged["sc_amount"], "sc_amount")
+                _validate_service_period(merged)
+                if "sc_amount" in allowed and merged.get("sc_amount") not in (None, ""):
+                    _validate_sc_amount_not_below_usage(
+                        conn,
+                        sc_id,
+                        float(merged["sc_amount"]),
+                    )
 
                 timestamp = utc_now()
                 conn.execute(

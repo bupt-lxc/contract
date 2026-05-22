@@ -66,6 +66,7 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
     from sc_gr_app.api import bridge
 
     calls = []
+    current_user = {"user_id": "U1", "role": "requester"}
 
     def fake_search(name):
         def _search(config, **payload):
@@ -78,7 +79,7 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
     monkeypatch.setattr(
         bridge,
         "get_user_by_machine_id",
-        lambda config, machine_id: {"user_id": "U1"},
+        lambda config, machine_id: current_user,
     )
     monkeypatch.setattr(bridge.query_service, "search_scs", fake_search("sc"))
     monkeypatch.setattr(bridge.query_service, "search_vendors", fake_search("vendor"))
@@ -94,10 +95,10 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
     assert api.search_grs({"filters": {"status": "pending"}}) == {"ok": True, "data": ["gr"]}
     assert api.search_audit_logs({"text": "approve"}) == {"ok": True, "data": ["logs"]}
     assert calls == [
-        ("sc", app_config, {"text": "alpha"}),
+        ("sc", app_config, {"text": "alpha", "current_user": current_user}),
         ("vendor", app_config, {}),
-        ("po", app_config, {}),
-        ("gr", app_config, {"filters": {"status": "pending"}}),
+        ("po", app_config, {"current_user": current_user}),
+        ("gr", app_config, {"filters": {"status": "pending"}, "current_user": current_user}),
         ("logs", app_config, {"text": "approve"}),
     ]
 

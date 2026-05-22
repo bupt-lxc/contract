@@ -31,7 +31,8 @@ class ApiBridge:
     def search_scs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
-            self._require_current_user()
+            current_user = self._require_current_user()
+            payload = {**payload, "current_user": current_user}
             return ok(query_service.search_scs(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -47,7 +48,8 @@ class ApiBridge:
     def search_pos(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
-            self._require_current_user()
+            current_user = self._require_current_user()
+            payload = {**payload, "current_user": current_user}
             return ok(query_service.search_pos(self.config, **payload))
         except Exception as exc:
             return fail(exc)
@@ -55,7 +57,8 @@ class ApiBridge:
     def search_grs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
-            self._require_current_user()
+            current_user = self._require_current_user()
+            payload = {**payload, "current_user": current_user}
             return ok(query_service.search_grs(self.config, **payload))
         except Exception as exc:
             return fail(exc)
