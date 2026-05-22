@@ -59,7 +59,7 @@ def seed_query_data(app_config):
     )
     create_gr(
         app_config,
-        USER,
+        ADMIN,
         {
             "gr_id": "GR1",
             "po_id": "PO1",
@@ -337,7 +337,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     )
     create_gr(
         app_config,
-        OTHER_USER,
+        ADMIN,
         {
             "gr_id": "GR2",
             "po_id": "PO2",
