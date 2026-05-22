@@ -218,7 +218,8 @@ class ApiBridge:
     def search_audit_logs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
-            self._require_current_user()
+            current_user = self._require_current_user()
+            payload = {**payload, "current_user": current_user}
             return ok(query_service.search_audit_logs(self.config, **payload))
         except Exception as exc:
             return fail(exc)

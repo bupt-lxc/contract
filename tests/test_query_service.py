@@ -11,7 +11,7 @@ from sc_gr_app.services.query_service import (
     search_scs,
     search_vendors,
 )
-from sc_gr_app.services.sc_service import approve_sc, create_sc
+from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft
 from sc_gr_app.services.vendor_service import create_vendor
 from tests.test_sc_po_gr_flow import ADMIN, OTHER_USER, USER, seed_other_user, seed_users
 
@@ -189,6 +189,21 @@ def test_search_audit_logs_searches_text_fields(app_config):
     assert search_audit_logs(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
     assert search_audit_logs(app_config, text="gr1")[0]["object_id"] == "GR1"
     assert search_audit_logs(app_config, text="90")[0]["action_type"] == "approve_gr"
+
+
+def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    admin_rows = search_audit_logs(app_config, current_user=ADMIN, limit=100)
+    owner_rows = search_audit_logs(app_config, current_user=USER, limit=100)
+    other_rows = search_audit_logs(app_config, current_user=OTHER_USER, limit=100)
+
+    assert [row["object_id"] for row in admin_rows] == []
+    assert [row["object_id"] for row in owner_rows] == ["SC_DRAFT"]
+    assert [row["object_id"] for row in other_rows] == []
 
 
 @pytest.mark.parametrize(

@@ -396,7 +396,58 @@ def search_audit_logs(
     direction: str = "desc",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    current_user: dict | None = None,
 ) -> list[dict]:
+    base_clauses: list[str]
+    base_params: list
+    if current_user is None:
+        base_clauses = [
+            """
+            (
+              audit_logs.sc_id is null
+              or exists (
+                select 1
+                from sc_records sc
+                where sc.sc_id = audit_logs.sc_id
+                  and sc.status != 'draft'
+              )
+            )
+            """
+        ]
+        base_params = []
+    elif current_user.get("role") == "admin":
+        base_clauses = [
+            """
+            (
+              audit_logs.sc_id is null
+              or exists (
+                select 1
+                from sc_records sc
+                where sc.sc_id = audit_logs.sc_id
+                  and sc.status != 'draft'
+              )
+            )
+            """
+        ]
+        base_params = []
+    elif current_user.get("role") == "requester":
+        base_clauses = [
+            """
+            (
+              (audit_logs.sc_id is null and audit_logs.operator_id = ?)
+              or exists (
+                select 1
+                from sc_records sc
+                where sc.sc_id = audit_logs.sc_id
+                  and sc.requester_id = ?
+              )
+            )
+            """
+        ]
+        base_params = [current_user["user_id"], current_user["user_id"]]
+    else:
+        raise ValidationError("current_user is invalid")
+
     return _search(
         config,
         select_sql="select * from audit_logs",
@@ -436,4 +487,6 @@ def search_audit_logs(
         direction=direction,
         limit=limit,
         offset=offset,
+        base_clauses=base_clauses,
+        base_params=base_params,
     )

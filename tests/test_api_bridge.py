@@ -99,7 +99,7 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
         ("vendor", app_config, {}),
         ("po", app_config, {"current_user": current_user}),
         ("gr", app_config, {"filters": {"status": "pending"}, "current_user": current_user}),
-        ("logs", app_config, {"text": "approve"}),
+        ("logs", app_config, {"text": "approve", "current_user": current_user}),
     ]
 
 

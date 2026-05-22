@@ -96,6 +96,17 @@ def _get_gr_sc_id(conn, gr_id: str) -> str:
     return lookup["sc_id"]
 
 
+def _require_editable_parent_sc(conn, sc_id: str) -> None:
+    row = conn.execute(
+        "select status from sc_records where sc_id = ?",
+        (sc_id,),
+    ).fetchone()
+    if row is None:
+        raise NotFound(f"SC not found: {sc_id}")
+    if row["status"] == "closed":
+        raise ConflictError("Closed SC cannot be edited")
+
+
 def _validate_user_exists(conn, user_id: str) -> None:
     if user_id in (None, ""):
         raise ValidationError("requester_id is required")
@@ -238,6 +249,7 @@ def approve_gr(
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
@@ -302,6 +314,7 @@ def update_gr(
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
                 if before["status"] == "cancelled":
                     raise ConflictError("Cancelled GR cannot be edited")
@@ -447,6 +460,7 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")

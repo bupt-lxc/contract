@@ -5,9 +5,9 @@ import pytest
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
-from sc_gr_app.services.gr_service import approve_gr, create_gr
+from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr
 from sc_gr_app.services.po_service import create_po
-from sc_gr_app.services.sc_service import approve_sc, create_sc
+from sc_gr_app.services.sc_service import approve_sc, close_sc, create_sc
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -146,6 +146,66 @@ def test_sc_po_gr_happy_path(app_config):
     assert approved["status"] == "approved"
     assert row["status"] == "approved"
     assert row["con_value"] == 90
+
+
+def test_approve_gr_rejects_closed_parent_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        ADMIN,
+        {
+            "gr_id": "GR1",
+            "po_id": "PO1",
+            "requester_id": "U1",
+            "estimated_amount": 100,
+        },
+    )
+    close_sc(app_config, ADMIN, "SC1")
+
+    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+        approve_gr(app_config, ADMIN, "GR1", con_value=90)
+
+
+def test_update_gr_rejects_closed_parent_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        ADMIN,
+        {
+            "gr_id": "GR1",
+            "po_id": "PO1",
+            "requester_id": "U1",
+            "estimated_amount": 100,
+        },
+    )
+    close_sc(app_config, ADMIN, "SC1")
+
+    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+        update_gr(app_config, ADMIN, "GR1", {"remark": "after close"})
+
+
+def test_cancel_gr_rejects_closed_parent_sc(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        ADMIN,
+        {
+            "gr_id": "GR1",
+            "po_id": "PO1",
+            "requester_id": "U1",
+            "estimated_amount": 100,
+        },
+    )
+    close_sc(app_config, ADMIN, "SC1")
+
+    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+        cancel_gr(app_config, ADMIN, "GR1")
 
 
 def test_requester_cannot_approve_sc_or_gr(app_config):
