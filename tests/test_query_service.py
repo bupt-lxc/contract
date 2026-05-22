@@ -47,7 +47,7 @@ def seed_query_data(app_config):
     )
     create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO1",
             "sc_id": "SC1",
@@ -325,7 +325,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     approve_sc(app_config, ADMIN, "SC2")
     create_po(
         app_config,
-        OTHER_USER,
+        ADMIN,
         {
             "po_id": "PO2",
             "sc_id": "SC2",
