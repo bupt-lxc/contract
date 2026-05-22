@@ -84,7 +84,7 @@ def _sc_visibility_clauses(
     include_own_drafts: bool = False,
 ) -> tuple[list[str], list]:
     if current_user is None:
-        return ([f"{sc_alias}.status != 'draft'"] if not include_own_drafts else []), []
+        return [f"{sc_alias}.status != 'draft'"], []
 
     role = current_user.get("role")
     if role == "admin":

@@ -921,6 +921,25 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     }
 
 
+def test_get_sc_detail_includes_po_budget_data(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_amount=800)
+    create_gr(
+        app_config,
+        USER,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    from sc_gr_app.services.sc_service import get_sc_detail
+
+    detail = get_sc_detail(app_config, ADMIN, "SC1")
+
+    assert detail["pos"][0]["budget"]["po_amount"] == 800
+    assert detail["pos"][0]["budget"]["open_po_amount"] == 700
+    assert detail["pos"][0]["open_po_amount"] == 700
+
+
 def test_admin_cannot_view_draft_sc_detail(app_config):
     migrate(app_config)
     seed_users(app_config)
@@ -958,6 +977,29 @@ def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
 
     with pytest.raises(ConflictError, match="below GR usage"):
         update_sc(app_config, ADMIN, "SC1", {"sc_amount": 899})
+
+
+def test_update_sc_allows_exact_decimal_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
+    create_po(
+        app_config,
+        USER,
+        {
+            "po_id": "PO2",
+            "sc_id": "SC1",
+            "vendor_id": "V1",
+            "po_amount": 0.2,
+            "status": "po_approved",
+        },
+    )
+
+    from sc_gr_app.services.sc_service import update_sc
+
+    updated = update_sc(app_config, ADMIN, "SC1", {"sc_amount": Decimal("0.3")})
+
+    assert updated["sc_amount"] == 0.3
 
 
 def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config):

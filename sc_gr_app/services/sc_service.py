@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from math import isfinite
 
 from sc_gr_app.config import AppConfig
@@ -6,7 +7,10 @@ from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
-from sc_gr_app.services.budget_service import compute_sc_budget
+from sc_gr_app.services.budget_service import (
+    compute_po_budget,
+    compute_sc_budget,
+)
 from sc_gr_app.services.lock_service import LeaseLock
 
 
@@ -140,33 +144,40 @@ def _require_non_draft_business_fields(sc: dict) -> None:
     _require_fields(sc, REQUIRED_BUSINESS_FIELDS)
 
 
-def _validate_sc_amount_not_below_usage(conn, sc_id: str, sc_amount: float) -> None:
-    row = conn.execute(
-        """
-        select coalesce(sum(po_amount), 0) as allocated_po_amount
-        from pos
-        where sc_id = ?
-        """,
-        (sc_id,),
-    ).fetchone()
-    if sc_amount < float(row["allocated_po_amount"]):
+def _validate_sc_amount_not_below_usage(config: AppConfig, sc_id: str, sc_amount) -> None:
+    amount = Decimal(str(sc_amount))
+    with connect(config) as conn:
+        po_amounts = [
+            Decimal(str(row["po_amount"]))
+            for row in conn.execute(
+                "select po_amount from pos where sc_id = ?",
+                (sc_id,),
+            )
+        ]
+        gr_rows = conn.execute(
+            """
+            select gr.status, gr.estimated_amount, gr.con_value
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            where po.sc_id = ?
+              and gr.status in ('pending', 'approved')
+            """,
+            (sc_id,),
+        ).fetchall()
+
+    allocated_po_amount = sum(po_amounts, Decimal("0"))
+    if amount < allocated_po_amount:
         raise ConflictError("SC amount cannot be below allocated PO amount")
 
-    row = conn.execute(
-        """
-        select
-          coalesce(sum(case when gr.status = 'pending' then gr.estimated_amount else 0 end), 0)
-            as pending_total,
-          coalesce(sum(case when gr.status = 'approved' then gr.con_value else 0 end), 0)
-            as con_value_total
-        from gr_requests gr
-        join pos po on po.po_id = gr.po_id
-        where po.sc_id = ?
-        """,
-        (sc_id,),
-    ).fetchone()
-    gr_usage = float(row["pending_total"]) + float(row["con_value_total"])
-    if sc_amount < gr_usage:
+    gr_usage = sum(
+        (
+            Decimal(str(row["estimated_amount"]))
+            if row["status"] == "pending"
+            else Decimal(str(row["con_value"]))
+        )
+        for row in gr_rows
+    )
+    if amount < gr_usage:
         raise ConflictError("SC amount cannot be below GR usage")
 
 
@@ -429,9 +440,9 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 _validate_service_period(merged)
                 if "sc_amount" in allowed and merged.get("sc_amount") not in (None, ""):
                     _validate_sc_amount_not_below_usage(
-                        conn,
+                        config,
                         sc_id,
-                        float(merged["sc_amount"]),
+                        merged["sc_amount"],
                     )
 
                 timestamp = utc_now()
@@ -603,6 +614,10 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 (sc_id,),
             )
         ]
+
+    for po in pos:
+        po["budget"] = compute_po_budget(config, po["po_id"])
+        po["open_po_amount"] = po["budget"]["open_po_amount"]
 
     return {
         "sc": sc,

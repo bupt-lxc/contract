@@ -294,6 +294,17 @@ def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
     assert [row["sc_id"] for row in other_rows] == []
 
 
+def test_sc_search_without_current_user_hides_drafts(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft
+
+    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+
+    assert search_scs(app_config, limit=100) == []
+
+
 def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     seed_query_data(app_config)
     seed_other_user(app_config)
