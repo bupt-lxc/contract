@@ -69,18 +69,22 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
             f"{null_con_value_gr['gr_id']}"
         )
 
-    row = conn.execute(
+    usage = Decimal("0")
+    rows = conn.execute(
         """
-        select
-          coalesce(sum(case when status = 'pending' then estimated_amount else 0 end), 0)
-          + coalesce(sum(case when status = 'approved' then con_value else 0 end), 0)
-          as used
+        select status, estimated_amount, con_value
         from gr_requests
         where po_id = ?
+          and status in ('pending', 'approved')
         """,
         (po_id,),
-    ).fetchone()
-    return Decimal(str(row["used"]))
+    )
+    for row in rows:
+        if row["status"] == "pending":
+            usage += Decimal(str(row["estimated_amount"]))
+        else:
+            usage += Decimal(str(row["con_value"]))
+    return usage
 
 
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
@@ -216,17 +220,15 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     if vendor is None:
                         raise NotFound(f"Vendor not found: {merged['vendor_id']}")
 
-                sibling_total = Decimal(
-                    str(
-                        conn.execute(
-                            """
-                            select coalesce(sum(po_amount), 0) as total
-                            from pos
-                            where sc_id = ? and po_id != ?
-                            """,
+                sibling_total = sum(
+                    (
+                        Decimal(str(row["po_amount"]))
+                        for row in conn.execute(
+                            "select po_amount from pos where sc_id = ? and po_id != ?",
                             (before["sc_id"], po_id),
-                        ).fetchone()["total"]
-                    )
+                        )
+                    ),
+                    Decimal("0"),
                 )
                 if sibling_total + po_amount > Decimal(str(sc["sc_amount"])):
                     raise ConflictError("PO total would exceed SC amount")

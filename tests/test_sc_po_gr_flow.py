@@ -1162,6 +1162,53 @@ def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_co
         update_po(app_config, ADMIN, "PO1", {"po_no": "PO-CLOSED"})
 
 
+def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=0.6, po_amount=0.1)
+    create_po(
+        app_config,
+        ADMIN,
+        {
+            "po_id": "PO2",
+            "sc_id": "SC1",
+            "vendor_id": "V1",
+            "po_amount": 0.2,
+        },
+    )
+    create_po(
+        app_config,
+        ADMIN,
+        {
+            "po_id": "PO3",
+            "sc_id": "SC1",
+            "vendor_id": "V1",
+            "po_amount": 0.1,
+        },
+    )
+
+    from sc_gr_app.services.po_service import update_po
+
+    updated = update_po(app_config, ADMIN, "PO3", {"po_amount": 0.3})
+
+    assert updated["po_amount"] == 0.3
+
+
+def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
+    create_gr(app_config, USER, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 0.1})
+    create_gr(app_config, USER, {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 0.2})
+    approve_gr(app_config, ADMIN, "GR2", con_value=0.2)
+
+    from sc_gr_app.services.po_service import update_po
+
+    updated = update_po(app_config, ADMIN, "PO1", {"po_amount": 0.3})
+
+    assert updated["po_amount"] == 0.3
+
+
 def test_po_status_transitions_require_current_status(app_config):
     migrate(app_config)
     seed_users(app_config)
