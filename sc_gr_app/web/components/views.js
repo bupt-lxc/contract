@@ -326,6 +326,11 @@ function renderOpenDetailAction() {
 function renderNewSc(regions, callbacks) {
   regions.filters.innerHTML = "";
   regions.table.innerHTML = "";
+  const pending = state.scDetail.actionPending;
+  const actionError = state.scDetail.actionError
+    ? `<div class="state-panel error action-error"><p>${escapeHtml(state.scDetail.actionError)}</p></div>`
+    : "";
+  const disabled = pending ? " disabled" : "";
   regions.home.innerHTML = `
     <section class="detail-section">
       <div class="detail-page-header">
@@ -337,6 +342,7 @@ function renderNewSc(regions, callbacks) {
           <button type="button" class="button" data-cancel>Cancel</button>
         </div>
       </div>
+      ${actionError}
       <form class="sc-form" data-new-sc-form>
         <div class="form-grid">
           ${field("requester_id", "Requester", state.user?.user_id ?? "", "text", { readonly: true, required: true })}
@@ -353,19 +359,19 @@ function renderNewSc(regions, callbacks) {
           </label>
         </div>
         <div class="actions">
-          <button type="submit" class="button" data-mode="draft">Save Draft</button>
-          <button type="submit" class="button primary" data-mode="submit">Submit</button>
-          <button type="button" class="button" data-cancel>Cancel</button>
+          <button type="submit" class="button" data-mode="draft"${disabled}>Save Draft${pending === "create" ? "..." : ""}</button>
+          <button type="submit" class="button primary" data-mode="submit"${disabled}>Submit${pending === "create-submit" ? "..." : ""}</button>
+          <button type="button" class="button" data-cancel${disabled}>Cancel</button>
         </div>
       </form>
     </section>
   `;
 
   const formElement = regions.home.querySelector("[data-new-sc-form]");
-  formElement.addEventListener("submit", (event) => {
+  formElement.addEventListener("submit", async (event) => {
     event.preventDefault();
     const mode = event.submitter?.dataset.mode ?? "draft";
-    callbacks.onCreateSc?.(mode, collectFormData(formElement.elements));
+    await callbacks.onCreateSc?.(mode, collectFormData(formElement.elements));
   });
   regions.home.querySelectorAll("[data-cancel]").forEach((button) => {
     button.addEventListener("click", () => callbacks.onCancel?.());
@@ -394,6 +400,13 @@ export function renderScDetail(regions, callbacks = {}) {
 
   const permissions = detail.permissions ?? {};
   const sc = detail.sc;
+  const pending = state.scDetail.actionPending;
+  const actionError = state.scDetail.actionError
+    ? `<div class="state-panel error action-error"><p>${escapeHtml(state.scDetail.actionError)}</p></div>`
+    : "";
+  const scContent = state.scDetail.editMode
+    ? renderScEditForm(sc, pending)
+    : `<div class="detail-grid">${detailFields(sc, ["sc_id", "sc_no", "requester_id", "request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end", "description", "created_at", "updated_at"])}</div>`;
   regions.home.innerHTML = `
     <div class="detail-page">
       <div class="detail-page-header">
@@ -403,16 +416,17 @@ export function renderScDetail(regions, callbacks = {}) {
           <p>${statusBadge(sc.status)} <span class="muted-text">${escapeHtml(text(sc.request_type))}</span></p>
         </div>
         <div class="actions">
-          ${scActionButton("edit", "Edit", permissions.can_edit_sc)}
-          ${scActionButton("submit", "Submit", permissions.can_submit_sc)}
-          ${scActionButton("approve", "Approve", permissions.can_approve_sc, true)}
-          ${scActionButton("deny", "Deny", permissions.can_deny_sc)}
-          ${scActionButton("close", "Close", permissions.can_close_sc)}
+          ${state.scDetail.editMode ? "" : scActionButton("edit", "Edit", permissions.can_edit_sc, pending)}
+          ${scActionButton("submit", "Submit", permissions.can_submit_sc, pending)}
+          ${scActionButton("approve", "Approve", permissions.can_approve_sc, pending, true)}
+          ${scActionButton("deny", "Deny", permissions.can_deny_sc, pending)}
+          ${scActionButton("close", "Close", permissions.can_close_sc, pending)}
         </div>
       </div>
+      ${actionError}
       <section class="detail-section sc-section">
         <div class="section-toolbar"><h3>SC</h3></div>
-        <div class="detail-grid">${detailFields(sc, ["sc_id", "sc_no", "requester_id", "request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end", "description", "created_at", "updated_at"])}</div>
+        ${scContent}
       </section>
       <section class="detail-section po-section">
         <div class="section-toolbar"><h3>PO</h3></div>
@@ -430,7 +444,17 @@ export function renderScDetail(regions, callbacks = {}) {
   `;
 
   regions.home.querySelectorAll("[data-sc-action]").forEach((button) => {
-    button.addEventListener("click", () => callbacks.onScAction?.(button.dataset.scAction));
+    button.addEventListener("click", async () => {
+      await callbacks.onScAction?.(button.dataset.scAction);
+    });
+  });
+  const editForm = regions.home.querySelector("[data-sc-edit-form]");
+  editForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await callbacks.onScSave?.(collectFormData(editForm.elements));
+  });
+  regions.home.querySelector("[data-sc-cancel-edit]")?.addEventListener("click", async () => {
+    await callbacks.onScCancelEdit?.();
   });
 }
 
@@ -447,11 +471,37 @@ function detailState(kind, title, message) {
   `;
 }
 
-function scActionButton(action, label, enabled, primary = false) {
+function scActionButton(action, label, enabled, pending = null, primary = false) {
   if (!enabled) {
     return "";
   }
-  return `<button type="button" class="button${primary ? " primary" : ""}" data-sc-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
+  const disabled = pending ? " disabled" : "";
+  const pendingText = pending === action ? "..." : "";
+  return `<button type="button" class="button${primary ? " primary" : ""}" data-sc-action="${escapeHtml(action)}"${disabled}>${escapeHtml(label)}${pendingText}</button>`;
+}
+
+function renderScEditForm(sc, pending) {
+  const disabled = pending ? " disabled" : "";
+  return `
+    <form class="sc-form" data-sc-edit-form>
+      <div class="form-grid">
+        ${field("sc_no", "SC No", sc.sc_no ?? "")}
+        ${field("request_type", "Request Type", sc.request_type ?? "")}
+        ${field("cost_center", "Cost Center", sc.cost_center ?? "")}
+        ${field("sc_amount", "SC Amount", sc.sc_amount ?? "", "number")}
+        ${field("service_period_start", "Service Period Start", sc.service_period_start ?? "", "date")}
+        ${field("service_period_end", "Service Period End", sc.service_period_end ?? "", "date")}
+        <label class="form-field full">
+          <span>Description</span>
+          <textarea name="description"${disabled}>${escapeHtml(text(sc.description))}</textarea>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" class="button primary"${disabled}>Save${pending === "save" ? "..." : ""}</button>
+        <button type="button" class="button" data-sc-cancel-edit${disabled}>Cancel</button>
+      </div>
+    </form>
+  `;
 }
 
 function detailFields(record, keys) {

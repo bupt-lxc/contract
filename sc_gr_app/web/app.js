@@ -1,7 +1,19 @@
 import { escapeHtml } from "./components/format.js";
 import { loadCurrentUserState } from "./components/auth.js";
 import { callApi } from "./components/api.js";
-import { NAV_ITEMS, setCurrentView, setScDetailTarget, state, toggleSort } from "./components/state.js";
+import {
+  applyScDetailFailure,
+  applyScDetailRecord,
+  beginScDetailRequest,
+  finishScDetailRequest,
+  NAV_ITEMS,
+  resolveScAction,
+  runScDetailAction,
+  setCurrentView,
+  setScDetailTarget,
+  state,
+  toggleSort,
+} from "./components/state.js";
 import { getViewTitle, renderDetail, renderView } from "./components/views.js";
 
 const elements = {
@@ -89,25 +101,23 @@ async function routeToScDetail(scId, target = {}) {
 }
 
 async function loadScDetail() {
-  if (!state.scDetail.scId) {
+  const requestedScId = state.scDetail.scId;
+  if (!requestedScId) {
     state.scDetail.record = null;
     state.scDetail.loading = false;
     state.scDetail.error = null;
     return;
   }
 
-  state.scDetail.loading = true;
-  state.scDetail.error = null;
-  state.scDetail.record = null;
+  const requestToken = beginScDetailRequest(requestedScId);
   await renderActiveView();
 
   try {
-    state.scDetail.record = await callApi("get_sc_detail", { sc_id: state.scDetail.scId });
+    applyScDetailRecord(requestToken, requestedScId, await callApi("get_sc_detail", { sc_id: requestedScId }));
   } catch (error) {
-    state.scDetail.record = null;
-    state.scDetail.error = error.message;
+    applyScDetailFailure(requestToken, requestedScId, error);
   } finally {
-    state.scDetail.loading = false;
+    finishScDetailRequest(requestToken, requestedScId);
   }
 }
 
@@ -117,12 +127,16 @@ async function refreshScDetail() {
 }
 
 async function createSc(mode, data) {
-  const created = await callApi("create_sc_draft", { data });
-  const scId = created.sc_id ?? data.sc_id;
-  if (mode === "submit") {
-    await callApi("submit_sc", { sc_id: scId, data: {} });
-  }
-  await routeToScDetail(scId);
+  const action = mode === "submit" ? "create-submit" : "create";
+  await runScDetailAction(action, async () => {
+    const created = await callApi("create_sc_draft", { data });
+    const scId = created.sc_id ?? data.sc_id;
+    if (mode === "submit") {
+      await callApi("submit_sc", { sc_id: scId, data: {} });
+    }
+    await routeToScDetail(scId);
+  });
+  await renderActiveView();
 }
 
 async function handleScAction(action) {
@@ -137,18 +151,42 @@ async function handleScAction(action) {
     return;
   }
 
-  if (action === "submit") {
-    await callApi("submit_sc", { sc_id: scId, data: {} });
-  } else if (action === "edit") {
-    await callApi("update_sc", { sc_id: scId, data: buildScUpdateData(state.scDetail.record?.sc ?? {}) });
-  } else if (action === "approve") {
-    await callApi("approve_sc", { sc_id: scId });
-  } else if (action === "deny") {
-    await callApi("deny_sc", { sc_id: scId });
-  } else if (action === "close") {
-    await callApi("close_sc", { sc_id: scId });
+  const resolved = resolveScAction(action, scId, buildScUpdateData(state.scDetail.record?.sc ?? {}));
+  if (resolved.mode === "edit") {
+    state.scDetail.editMode = true;
+    state.scDetail.actionError = null;
+    await renderActiveView();
+    return;
   }
-  await refreshScDetail();
+  if (resolved.mode !== "api") {
+    return;
+  }
+  await runScDetailAction(action, async () => {
+    await callApi(resolved.api, resolved.payload);
+    state.scDetail.editMode = false;
+    await refreshScDetail();
+  });
+  await renderActiveView();
+}
+
+async function handleScSave(data) {
+  const scId = state.scDetail.record?.sc?.sc_id ?? state.scDetail.scId;
+  if (!scId) {
+    return;
+  }
+  const resolved = resolveScAction("save", scId, data);
+  await runScDetailAction("save", async () => {
+    await callApi(resolved.api, resolved.payload);
+    state.scDetail.editMode = false;
+    await refreshScDetail();
+  });
+  await renderActiveView();
+}
+
+async function handleScCancelEdit() {
+  state.scDetail.editMode = false;
+  state.scDetail.actionError = null;
+  await renderActiveView();
 }
 
 function buildScUpdateData(sc) {
@@ -166,6 +204,8 @@ async function renderActiveView() {
       onCancel: () => routeTo("sc"),
       onCreateSc: createSc,
       onScAction: handleScAction,
+      onScSave: handleScSave,
+      onScCancelEdit: handleScCancelEdit,
       onSort: async (viewKey, sortKey) => {
         toggleSort(viewKey, sortKey);
         await renderActiveView();

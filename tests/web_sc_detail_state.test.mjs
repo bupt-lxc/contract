@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { clearScDetailTarget, setScDetailTarget, state } from "../sc_gr_app/web/components/state.js";
+import {
+  applyScDetailFailure,
+  applyScDetailRecord,
+  beginScDetailRequest,
+  clearScDetailTarget,
+  resolveScAction,
+  runScDetailAction,
+  setScDetailTarget,
+  state,
+} from "../sc_gr_app/web/components/state.js";
 import { collectFormData } from "../sc_gr_app/web/components/forms.js";
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {
@@ -35,6 +44,57 @@ test("clearScDetailTarget resets target, record, loading, and error", () => {
     record: null,
     loading: false,
     error: null,
+    actionPending: null,
+    actionError: null,
+    editMode: false,
+  });
+});
+
+test("stale SC detail responses are ignored when the target or token changes", () => {
+  clearScDetailTarget();
+  setScDetailTarget("SC1");
+  const staleByTarget = beginScDetailRequest(state.scDetail.scId);
+
+  setScDetailTarget("SC2");
+
+  assert.equal(applyScDetailRecord(staleByTarget, "SC1", { sc: { sc_id: "SC1" } }), false);
+  assert.equal(state.scDetail.record, null);
+
+  const staleByToken = beginScDetailRequest("SC2");
+  const currentToken = beginScDetailRequest("SC2");
+
+  assert.equal(applyScDetailFailure(staleByToken, "SC2", new Error("slow failed")), false);
+  assert.equal(state.scDetail.error, null);
+  assert.equal(state.scDetail.loading, true);
+
+  assert.equal(applyScDetailRecord(currentToken, "SC2", { sc: { sc_id: "SC2" } }), true);
+  assert.deepEqual(state.scDetail.record, { sc: { sc_id: "SC2" } });
+  assert.equal(state.scDetail.loading, false);
+});
+
+test("runScDetailAction captures errors, records actionError, and clears pending", async () => {
+  clearScDetailTarget();
+  setScDetailTarget("SC1");
+
+  await runScDetailAction("submit", async () => {
+    throw new Error("bridge unavailable");
+  }).catch(() => undefined);
+
+  assert.equal(state.scDetail.actionPending, null);
+  assert.equal(state.scDetail.actionError, "bridge unavailable");
+});
+
+test("resolveScAction does not map edit to update_sc before save", () => {
+  assert.deepEqual(resolveScAction("edit", "SC1"), { mode: "edit" });
+  assert.deepEqual(resolveScAction("save", "SC1", { description: "updated" }), {
+    mode: "api",
+    api: "update_sc",
+    payload: { sc_id: "SC1", data: { description: "updated" } },
+  });
+  assert.deepEqual(resolveScAction("submit", "SC1"), {
+    mode: "api",
+    api: "submit_sc",
+    payload: { sc_id: "SC1", data: {} },
   });
 });
 
