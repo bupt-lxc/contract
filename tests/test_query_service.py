@@ -292,3 +292,77 @@ def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
     assert [row["sc_id"] for row in admin_rows] == []
     assert [row["sc_id"] for row in owner_rows] == ["SC_DRAFT"]
     assert [row["sc_id"] for row in other_rows] == []
+
+
+def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
+    seed_query_data(app_config)
+    seed_other_user(app_config)
+    create_sc(
+        app_config,
+        OTHER_USER,
+        {
+            "sc_id": "SC2",
+            "sc_no": "SC-BETA",
+            "requester_id": "U2",
+            "request_type": "service",
+            "cost_center": 2002,
+            "sc_amount": 500,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    approve_sc(app_config, ADMIN, "SC2")
+    create_po(
+        app_config,
+        OTHER_USER,
+        {
+            "po_id": "PO2",
+            "sc_id": "SC2",
+            "vendor_id": "V1",
+            "po_no": "PO-BETA",
+            "po_amount": 300,
+            "status": "po_approved",
+        },
+    )
+    create_gr(
+        app_config,
+        OTHER_USER,
+        {
+            "gr_id": "GR2",
+            "po_id": "PO2",
+            "estimated_amount": 50,
+            "remark": "beta remark",
+        },
+    )
+
+    admin_pos = search_pos(app_config, current_user=ADMIN, sort="po_id", direction="asc")
+    owner_pos = search_pos(app_config, current_user=USER, sort="po_id", direction="asc")
+    other_pos = search_pos(
+        app_config,
+        current_user=OTHER_USER,
+        sort="po_id",
+        direction="asc",
+    )
+    admin_grs = search_grs(app_config, current_user=ADMIN, sort="gr_id", direction="asc")
+    owner_grs = search_grs(app_config, current_user=USER, sort="gr_id", direction="asc")
+    other_grs = search_grs(
+        app_config,
+        current_user=OTHER_USER,
+        sort="gr_id",
+        direction="asc",
+    )
+
+    assert [row["po_id"] for row in admin_pos] == ["PO1", "PO2"]
+    assert [row["po_id"] for row in owner_pos] == ["PO1"]
+    assert [row["po_id"] for row in other_pos] == ["PO2"]
+    assert [row["gr_id"] for row in admin_grs] == ["GR1", "GR2"]
+    assert [row["gr_id"] for row in owner_grs] == ["GR1"]
+    assert [row["gr_id"] for row in other_grs] == ["GR2"]
+
+
+@pytest.mark.parametrize("search_func", [search_pos, search_grs])
+def test_po_and_gr_search_reject_invalid_current_user(app_config, search_func):
+    seed_query_data(app_config)
+
+    with pytest.raises(ValidationError, match="current_user is invalid"):
+        search_func(app_config, current_user={"role": "auditor"})

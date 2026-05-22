@@ -77,6 +77,28 @@ def _append_filters(
         params.append(value)
 
 
+def _sc_visibility_clauses(
+    current_user: dict | None,
+    *,
+    sc_alias: str = "sc",
+    include_own_drafts: bool = False,
+) -> tuple[list[str], list]:
+    if current_user is None:
+        return ([f"{sc_alias}.status != 'draft'"] if not include_own_drafts else []), []
+
+    role = current_user.get("role")
+    if role == "admin":
+        return [f"{sc_alias}.status != 'draft'"], []
+    if role == "requester":
+        if include_own_drafts:
+            return [f"{sc_alias}.requester_id = ?"], [current_user["user_id"]]
+        return [
+            f"{sc_alias}.status != 'draft'",
+            f"{sc_alias}.requester_id = ?",
+        ], [current_user["user_id"]]
+    raise ValidationError("current_user is invalid")
+
+
 def _search(
     config: AppConfig,
     *,
@@ -126,16 +148,10 @@ def search_scs(
     offset: int = 0,
     current_user: dict | None = None,
 ) -> list[dict]:
-    base_clauses: list[str] = []
-    base_params: list = []
-    if current_user:
-        if current_user.get("role") == "admin":
-            base_clauses.append("sc.status != 'draft'")
-        elif current_user.get("role") == "requester":
-            base_clauses.append("sc.requester_id = ?")
-            base_params.append(current_user["user_id"])
-        else:
-            raise ValidationError("current_user is invalid")
+    base_clauses, base_params = _sc_visibility_clauses(
+        current_user,
+        include_own_drafts=True,
+    )
 
     return _search(
         config,
@@ -244,6 +260,8 @@ def search_pos(
     offset: int = 0,
     current_user: dict | None = None,
 ) -> list[dict]:
+    base_clauses, base_params = _sc_visibility_clauses(current_user)
+
     return _search(
         config,
         select_sql="""
@@ -300,7 +318,8 @@ def search_pos(
         direction=direction,
         limit=limit,
         offset=offset,
-        base_clauses=["sc.status != 'draft'"],
+        base_clauses=base_clauses,
+        base_params=base_params,
     )
 
 
@@ -314,6 +333,8 @@ def search_grs(
     offset: int = 0,
     current_user: dict | None = None,
 ) -> list[dict]:
+    base_clauses, base_params = _sc_visibility_clauses(current_user)
+
     return _search(
         config,
         select_sql="""
@@ -362,7 +383,8 @@ def search_grs(
         direction=direction,
         limit=limit,
         offset=offset,
-        base_clauses=["sc.status != 'draft'"],
+        base_clauses=base_clauses,
+        base_params=base_params,
     )
 
 

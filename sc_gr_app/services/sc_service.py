@@ -30,6 +30,13 @@ OPTIONAL_UPDATE_FIELDS = (
     "service_period_end",
     "description",
 )
+REQUIRED_BUSINESS_FIELDS = (
+    "request_type",
+    "cost_center",
+    "sc_amount",
+    "service_period_start",
+    "service_period_end",
+)
 
 
 def utc_now() -> str:
@@ -71,16 +78,7 @@ def _get_sc(conn, sc_id: str) -> dict:
 
 
 def _require_submit_fields(data: dict) -> None:
-    _require_fields(
-        data,
-        (
-            "request_type",
-            "cost_center",
-            "sc_amount",
-            "service_period_start",
-            "service_period_end",
-        ),
-    )
+    _require_fields(data, REQUIRED_BUSINESS_FIELDS)
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
     _positive_number(data["sc_amount"], "sc_amount")
@@ -134,6 +132,12 @@ def _validate_service_period(data: dict) -> None:
     end = data.get("service_period_end")
     if start not in (None, "") and end not in (None, "") and start > end:
         raise ValidationError("service period is invalid")
+
+
+def _require_non_draft_business_fields(sc: dict) -> None:
+    if sc["status"] == "draft":
+        return
+    _require_fields(sc, REQUIRED_BUSINESS_FIELDS)
 
 
 def _validate_sc_amount_not_below_usage(conn, sc_id: str, sc_amount: float) -> None:
@@ -414,6 +418,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 before = _get_sc(conn, sc_id)
                 _assert_can_edit_sc(current_user, before)
                 merged = {**before, **allowed}
+                _require_non_draft_business_fields(merged)
                 if (
                     merged.get("request_type") not in (None, "")
                     and merged["request_type"] not in SUPPORTED_REQUEST_TYPES

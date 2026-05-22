@@ -1003,3 +1003,29 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
                 "service_period_end": "2026-12-31",
             },
         )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "request_type",
+        "cost_center",
+        "sc_amount",
+        "service_period_start",
+        "service_period_end",
+    ],
+)
+@pytest.mark.parametrize("empty_value", [None, ""])
+def test_update_sc_rejects_clearing_required_fields_on_non_draft(
+    app_config,
+    field,
+    empty_value,
+):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+
+    from sc_gr_app.services.sc_service import update_sc
+
+    with pytest.raises(ValidationError, match=f"{field} is required"):
+        update_sc(app_config, ADMIN, "SC1", {field: empty_value})
