@@ -900,12 +900,18 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
 
     seed_approved_sc_vendor_po(app_config)
     create_gr(
-            app_config,
-            ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        app_config,
+        ADMIN,
+        {
+            "gr_id": "GR1",
+            "po_id": "PO1",
+            "requester_id": "U1",
+            "estimated_amount": 100,
+        },
     )
 
     detail = get_sc_detail(app_config, ADMIN, "SC1")
+    requester_detail = get_sc_detail(app_config, USER, "SC1")
 
     assert detail["sc"]["sc_id"] == "SC1"
     assert detail["budget"]["sc_amount"] == 1000
@@ -921,6 +927,8 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_manage_po": True,
         "can_manage_gr": True,
     }
+    assert requester_detail["permissions"]["can_manage_po"] is False
+    assert requester_detail["permissions"]["can_manage_gr"] is False
 
 
 def test_get_sc_detail_includes_po_budget_data(app_config):
