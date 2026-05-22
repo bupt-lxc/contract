@@ -4,7 +4,7 @@ import pytest
 
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.errors import ConflictError, PermissionDenied, ValidationError
+from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.services.gr_service import approve_gr, create_gr
 from sc_gr_app.services.po_service import create_po
 from sc_gr_app.services.sc_service import approve_sc, create_sc
@@ -108,7 +108,7 @@ def seed_approved_sc_vendor_po(
     )
     create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO1",
             "sc_id": "SC1",
@@ -181,7 +181,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
     )
     create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO1",
             "sc_id": "SC1",
@@ -317,7 +317,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
     )
     create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO1",
             "sc_id": "SC1",
@@ -329,7 +329,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
     with pytest.raises(ConflictError, match="exceed SC amount"):
         create_po(
             app_config,
-            USER,
+            ADMIN,
             {
                 "po_id": "PO2",
                 "sc_id": "SC1",
@@ -348,7 +348,7 @@ def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
     with pytest.raises(ValidationError, match="po_amount must be positive"):
         create_po(
             app_config,
-            USER,
+            ADMIN,
             {
                 "po_id": "PO2",
                 "sc_id": "SC1",
@@ -424,7 +424,7 @@ def test_create_po_requires_approved_sc(app_config):
     with pytest.raises(ConflictError, match="SC must be approved"):
         create_po(
             app_config,
-            USER,
+            ADMIN,
             {
                 "po_id": "PO1",
                 "sc_id": "SC1",
@@ -681,7 +681,7 @@ def test_create_po_allows_exact_decimal_budget_boundary(app_config):
 
     created = create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO2",
             "sc_id": "SC1",
@@ -985,7 +985,7 @@ def test_update_sc_allows_exact_decimal_boundary(app_config):
     seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
     create_po(
         app_config,
-        USER,
+        ADMIN,
         {
             "po_id": "PO2",
             "sc_id": "SC1",
@@ -1071,3 +1071,130 @@ def test_update_sc_rejects_clearing_required_fields_on_non_draft(
 
     with pytest.raises(ValidationError, match=f"{field} is required"):
         update_sc(app_config, ADMIN, "SC1", {field: empty_value})
+
+
+def test_po_writes_require_admin(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+
+    from sc_gr_app.services.po_service import approve_po, finish_po, update_po
+
+    with pytest.raises(PermissionDenied):
+        create_po(
+            app_config,
+            USER,
+            {
+                "po_id": "PO2",
+                "sc_id": "SC1",
+                "vendor_id": "V1",
+                "po_amount": 100,
+            },
+        )
+    with pytest.raises(PermissionDenied):
+        update_po(app_config, USER, "PO1", {"po_no": "PO002"})
+    with pytest.raises(PermissionDenied):
+        approve_po(app_config, USER, "PO1")
+    with pytest.raises(PermissionDenied):
+        finish_po(app_config, USER, "PO1")
+
+
+def test_admin_updates_po_with_budget_validation(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_amount=800)
+    create_gr(app_config, USER, {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 300})
+
+    from sc_gr_app.services.po_service import update_po
+
+    with pytest.raises(ConflictError, match="below GR usage"):
+        update_po(app_config, ADMIN, "PO1", {"po_amount": 299})
+
+    updated = update_po(
+        app_config,
+        ADMIN,
+        "PO1",
+        {
+            "po_no": "PO002",
+            "po_amount": 500,
+            "contract_no": "CTR-001",
+            "payment_frequency": "monthly",
+        },
+    )
+
+    assert updated["po_no"] == "PO002"
+    assert updated["po_amount"] == 500
+    assert updated["contract_no"] == "CTR-001"
+
+
+def test_admin_approves_and_finishes_po(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_status="po_pending")
+
+    from sc_gr_app.services.po_service import approve_po, finish_po
+
+    approved = approve_po(app_config, ADMIN, "PO1")
+    finished = finish_po(app_config, ADMIN, "PO1")
+
+    assert approved["status"] == "po_approved"
+    assert finished["status"] == "finished"
+
+
+def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+
+    from sc_gr_app.services.po_service import update_po
+
+    with pytest.raises(NotFound, match="Vendor not found"):
+        update_po(app_config, ADMIN, "PO1", {"vendor_id": "MISSING"})
+
+    with pytest.raises(ConflictError, match="exceed SC amount"):
+        update_po(app_config, ADMIN, "PO1", {"po_amount": 1001})
+
+    with connect(app_config) as conn:
+        conn.execute("update sc_records set status = 'closed' where sc_id = 'SC1'")
+        conn.commit()
+
+    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+        update_po(app_config, ADMIN, "PO1", {"po_no": "PO-CLOSED"})
+
+
+def test_po_status_transitions_require_current_status(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_status="po_approved")
+
+    from sc_gr_app.services.po_service import approve_po, finish_po
+
+    with pytest.raises(ConflictError, match="PO must be pending"):
+        approve_po(app_config, ADMIN, "PO1")
+
+    finish_po(app_config, ADMIN, "PO1")
+
+    with pytest.raises(ConflictError, match="PO must be approved"):
+        finish_po(app_config, ADMIN, "PO1")
+
+
+def test_po_update_approve_finish_are_audited(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, po_status="po_pending")
+
+    from sc_gr_app.services.po_service import approve_po, finish_po, update_po
+
+    update_po(app_config, ADMIN, "PO1", {"po_no": "PO002"})
+    approve_po(app_config, ADMIN, "PO1")
+    finish_po(app_config, ADMIN, "PO1")
+
+    with connect(app_config) as conn:
+        actions = [
+            row["action_type"]
+            for row in conn.execute(
+                "select action_type from audit_logs order by created_at"
+            )
+        ]
+
+    assert actions[-3:] == ["update_po", "approve_po", "finish_po"]

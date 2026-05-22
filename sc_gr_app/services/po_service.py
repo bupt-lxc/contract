@@ -4,7 +4,7 @@ from decimal import Decimal
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, ValidationError
-from sc_gr_app.rbac import require_requester_or_admin
+from sc_gr_app.rbac import require_admin
 from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
@@ -44,8 +44,47 @@ def _get_po(conn, po_id: str) -> dict:
     )
 
 
+def _get_po_or_raise(conn, po_id: str) -> dict:
+    row = conn.execute("select * from pos where po_id = ?", (po_id,)).fetchone()
+    if row is None:
+        raise NotFound(f"PO not found: {po_id}")
+    return _row_to_dict(row)
+
+
+def _po_gr_usage(conn, po_id: str) -> Decimal:
+    null_con_value_gr = conn.execute(
+        """
+        select gr_id
+        from gr_requests
+        where po_id = ?
+          and status = 'approved'
+          and con_value is null
+        limit 1
+        """,
+        (po_id,),
+    ).fetchone()
+    if null_con_value_gr is not None:
+        raise ConflictError(
+            f"Approved GR has NULL con_value for PO {po_id}: "
+            f"{null_con_value_gr['gr_id']}"
+        )
+
+    row = conn.execute(
+        """
+        select
+          coalesce(sum(case when status = 'pending' then estimated_amount else 0 end), 0)
+          + coalesce(sum(case when status = 'approved' then con_value else 0 end), 0)
+          as used
+        from gr_requests
+        where po_id = ?
+        """,
+        (po_id,),
+    ).fetchone()
+    return Decimal(str(row["used"]))
+
+
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
-    require_requester_or_admin(current_user)
+    require_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     po_amount = _positive_number(data["po_amount"], "po_amount")
     status = data.get("status", "po_pending")
@@ -132,3 +171,207 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 raise
 
     return created
+
+
+def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> dict:
+    require_admin(current_user)
+    allowed_fields = {
+        "vendor_id",
+        "po_no",
+        "po_amount",
+        "contract_from",
+        "contract_to",
+        "contract_no",
+        "payment_frequency",
+    }
+    updates = {key: value for key, value in data.items() if key in allowed_fields}
+    if not updates:
+        raise ValidationError("No PO fields to update")
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                sc = conn.execute(
+                    "select * from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if sc["status"] == "closed":
+                    raise ConflictError("Closed SC cannot be edited")
+
+                merged = {**before, **updates}
+                po_amount = _positive_number(merged["po_amount"], "po_amount")
+                if po_amount < _po_gr_usage(conn, po_id):
+                    raise ConflictError("PO amount cannot be below GR usage")
+
+                if merged["vendor_id"] != before["vendor_id"]:
+                    vendor = conn.execute(
+                        "select vendor_id from vendors where vendor_id = ?",
+                        (merged["vendor_id"],),
+                    ).fetchone()
+                    if vendor is None:
+                        raise NotFound(f"Vendor not found: {merged['vendor_id']}")
+
+                sibling_total = Decimal(
+                    str(
+                        conn.execute(
+                            """
+                            select coalesce(sum(po_amount), 0) as total
+                            from pos
+                            where sc_id = ? and po_id != ?
+                            """,
+                            (before["sc_id"], po_id),
+                        ).fetchone()["total"]
+                    )
+                )
+                if sibling_total + po_amount > Decimal(str(sc["sc_amount"])):
+                    raise ConflictError("PO total would exceed SC amount")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update pos
+                    set vendor_id = ?,
+                        po_no = ?,
+                        po_amount = ?,
+                        contract_from = ?,
+                        contract_to = ?,
+                        contract_no = ?,
+                        payment_frequency = ?,
+                        updated_at = ?
+                    where po_id = ?
+                    """,
+                    (
+                        merged["vendor_id"],
+                        merged.get("po_no"),
+                        float(po_amount),
+                        merged.get("contract_from"),
+                        merged.get("contract_to"),
+                        merged.get("contract_no"),
+                        merged.get("payment_frequency"),
+                        timestamp,
+                        po_id,
+                    ),
+                )
+                after = _get_po_or_raise(conn, po_id)
+                write_audit_log(
+                    conn,
+                    action_type="update_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=before["sc_id"],
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                sc = conn.execute(
+                    "select status from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if sc["status"] == "closed":
+                    raise ConflictError("Closed SC cannot be edited")
+                if before["status"] != "po_pending":
+                    raise ConflictError("PO must be pending")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update pos
+                    set status = 'po_approved',
+                        updated_at = ?
+                    where po_id = ?
+                    """,
+                    (timestamp, po_id),
+                )
+                after = _get_po_or_raise(conn, po_id)
+                write_audit_log(
+                    conn,
+                    action_type="approve_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=before["sc_id"],
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                sc = conn.execute(
+                    "select status from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if sc["status"] == "closed":
+                    raise ConflictError("Closed SC cannot be edited")
+                if before["status"] != "po_approved":
+                    raise ConflictError("PO must be approved")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update pos
+                    set status = 'finished',
+                        updated_at = ?
+                    where po_id = ?
+                    """,
+                    (timestamp, po_id),
+                )
+                after = _get_po_or_raise(conn, po_id)
+                write_audit_log(
+                    conn,
+                    action_type="finish_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=before["sc_id"],
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
