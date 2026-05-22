@@ -96,6 +96,17 @@ def _get_gr_sc_id(conn, gr_id: str) -> str:
     return lookup["sc_id"]
 
 
+def _validate_user_exists(conn, user_id: str) -> None:
+    if user_id in (None, ""):
+        raise ValidationError("requester_id is required")
+    user = conn.execute(
+        "select user_id from users where user_id = ?",
+        (user_id,),
+    ).fetchone()
+    if user is None:
+        raise NotFound(f"User not found: {user_id}")
+
+
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
@@ -309,6 +320,8 @@ def update_gr(
                         raise ValidationError("No GR fields to update")
 
                     merged = {**before, **allowed}
+                    if "requester_id" in allowed:
+                        _validate_user_exists(conn, merged["requester_id"])
                     amount = _positive_number(
                         merged["estimated_amount"],
                         "estimated_amount",
@@ -397,17 +410,23 @@ def update_gr(
                     )
 
                 after = _get_gr(conn, gr_id)
-                write_audit_log(
-                    conn,
-                    action_type="update_gr",
-                    object_type="gr",
-                    object_id=gr_id,
-                    sc_id=sc_id,
-                    operator_id=current_user["user_id"],
-                    machine_id=current_user["machine_id"],
-                    before=before,
-                    after=after,
-                )
+                audit_sc_ids = [sc_id]
+                if before["status"] == "pending" and after["po_id"] != before["po_id"]:
+                    after_sc_id = _get_po_sc(conn, after["po_id"])["sc_id"]
+                    if after_sc_id != sc_id:
+                        audit_sc_ids.append(after_sc_id)
+                for audit_sc_id in audit_sc_ids:
+                    write_audit_log(
+                        conn,
+                        action_type="update_gr",
+                        object_type="gr",
+                        object_id=gr_id,
+                        sc_id=audit_sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=before,
+                        after=after,
+                    )
                 conn.commit()
             except Exception:
                 conn.rollback()

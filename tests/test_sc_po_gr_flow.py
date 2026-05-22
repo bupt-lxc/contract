@@ -1369,6 +1369,96 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
     assert updated["estimated_amount"] == 150
 
 
+def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
+    create_sc(
+        app_config,
+        USER,
+        {
+            "sc_id": "SC2",
+            "sc_no": "SC002",
+            "requester_id": "U1",
+            "request_type": "service",
+            "cost_center": 2002,
+            "sc_amount": 500,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    approve_sc(app_config, ADMIN, "SC2")
+    create_po(
+        app_config,
+        ADMIN,
+        {
+            "po_id": "PO2",
+            "sc_id": "SC2",
+            "vendor_id": "V1",
+            "po_no": "PO002",
+            "po_amount": 500,
+            "status": "po_approved",
+        },
+    )
+    create_gr(
+        app_config,
+        ADMIN,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    from sc_gr_app.services.gr_service import update_gr
+
+    update_gr(app_config, ADMIN, "GR1", {"po_id": "PO2"})
+
+    with connect(app_config) as conn:
+        audit_sc_ids = [
+            row["sc_id"]
+            for row in conn.execute(
+                """
+                select sc_id
+                from audit_logs
+                where action_type = 'update_gr' and object_id = 'GR1'
+                order by sc_id
+                """
+            )
+        ]
+
+    assert audit_sc_ids == ["SC1", "SC2"]
+
+
+@pytest.mark.parametrize("requester_id", [None, ""])
+def test_update_pending_gr_rejects_blank_requester_id(app_config, requester_id):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        ADMIN,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    from sc_gr_app.services.gr_service import update_gr
+
+    with pytest.raises(ValidationError, match="requester_id is required"):
+        update_gr(app_config, ADMIN, "GR1", {"requester_id": requester_id})
+
+
+def test_update_pending_gr_rejects_unknown_requester_id(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config)
+    create_gr(
+        app_config,
+        ADMIN,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+
+    from sc_gr_app.services.gr_service import update_gr
+
+    with pytest.raises(NotFound, match="User not found: MISSING"):
+        update_gr(app_config, ADMIN, "GR1", {"requester_id": "MISSING"})
+
+
 def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
