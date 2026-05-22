@@ -313,12 +313,36 @@ def update_gr(
                         merged["estimated_amount"],
                         "estimated_amount",
                     )
-                    budget_amount = amount
-                    if merged["po_id"] == before["po_id"]:
-                        budget_amount -= Decimal(str(before["estimated_amount"]))
-
                     po_sc = _get_po_sc(conn, merged["po_id"])
-                    _validate_gr_creation_context(config, po_sc, budget_amount)
+                    if po_sc["sc_status"] != "approved":
+                        raise ConflictError("SC must be approved")
+                    if not po_sc["sc_no"]:
+                        raise ConflictError("SC No is required")
+                    if not po_sc["po_no"]:
+                        raise ConflictError("PO No is required")
+                    if po_sc["status"] != "po_approved":
+                        raise ConflictError("PO must be approved")
+
+                    old_amount = Decimal(str(before["estimated_amount"]))
+                    if po_sc["sc_id"] == sc_id:
+                        sc_budget_amount = amount - old_amount
+                    else:
+                        sc_budget_amount = amount
+                    if sc_budget_amount > 0:
+                        sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
+                        if sc_budget["sc_available_amount"] < sc_budget_amount:
+                            raise ConflictError(
+                                "SC available amount is insufficient"
+                            )
+
+                    if merged["po_id"] == before["po_id"]:
+                        po_budget_amount = amount - old_amount
+                    else:
+                        po_budget_amount = amount
+                    if po_budget_amount > 0:
+                        po_budget = compute_po_budget_decimal(config, merged["po_id"])
+                        if po_budget["open_po_amount"] < po_budget_amount:
+                            raise ConflictError("PO open amount is insufficient")
 
                     conn.execute(
                         """

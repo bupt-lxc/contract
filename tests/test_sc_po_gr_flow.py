@@ -1307,6 +1307,68 @@ def test_admin_updates_pending_gr_with_budget_validation(app_config):
     assert updated["remark"] == "updated"
 
 
+def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_approved_sc_vendor_po(app_config, sc_amount=300, po_amount=300)
+    with connect(app_config) as conn:
+        conn.execute(
+            """
+            insert into pos (
+              po_id,
+              sc_id,
+              vendor_id,
+              po_no,
+              po_amount,
+              status,
+              contract_from,
+              contract_to,
+              contract_no,
+              payment_frequency,
+              created_at,
+              updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "PO2",
+                "SC1",
+                "V1",
+                "PO002",
+                200,
+                "po_approved",
+                None,
+                None,
+                None,
+                None,
+                "2026-05-22T00:00:00+00:00",
+                "2026-05-22T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+    create_gr(
+        app_config,
+        ADMIN,
+        {"gr_id": "GR1", "po_id": "PO1", "estimated_amount": 100},
+    )
+    create_gr(
+        app_config,
+        ADMIN,
+        {"gr_id": "GR2", "po_id": "PO1", "estimated_amount": 150},
+    )
+
+    from sc_gr_app.services.gr_service import update_gr
+
+    updated = update_gr(
+        app_config,
+        ADMIN,
+        "GR1",
+        {"po_id": "PO2", "estimated_amount": 150},
+    )
+
+    assert updated["po_id"] == "PO2"
+    assert updated["estimated_amount"] == 150
+
+
 def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
