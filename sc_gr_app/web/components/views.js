@@ -338,6 +338,31 @@ export function visibleDetailActions(detail) {
     .map(([, action]) => action);
 }
 
+export function visiblePoActions(row, detail) {
+  if (!detail?.permissions?.can_manage_po) {
+    return [];
+  }
+  const actions = ["edit"];
+  if (row?.status === "po_pending") {
+    actions.push("approve");
+  }
+  if (row?.status === "po_approved") {
+    actions.push("finish");
+  }
+  return actions;
+}
+
+export function visibleGrActions(row, detail) {
+  if (!detail?.permissions?.can_manage_gr) {
+    return [];
+  }
+  const actions = ["edit"];
+  if (row?.status === "pending") {
+    actions.push("approve", "cancel");
+  }
+  return actions;
+}
+
 function renderNewSc(regions, callbacks) {
   regions.filters.innerHTML = "";
   regions.table.innerHTML = "";
@@ -560,23 +585,25 @@ function renderPoSection(detail, formState, pending) {
         ${canManage && !formState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
       </div>
       ${form}
-      ${simpleTable(rows, ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"], (row) => renderPoRowActions(row, canManage, pending))}
+      ${simpleTable(rows, ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"], (row) => renderPoRowActions(row, detail, pending))}
     </section>
   `;
 }
 
-function renderPoRowActions(row, canManage, pending) {
+function renderPoRowActions(row, detail, pending) {
   const disabled = pending ? " disabled" : "";
-  const buttons = [];
-  if (canManage) {
-    buttons.push(`<button type="button" class="button compact" data-po-form-open="edit" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Edit</button>`);
-  }
-  if (row.status === "po_pending") {
-    buttons.push(`<button type="button" class="button compact" data-po-action="approve" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Approve${pending === `po-approve-${row.po_id}` ? "..." : ""}</button>`);
-  }
-  if (row.status === "po_approved") {
-    buttons.push(`<button type="button" class="button compact" data-po-action="finish" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Finish${pending === `po-finish-${row.po_id}` ? "..." : ""}</button>`);
-  }
+  const buttons = visiblePoActions(row, detail).map((action) => {
+    if (action === "edit") {
+      return `<button type="button" class="button compact" data-po-form-open="edit" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Edit</button>`;
+    }
+    if (action === "approve") {
+      return `<button type="button" class="button compact" data-po-action="approve" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Approve${pending === `po-approve-${row.po_id}` ? "..." : ""}</button>`;
+    }
+    if (action === "finish") {
+      return `<button type="button" class="button compact" data-po-action="finish" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Finish${pending === `po-finish-${row.po_id}` ? "..." : ""}</button>`;
+    }
+    return "";
+  });
   return buttons.join("");
 }
 
@@ -615,21 +642,25 @@ function renderGrSection(detail, formState, pending) {
         ${canManage && !formState ? `<button type="button" class="button" data-gr-form-open="create"${pending ? " disabled" : ""}>Add GR</button>` : ""}
       </div>
       ${form}
-      ${simpleTable(rows, ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "remark", "created_at"], (row) => renderGrRowActions(row, canManage, pending))}
+      ${simpleTable(rows, ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "remark", "created_at"], (row) => renderGrRowActions(row, detail, pending))}
     </section>
   `;
 }
 
-function renderGrRowActions(row, canManage, pending) {
+function renderGrRowActions(row, detail, pending) {
   const disabled = pending ? " disabled" : "";
-  const buttons = [];
-  if (canManage) {
-    buttons.push(`<button type="button" class="button compact" data-gr-form-open="edit" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Edit</button>`);
-  }
-  if (row.status === "pending") {
-    buttons.push(`<button type="button" class="button compact" data-gr-action="approve" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Approve${pending === `gr-approve-${row.gr_id}` ? "..." : ""}</button>`);
-    buttons.push(`<button type="button" class="button compact" data-gr-action="cancel" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Cancel${pending === `gr-cancel-${row.gr_id}` ? "..." : ""}</button>`);
-  }
+  const buttons = visibleGrActions(row, detail).map((action) => {
+    if (action === "edit") {
+      return `<button type="button" class="button compact" data-gr-form-open="edit" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Edit</button>`;
+    }
+    if (action === "approve") {
+      return `<button type="button" class="button compact" data-gr-action="approve" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Approve${pending === `gr-approve-${row.gr_id}` ? "..." : ""}</button>`;
+    }
+    if (action === "cancel") {
+      return `<button type="button" class="button compact" data-gr-action="cancel" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Cancel${pending === `gr-cancel-${row.gr_id}` ? "..." : ""}</button>`;
+    }
+    return "";
+  });
   return buttons.join("");
 }
 

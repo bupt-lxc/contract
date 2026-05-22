@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  visibleGrActions,
   visibleDetailActions,
+  visiblePoActions,
 } from "../sc_gr_app/web/components/views.js";
 
 import {
@@ -32,6 +34,34 @@ test("visibleDetailActions includes PO and GR management actions from permission
   assert.equal(actions.includes("add-gr"), true);
   assert.equal(actions.includes("close-sc"), true);
   assert.equal(actions.includes("approve-sc"), false);
+});
+
+test("visiblePoActions hides PO status actions without PO management permission", () => {
+  const detail = { permissions: { can_manage_po: false } };
+
+  assert.deepEqual(visiblePoActions({ po_id: "PO1", status: "po_pending" }, detail), []);
+  assert.deepEqual(visiblePoActions({ po_id: "PO1", status: "po_approved" }, detail), []);
+});
+
+test("visiblePoActions shows PO row actions only when status and permission match", () => {
+  const detail = { permissions: { can_manage_po: true } };
+
+  assert.deepEqual(visiblePoActions({ po_id: "PO1", status: "po_pending" }, detail), ["edit", "approve"]);
+  assert.deepEqual(visiblePoActions({ po_id: "PO1", status: "po_approved" }, detail), ["edit", "finish"]);
+  assert.deepEqual(visiblePoActions({ po_id: "PO1", status: "finished" }, detail), ["edit"]);
+});
+
+test("visibleGrActions hides GR status actions without GR management permission", () => {
+  const detail = { permissions: { can_manage_gr: false } };
+
+  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "pending" }, detail), []);
+});
+
+test("visibleGrActions shows GR row actions only when status and permission match", () => {
+  const detail = { permissions: { can_manage_gr: true } };
+
+  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "pending" }, detail), ["edit", "approve", "cancel"]);
+  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "approved" }, detail), ["edit"]);
 });
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {
