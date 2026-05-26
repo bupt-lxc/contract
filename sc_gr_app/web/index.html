@@ -10,41 +10,66 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="side-nav" aria-label="Primary navigation">
-        <div class="brand-block">
-          <div class="brand-mark">SG</div>
-          <div>
-            <div class="brand-title">SC GR</div>
-            <div class="brand-subtitle">Operations</div>
+      <!-- Login screen (visible on startup) -->
+      <div id="login-screen" class="login-screen">
+        <div class="login-card">
+          <div class="login-icon">SG</div>
+          <h2>SC GR Operations</h2>
+          <div id="login-state-loading">
+            <p aria-busy="true">Verifying identity...</p>
+          </div>
+          <div id="login-state-authorized" hidden>
+            <p style="color: var(--success); font-weight: 700;">Identity Verified</p>
+            <p>Welcome, <strong id="login-welcome-name"></strong></p>
+            <p class="muted-text" id="login-welcome-role"></p>
+            <button type="button" class="button primary" id="login-enter-btn" style="margin-top: 16px;">Enter System</button>
+          </div>
+          <div id="login-state-unauthorized" hidden>
+            <p style="color: var(--danger); font-weight: 700;">Not Authorized</p>
+            <p>Your machine ID <strong id="login-machine-id"></strong> is not recognized.</p>
+            <p class="muted-text">Please contact an administrator to gain access.</p>
           </div>
         </div>
-        <nav id="nav" class="nav-list"></nav>
-      </aside>
+      </div>
 
-      <div class="workspace">
-        <header class="top-toolbar">
-          <div class="toolbar-main" id="toolbar">
+      <!-- Main shell (hidden until login complete) -->
+      <div id="main-shell" hidden>
+        <aside class="side-nav" aria-label="Primary navigation">
+          <div class="brand-block">
+            <div class="brand-mark">SG</div>
             <div>
-              <div class="eyebrow">Workspace</div>
-              <h1 id="view-title">SC</h1>
+              <div class="brand-title">SC GR</div>
+              <div class="brand-subtitle">Operations</div>
             </div>
           </div>
-          <form id="global-search-form" class="search-box" role="search">
-            <label class="sr-only" for="global-search">Search current view</label>
-            <input id="global-search" type="search" autocomplete="off" placeholder="Search current view">
-            <button type="submit" class="button primary">Search</button>
-          </form>
-          <div id="user-panel" class="user-panel" aria-live="polite">
-            <span class="auth-dot waiting"></span>
-            <span>Checking authorization</span>
-          </div>
-        </header>
+          <nav id="nav" class="nav-list"></nav>
+        </aside>
 
-        <main class="content" id="main-content">
-          <section id="home-view" class="view-region"></section>
-          <section id="filters" class="filter-region" aria-label="Filters"></section>
-          <section id="table-region" class="table-region"></section>
-        </main>
+        <div class="workspace">
+          <header class="top-toolbar">
+            <div class="toolbar-main" id="toolbar">
+              <div>
+                <div class="eyebrow">Workspace</div>
+                <h1 id="view-title">SC</h1>
+              </div>
+            </div>
+            <form id="global-search-form" class="search-box" role="search">
+              <label class="sr-only" for="global-search">Search current view</label>
+              <input id="global-search" type="search" autocomplete="off" placeholder="Search current view">
+              <button type="submit" class="button primary">Search</button>
+            </form>
+            <div id="user-panel" class="user-panel" aria-live="polite">
+              <span class="auth-dot waiting"></span>
+              <span>Checking authorization</span>
+            </div>
+          </header>
+
+          <main class="content" id="main-content">
+            <section id="home-view" class="view-region"></section>
+            <section id="filters" class="filter-region" aria-label="Filters"></section>
+            <section id="table-region" class="table-region"></section>
+          </main>
+        </div>
       </div>
     </div>
 

@@ -798,57 +798,27 @@ export function renderDetail(row, drawer) {
   `).join("");
 }
 
-export function renderLoginScreen() {
-  const appShell = document.querySelector(".app-shell");
-  appShell.innerHTML = `
-    <div class="login-screen">
-      <div class="login-card">
-        <div class="login-icon">SG</div>
-        <h2>SC GR Operations</h2>
-        <div id="login-state-loading">
-          <p aria-busy="true">Verifying identity...</p>
-        </div>
-        <div id="login-state-authorized" hidden>
-          <p style="color: var(--success); font-weight: 700;">Identity Verified</p>
-          <p>Welcome, <strong id="login-welcome-name"></strong></p>
-          <p class="muted-text" id="login-welcome-role"></p>
-          <button type="button" class="button primary" id="login-enter-btn" style="margin-top: 16px;">Enter System</button>
-        </div>
-        <div id="login-state-unauthorized" hidden>
-          <p style="color: var(--danger); font-weight: 700;">Not Authorized</p>
-          <p>Your machine ID <strong id="login-machine-id"></strong> is not recognized.</p>
-          <p class="muted-text">Please contact an administrator to gain access.</p>
-        </div>
-      </div>
-    </div>
-  `;
-
+export async function renderLoginScreen() {
   const loadingEl = document.getElementById("login-state-loading");
   const authorizedEl = document.getElementById("login-state-authorized");
   const unauthorizedEl = document.getElementById("login-state-unauthorized");
+  const mainShell = document.getElementById("main-shell");
 
-  (async () => {
-    try {
-      const result = await window.pywebview.api.current_user();
-      const data = JSON.parse(result);
-      if (data.ok) {
-        loadingEl.hidden = true;
-        document.getElementById("login-welcome-name").textContent = data.data.user_name;
-        document.getElementById("login-welcome-role").textContent = (data.data.role || "") + " | " + (data.data.machine_id || "");
-        authorizedEl.hidden = false;
+  try {
+    const data = await callApi("current_user", null);
+    loadingEl.hidden = true;
+    document.getElementById("login-welcome-name").textContent = data.user_name;
+    document.getElementById("login-welcome-role").textContent = (data.role || "") + " | " + (data.machine_id || "");
+    authorizedEl.hidden = false;
 
-        document.getElementById("login-enter-btn").addEventListener("click", () => {
-          window.__loginComplete = true;
-        });
-        return;
-      }
-      loadingEl.hidden = true;
-      document.getElementById("login-machine-id").textContent = data.error?.message ?? "Unknown";
-      unauthorizedEl.hidden = false;
-    } catch (e) {
-      loadingEl.hidden = true;
-      document.getElementById("login-machine-id").textContent = "Bridge unavailable";
-      unauthorizedEl.hidden = false;
-    }
-  })();
+    document.getElementById("login-enter-btn").addEventListener("click", () => {
+      document.getElementById("login-screen").hidden = true;
+      mainShell.hidden = false;
+      window.__loginComplete = true;
+    });
+  } catch (error) {
+    loadingEl.hidden = true;
+    document.getElementById("login-machine-id").textContent = error.message || "Bridge unavailable";
+    unauthorizedEl.hidden = false;
+  }
 }
