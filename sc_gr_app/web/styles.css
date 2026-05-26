@@ -734,6 +734,15 @@ textarea {
 
 .detail-table {
   border: 1px solid var(--line);
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+.detail-table th,
+.detail-table td {
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .empty-note,
