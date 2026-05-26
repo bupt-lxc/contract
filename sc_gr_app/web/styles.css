@@ -641,10 +641,14 @@ textarea {
 }
 
 .detail-section {
-  display: grid;
-  gap: 12px;
+  display: block;
   padding: 14px;
   overflow-x: auto;
+  overflow-y: visible;
+}
+
+.detail-section > * + * {
+  margin-top: 12px;
 }
 
 .section-toolbar {
