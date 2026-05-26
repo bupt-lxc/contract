@@ -14,7 +14,7 @@ import {
   state,
   toggleSort,
 } from "./components/state.js";
-import { getViewTitle, renderDetail, renderView } from "./components/views.js";
+import { getViewTitle, renderDetail, renderLoginScreen, renderView } from "./components/views.js";
 
 const elements = {
   nav: document.querySelector("#nav"),
@@ -360,26 +360,109 @@ async function renderActiveView() {
   );
 }
 
-elements.searchForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  state.globalSearch = elements.searchInput.value.trim();
-  await renderActiveView();
-});
+(async function startup() {
+  // Show login screen
+  renderLoginScreen();
 
-elements.searchInput.addEventListener("search", async () => {
-  state.globalSearch = elements.searchInput.value.trim();
-  await renderActiveView();
-});
+  // Wait for user to click "Enter System"
+  await new Promise((resolve) => {
+    const check = () => {
+      if (window.__loginComplete) {
+        resolve();
+      } else {
+        setTimeout(check, 100);
+      }
+    };
+    check();
+  });
 
-elements.drawer.close.addEventListener("click", () => {
-  elements.drawer.root.hidden = true;
-});
+  // Rebuild app shell with the normal layout
+  const appShell = document.querySelector(".app-shell");
+  appShell.innerHTML = `
+    <aside class="side-nav" aria-label="Primary navigation">
+      <div class="brand-block">
+        <div class="brand-mark">SG</div>
+        <div>
+          <div class="brand-title">SC GR</div>
+          <div class="brand-subtitle">Operations</div>
+        </div>
+      </div>
+      <nav id="nav" class="nav-list"></nav>
+    </aside>
+    <div class="workspace">
+      <header class="top-toolbar">
+        <div class="toolbar-main" id="toolbar">
+          <div>
+            <div class="eyebrow">Workspace</div>
+            <h1 id="view-title">SC</h1>
+          </div>
+        </div>
+        <form id="global-search-form" class="search-box" role="search">
+          <label class="sr-only" for="global-search">Search current view</label>
+          <input id="global-search" type="search" autocomplete="off" placeholder="Search current view">
+          <button type="submit" class="button primary">Search</button>
+        </form>
+        <div id="user-panel" class="user-panel" aria-live="polite">
+          <span class="auth-dot waiting"></span>
+          <span>Checking authorization</span>
+        </div>
+      </header>
+      <main class="content" id="main-content">
+        <section id="home-view" class="view-region"></section>
+        <section id="filters" class="filter-region" aria-label="Filters"></section>
+        <section id="table-region" class="table-region"></section>
+      </main>
+    </div>
+    <aside id="detail-drawer" class="detail-drawer" aria-label="Record detail" hidden>
+      <div class="drawer-header">
+        <div>
+          <div class="eyebrow">Detail</div>
+          <h2 id="drawer-title">Record</h2>
+        </div>
+        <button id="drawer-close" type="button" class="icon-button" aria-label="Close detail drawer">x</button>
+      </div>
+      <div id="drawer-content" class="drawer-content"></div>
+    </aside>
+  `;
 
-renderNavigation();
-renderUserPanel();
-await loadCurrentUser();
-if (state.user) {
-  await routeTo("sc");
-} else {
-  await routeTo("system");
-}
+  // Re-query all DOM references since the shell was rebuilt
+  elements.nav = document.querySelector("#nav");
+  elements.title = document.querySelector("#view-title");
+  elements.toolbar = document.querySelector("#toolbar");
+  elements.userPanel = document.querySelector("#user-panel");
+  elements.searchForm = document.querySelector("#global-search-form");
+  elements.searchInput = document.querySelector("#global-search");
+  elements.home = document.querySelector("#home-view");
+  elements.filters = document.querySelector("#filters");
+  elements.table = document.querySelector("#table-region");
+  elements.drawer.root = document.querySelector("#detail-drawer");
+  elements.drawer.title = document.querySelector("#drawer-title");
+  elements.drawer.content = document.querySelector("#drawer-content");
+  elements.drawer.close = document.querySelector("#drawer-close");
+
+  // Re-bind drawer close
+  elements.drawer.close.addEventListener("click", () => {
+    elements.drawer.root.hidden = true;
+  });
+
+  // Re-bind search events
+  elements.searchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.globalSearch = elements.searchInput.value.trim();
+    await renderActiveView();
+  });
+  elements.searchInput.addEventListener("search", async () => {
+    state.globalSearch = elements.searchInput.value.trim();
+    await renderActiveView();
+  });
+
+  renderNavigation();
+  await loadCurrentUser();
+  renderUserPanel();
+
+  if (state.user) {
+    await routeTo("sc");
+  } else {
+    await routeTo("system");
+  }
+})();
