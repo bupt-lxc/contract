@@ -28,6 +28,29 @@ body {
   letter-spacing: 0;
 }
 
+/* Override PicoCSS dark table / form styles */
+table {
+  color: var(--text);
+  background: var(--surface);
+}
+
+thead {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+tbody tr {
+  color: var(--text);
+  background: var(--surface);
+}
+
+input,
+select,
+textarea {
+  color: var(--text);
+  background: var(--surface);
+}
+
 button,
 input,
 select {
@@ -417,6 +440,14 @@ textarea {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.data-table tbody tr,
+.data-table tbody td {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .data-table th,
@@ -439,7 +470,8 @@ textarea {
 }
 
 .data-table tr:hover td {
-  background: #fbfdff;
+  color: var(--text);
+  background: #eef3f8;
 }
 
 .sortable-header {
