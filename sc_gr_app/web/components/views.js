@@ -625,12 +625,28 @@ function renderPoSection(detail, poFormState, grFormState, pending) {
     `;
   }
 
+  const thead = `
+    <thead>
+      <tr>
+        <th style="width: 36px;"></th>
+        <th>Status</th>
+        <th>ID</th>
+        <th>Party</th>
+        <th>Amount</th>
+        <th>Open / Con</th>
+        <th>Info</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>`;
+
   const posHtml = pos.map((po) => {
     const poGrs = grs.filter((gr) => String(gr.po_id) === String(po.po_id));
     const poId = escapeHtml(text(po.po_id));
     return `
       <div class="po-group" x-data="{ expanded: false }">
         <table class="data-table detail-table">
+          ${thead}
           <tbody>
             <tr class="status-row status-${escapeHtml(po.status)} po-parent-row" @click="expanded = !expanded">
               <td style="width: 36px;">
@@ -683,7 +699,9 @@ function renderPoSection(detail, poFormState, grFormState, pending) {
         ${canManagePo && !poFormState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
       </div>
       ${poForm}
-      ${posHtml}
+      <div class="po-scroll">
+        ${posHtml}
+      </div>
     </section>
   `;
 }

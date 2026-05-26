@@ -643,8 +643,6 @@ textarea {
 .detail-section {
   display: block;
   padding: 14px;
-  overflow-x: auto;
-  overflow-y: visible;
 }
 
 .detail-section > * + * {
@@ -747,6 +745,12 @@ textarea {
 .detail-table td {
   overflow: visible;
   white-space: nowrap;
+}
+
+.po-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .empty-note,
