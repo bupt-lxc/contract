@@ -49,6 +49,15 @@ elements.drawer.close.addEventListener("click", () => {
   elements.drawer.root.hidden = true;
 });
 
+document.getElementById("nav-toggle").addEventListener("click", () => {
+  const sideNav = document.querySelector(".side-nav");
+  const toggle = document.getElementById("nav-toggle");
+  const collapsed = sideNav.classList.toggle("collapsed");
+  toggle.innerHTML = collapsed
+    ? "<span>▶</span>"
+    : "<span>◀</span><span> Collapse</span>";
+});
+
 const scDetailUi = {
   poForm: null,
   grForm: null,

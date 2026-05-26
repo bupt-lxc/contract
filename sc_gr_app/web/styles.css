@@ -173,6 +173,58 @@ button {
 
 .workspace {
   margin-left: 224px;
+  transition: margin-left 0.2s;
+}
+
+/* Sidebar toggle */
+.nav-toggle {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  min-height: 32px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nav-toggle:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+/* Collapsed sidebar */
+.side-nav.collapsed {
+  width: 56px;
+  padding: 18px 10px;
+  overflow: hidden;
+}
+.side-nav.collapsed .brand-block {
+  padding: 0 2px 16px;
+  justify-content: center;
+}
+.side-nav.collapsed .brand-text,
+.side-nav.collapsed .nav-button span:last-child {
+  display: none;
+}
+.side-nav.collapsed .nav-button {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 7px 4px;
+}
+.side-nav.collapsed .nav-toggle {
+  left: 8px;
+  right: 8px;
+}
+.side-nav.collapsed .nav-toggle span {
+  display: none;
+}
+.side-nav.collapsed ~ .workspace {
+  margin-left: 56px;
 }
 
 .top-toolbar {
