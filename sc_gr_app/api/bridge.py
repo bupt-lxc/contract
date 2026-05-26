@@ -1,6 +1,6 @@
 from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
-from sc_gr_app.errors import ValidationError
+from sc_gr_app.errors import PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, po_service, query_service, sc_service
 from sc_gr_app.services.user_service import get_user_by_machine_id
@@ -21,6 +21,9 @@ class ApiBridge:
         try:
             machine_id = get_7_digit_id()
             return ok(get_user_by_machine_id(self.config, machine_id))
+        except PermissionDenied as exc:
+            machine_id = get_7_digit_id()
+            return fail(PermissionDenied(f"Machine {machine_id} is not authorized"))
         except Exception as exc:
             return fail(exc)
 

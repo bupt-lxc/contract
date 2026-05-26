@@ -413,16 +413,6 @@ async function renderActiveView() {
         <section id="table-region" class="table-region"></section>
       </main>
     </div>
-    <aside id="detail-drawer" class="detail-drawer" aria-label="Record detail" hidden>
-      <div class="drawer-header">
-        <div>
-          <div class="eyebrow">Detail</div>
-          <h2 id="drawer-title">Record</h2>
-        </div>
-        <button id="drawer-close" type="button" class="icon-button" aria-label="Close detail drawer">x</button>
-      </div>
-      <div id="drawer-content" class="drawer-content"></div>
-    </aside>
   `;
 
   // Re-query all DOM references since the shell was rebuilt
