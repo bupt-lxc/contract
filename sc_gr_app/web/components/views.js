@@ -706,22 +706,6 @@ function renderPoForm(sc, formState, pending) {
   `;
 }
 
-function renderGrSection(detail, formState, pending) {
-  const canManage = Boolean(detail.permissions?.can_manage_gr);
-  const rows = detail.grs ?? [];
-  const form = formState ? renderGrForm(detail, formState, pending) : "";
-  return `
-    <section class="detail-section gr-section">
-      <div class="section-toolbar">
-        <h3>GR</h3>
-        ${canManage && !formState ? `<button type="button" class="button" data-gr-form-open="create"${pending ? " disabled" : ""}>Add GR</button>` : ""}
-      </div>
-      ${form}
-      ${simpleTable(rows, ["gr_id", "po_id", "requester_id", "status", "estimated_amount", "con_value", "remark", "created_at"], (row) => renderGrRowActions(row, detail, pending))}
-    </section>
-  `;
-}
-
 function renderGrRowActions(row, detail, pending) {
   const disabled = pending ? " disabled" : "";
   const buttons = visibleGrActions(row, detail).map((action) => {
