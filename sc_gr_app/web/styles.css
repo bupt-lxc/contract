@@ -612,7 +612,7 @@ textarea {
   display: grid;
   gap: 12px;
   padding: 14px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .section-toolbar {
@@ -620,6 +620,15 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding: 4px 0;
+}
+
+.section-toolbar .toolbar-actions {
+  flex-shrink: 0;
 }
 
 .section-toolbar h3 {
@@ -839,19 +848,4 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-muted);
-}
-
-/* Fix: overflow-x auto on detail sections */
-.detail-section {
-  overflow-x: auto;
-}
-.section-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--surface);
-  padding: 4px 0;
-}
-.section-toolbar .toolbar-actions {
-  flex-shrink: 0;
 }
