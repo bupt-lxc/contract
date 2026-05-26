@@ -190,29 +190,32 @@ async function handleScAction(action) {
         confirmBtn.disabled = input.value !== "I CONFIRM CLOSE THIS SC";
       });
 
-      confirmBtn.addEventListener("click", () => {
+      const onEsc = (e) => {
+        if (e.key === "Escape") {
+          cleanup();
+          resolve(false);
+        }
+      };
+      const cleanup = () => {
         modal.remove();
+        document.removeEventListener("keydown", onEsc);
+      };
+
+      document.addEventListener("keydown", onEsc);
+
+      confirmBtn.addEventListener("click", () => {
+        cleanup();
         resolve(true);
       });
 
       cancelBtn.addEventListener("click", () => {
-        modal.remove();
+        cleanup();
         resolve(false);
       });
 
-      // Close on Escape
-      document.addEventListener("keydown", function onEsc(e) {
-        if (e.key === "Escape") {
-          modal.remove();
-          document.removeEventListener("keydown", onEsc);
-          resolve(false);
-        }
-      });
-
-      // Close on overlay click
       modal.addEventListener("click", (e) => {
         if (e.target === modal) {
-          modal.remove();
+          cleanup();
           resolve(false);
         }
       });

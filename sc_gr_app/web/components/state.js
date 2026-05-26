@@ -23,7 +23,6 @@ export const state = {
     actionPending: null,
     actionError: null,
     editMode: false,
-    confirmingClose: false,
   },
   views: {
     sc: { rows: [], loading: false, error: null, sort: "created_at", direction: "desc", filters: {} },
@@ -52,7 +51,6 @@ export function setScDetailTarget(scId, target = {}) {
   state.scDetail.actionPending = null;
   state.scDetail.actionError = null;
   state.scDetail.editMode = false;
-  state.scDetail.confirmingClose = false;
 }
 
 export function clearScDetailTarget() {
@@ -65,7 +63,6 @@ export function clearScDetailTarget() {
   state.scDetail.actionPending = null;
   state.scDetail.actionError = null;
   state.scDetail.editMode = false;
-  state.scDetail.confirmingClose = false;
 }
 
 let scDetailRequestToken = 0;
