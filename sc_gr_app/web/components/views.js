@@ -869,7 +869,124 @@ function renderHome(regions) {
 
 function renderSystem(regions) {
   const user = state.user;
+  const isAdmin = user?.role === "admin";
   const authorized = user ? "Authorized" : "Not authorized";
+  const users = state.users || [];
+
+  let userMgmtHtml = "";
+  if (isAdmin) {
+    userMgmtHtml = `
+      <div class="user-mgmt-section" x-data="{
+        showForm: false,
+        editTarget: null,
+        formMode: 'add',
+        machineId: '',
+        userName: '',
+        email: '',
+        role: 'requester'
+      }">
+        <div class="section-toolbar">
+          <h3>User Management</h3>
+          <button type="button" class="button primary" @click="
+            showForm = true;
+            formMode = 'add';
+            editTarget = null;
+            machineId = '';
+            userName = '';
+            email = '';
+            role = 'requester';
+          ">Add User</button>
+        </div>
+
+        <table class="data-table detail-table" style="margin-top: 10px;">
+          <thead>
+            <tr>
+              <th>Machine ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${users.map((u) => `
+              <tr class="status-row status-${escapeHtml(u.status)}">
+                <td>${escapeHtml(text(u.machine_id))}</td>
+                <td>${escapeHtml(text(u.user_name))}</td>
+                <td>${escapeHtml(text(u.email))}</td>
+                <td>${escapeHtml(text(u.role))}</td>
+                <td>${statusBadge(u.status)}</td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" class="button compact" @click="
+                      showForm = true;
+                      formMode = 'edit';
+                      editTarget = '${escapeHtml(u.machine_id)}';
+                      machineId = '${escapeHtml(u.machine_id)}';
+                      userName = '${escapeHtml(text(u.user_name))}';
+                      email = '${escapeHtml(text(u.email ?? ''))}';
+                      role = '${escapeHtml(u.role)}';
+                    ">Edit</button>
+                    ${u.status === 'active' ? `
+                      <button type="button" class="button compact danger" @click="
+                        if (window.confirm('Disable user ${escapeHtml(text(u.user_name))}?')) {
+                          window.__disableMachineId = '${escapeHtml(u.machine_id)}';
+                          window.__userAction = 'disable';
+                        }
+                      ">Disable</button>
+                    ` : ""}
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+
+        <div x-show="showForm" class="inline-user-form" @keydown.escape.window="showForm = false">
+          <h4 x-text="formMode === 'add' ? 'Add User' : 'Edit User'"></h4>
+          <div class="form-grid" style="margin-top: 10px;">
+            <label class="form-field">
+              <span>Machine ID (7-digit)</span>
+              <input type="text" x-model="machineId" :readonly="formMode === 'edit'" maxlength="7" pattern="[A-Z0-9]{7}">
+            </label>
+            <label class="form-field">
+              <span>Name</span>
+              <input type="text" x-model="userName">
+            </label>
+            <label class="form-field">
+              <span>Email</span>
+              <input type="email" x-model="email">
+            </label>
+            <label class="form-field">
+              <span>Role</span>
+              <select x-model="role">
+                <option value="requester">Requester</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions" style="margin-top: 10px;">
+            <button type="button" class="button primary" @click="
+              window.__userFormData = {
+                mode: formMode,
+                machineId: machineId,
+                data: {
+                  machine_id: machineId,
+                  user_name: userName,
+                  email: email,
+                  role: role
+                }
+              };
+              window.__userAction = formMode === 'add' ? 'create' : 'update';
+            ">Save</button>
+            <button type="button" class="button" @click="showForm = false">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   regions.home.innerHTML = `
     <div class="home-intro">
       <h2>System</h2>
@@ -881,8 +998,46 @@ function renderSystem(regions) {
       <div class="metric-card"><div class="metric-label">Machine ID</div><div class="metric-value">${escapeHtml(user?.machine_id ?? "-")}</div><div class="metric-note">Windows user/device identity</div></div>
       <div class="metric-card"><div class="metric-label">Bridge</div><div class="metric-value">${window.pywebview?.api ? "Ready" : "Unavailable"}</div><div class="metric-note">Provided by pywebview</div></div>
     </div>
+    ${userMgmtHtml}
   `;
   regions.table.innerHTML = "";
+
+  if (isAdmin) {
+    if (window.Alpine) {
+      window.Alpine.initTree(regions.home);
+    }
+
+    const checkActions = () => {
+      if (window.__userAction) {
+        const action = window.__userAction;
+        const formData = window.__userFormData;
+        window.__userAction = null;
+        window.__userFormData = null;
+
+        (async () => {
+          try {
+            if (action === "create") {
+              await callApi("create_user", { data: formData.data });
+            } else if (action === "update") {
+              await callApi("update_user", { machine_id: formData.machineId, data: formData.data });
+            } else if (action === "disable") {
+              const machineId = window.__disableMachineId;
+              window.__disableMachineId = null;
+              await callApi("disable_user", { machine_id: machineId });
+            }
+            state.users = await callApi("list_users", {});
+            renderSystem(regions);
+          } catch (e) {
+            alert(e.message);
+          }
+        })();
+      }
+      if (document.querySelector(".user-mgmt-section")) {
+        setTimeout(checkActions, 200);
+      }
+    };
+    setTimeout(checkActions, 200);
+  }
 }
 
 export function renderDetail(row, drawer) {

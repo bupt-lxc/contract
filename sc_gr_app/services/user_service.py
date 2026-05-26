@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.errors import PermissionDenied
+from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
+from sc_gr_app.services.audit_service import write_audit_log
 
 
 SEED_USERS = [
@@ -58,3 +59,114 @@ def get_user_by_machine_id(config: AppConfig, machine_id: str) -> dict:
     if row is None:
         raise PermissionDenied("This machine is not authorized")
     return dict(row)
+
+
+def create_user(config: AppConfig, current_user: dict, data: dict) -> dict:
+    if current_user.get("role") != "admin":
+        raise PermissionDenied("Only admins can create users")
+    machine_id = data["machine_id"]
+    user_name = data["user_name"]
+    email = data.get("email")
+    role = data["role"]
+    if role not in ("admin", "requester"):
+        raise ValidationError("role must be 'admin' or 'requester'")
+    user_id = f"U-{machine_id}"
+    timestamp = now()
+    with connect(config) as conn:
+        existing = conn.execute(
+            "select user_id from users where machine_id = ?",
+            (machine_id,),
+        ).fetchone()
+        if existing:
+            raise ValidationError(f"User with machine_id {machine_id} already exists")
+        conn.execute(
+            """
+            insert into users (user_id, machine_id, user_name, role, email, status, created_at, updated_at)
+            values (?, ?, ?, ?, ?, 'active', ?, ?)
+            """,
+            (user_id, machine_id, user_name, role, email, timestamp, timestamp),
+        )
+        write_audit_log(
+            conn,
+            action_type="create_user",
+            object_type="user",
+            object_id=user_id,
+            sc_id=None,
+            operator_id=current_user["user_id"],
+            machine_id=current_user["machine_id"],
+            before=None,
+            after={"user_id": user_id, "machine_id": machine_id, "user_name": user_name, "role": role, "email": email},
+        )
+        conn.commit()
+    return {"user_id": user_id, "machine_id": machine_id, "user_name": user_name, "role": role, "email": email, "status": "active"}
+
+
+def update_user(config: AppConfig, current_user: dict, machine_id: str, data: dict) -> dict:
+    if current_user.get("role") != "admin":
+        raise PermissionDenied("Only admins can update users")
+    with connect(config) as conn:
+        row = conn.execute(
+            "select * from users where machine_id = ? and status = 'active'",
+            (machine_id,),
+        ).fetchone()
+        if not row:
+            raise NotFound(f"User with machine_id {machine_id} not found")
+        before = dict(row)
+        user_name = data.get("user_name", before["user_name"])
+        email = data.get("email", before.get("email"))
+        role = data.get("role", before["role"])
+        if role not in ("admin", "requester"):
+            raise ValidationError("role must be 'admin' or 'requester'")
+        timestamp = now()
+        conn.execute(
+            "update users set user_name = ?, email = ?, role = ?, updated_at = ? where machine_id = ?",
+            (user_name, email, role, timestamp, machine_id),
+        )
+        after = {**before, "user_name": user_name, "email": email, "role": role, "updated_at": timestamp}
+        write_audit_log(
+            conn,
+            action_type="update_user",
+            object_type="user",
+            object_id=before["user_id"],
+            sc_id=None,
+            operator_id=current_user["user_id"],
+            machine_id=current_user["machine_id"],
+            before=before,
+            after=after,
+        )
+        conn.commit()
+    return after
+
+
+def disable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict:
+    if current_user.get("role") != "admin":
+        raise PermissionDenied("Only admins can disable users")
+    if machine_id == current_user.get("machine_id"):
+        raise ValidationError("Cannot disable your own account")
+    with connect(config) as conn:
+        row = conn.execute(
+            "select * from users where machine_id = ? and status = 'active'",
+            (machine_id,),
+        ).fetchone()
+        if not row:
+            raise NotFound(f"User with machine_id {machine_id} not found")
+        before = dict(row)
+        timestamp = now()
+        conn.execute(
+            "update users set status = 'disabled', updated_at = ? where machine_id = ?",
+            (timestamp, machine_id),
+        )
+        after = {**before, "status": "disabled", "updated_at": timestamp}
+        write_audit_log(
+            conn,
+            action_type="disable_user",
+            object_type="user",
+            object_id=before["user_id"],
+            sc_id=None,
+            operator_id=current_user["user_id"],
+            machine_id=current_user["machine_id"],
+            before=before,
+            after=after,
+        )
+        conn.commit()
+    return after

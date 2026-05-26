@@ -1,6 +1,6 @@
 from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
-from sc_gr_app.errors import PermissionDenied, ValidationError
+from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, po_service, query_service, sc_service
 from sc_gr_app.services.user_service import get_user_by_machine_id
@@ -205,6 +205,37 @@ class ApiBridge:
             self._require_current_user()
             from sc_gr_app.services.user_service import list_active_users
             return ok(list_active_users(self.config))
+        except Exception as exc:
+            return fail(exc)
+
+    def create_user(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            data = _require_payload_field(payload, "data")
+            from sc_gr_app.services.user_service import create_user
+            return ok(create_user(self.config, current_user, data))
+        except Exception as exc:
+            return fail(exc)
+
+    def update_user(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            machine_id = _require_payload_field(payload, "machine_id")
+            data = _require_payload_field(payload, "data")
+            from sc_gr_app.services.user_service import update_user
+            return ok(update_user(self.config, current_user, machine_id, data))
+        except Exception as exc:
+            return fail(exc)
+
+    def disable_user(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            machine_id = _require_payload_field(payload, "machine_id")
+            from sc_gr_app.services.user_service import disable_user
+            return ok(disable_user(self.config, current_user, machine_id))
         except Exception as exc:
             return fail(exc)
 
