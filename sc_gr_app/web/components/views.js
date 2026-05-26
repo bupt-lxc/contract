@@ -470,8 +470,7 @@ export function renderScDetail(regions, callbacks = {}) {
         <div class="section-toolbar"><h3>SC</h3></div>
         ${scContent}
       </section>
-      ${renderPoSection(detail, callbacks.poForm, pending)}
-      ${renderGrSection(detail, callbacks.grForm, pending)}
+      ${renderPoSection(detail, callbacks.poForm, callbacks.grForm, pending)}
       <section class="detail-section audit-section">
         <div class="section-toolbar"><h3>Audit</h3></div>
         ${simpleTable(detail.audit_logs ?? [], ["created_at", "action_type", "object_type", "object_id", "operator_id", "machine_id"])}
@@ -512,7 +511,8 @@ export function renderScDetail(regions, callbacks = {}) {
   });
   regions.home.querySelectorAll("[data-gr-form-open]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await callbacks.onGrFormOpen?.(button.dataset.grFormOpen, findGr(detail, button.dataset.grId));
+      const row = findGr(detail, button.dataset.grId);
+      await callbacks.onGrFormOpen?.(button.dataset.grFormOpen, { ...row, poId: button.dataset.poId });
     });
   });
   regions.home.querySelectorAll("[data-gr-action]").forEach((button) => {
@@ -528,6 +528,10 @@ export function renderScDetail(regions, callbacks = {}) {
   regions.home.querySelector("[data-gr-form-cancel]")?.addEventListener("click", async () => {
     await callbacks.onGrFormCancel?.();
   });
+
+  if (window.Alpine) {
+    window.Alpine.initTree(regions.home);
+  }
 }
 
 function detailState(kind, title, message) {
@@ -578,18 +582,85 @@ function renderScEditForm(sc, pending) {
   `;
 }
 
-function renderPoSection(detail, formState, pending) {
-  const canManage = Boolean(detail.permissions?.can_manage_po);
-  const rows = detail.pos ?? [];
-  const form = formState ? renderPoForm(detail.sc, formState, pending) : "";
+function renderPoSection(detail, poFormState, grFormState, pending) {
+  const canManagePo = Boolean(detail.permissions?.can_manage_po);
+  const canManageGr = Boolean(detail.permissions?.can_manage_gr);
+  const pos = detail.pos ?? [];
+  const grs = detail.grs ?? [];
+  const poForm = poFormState && !poFormState.poId ? renderPoForm(detail.sc, poFormState, pending) : "";
+
+  if (!pos.length) {
+    return `
+      <section class="detail-section po-section">
+        <div class="section-toolbar">
+          <h3>PO / GR</h3>
+          ${canManagePo && !poFormState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
+        </div>
+        ${poForm}
+        <p class="empty-note">No PO records.</p>
+      </section>
+    `;
+  }
+
+  const posHtml = pos.map((po) => {
+    const poGrs = grs.filter((gr) => String(gr.po_id) === String(po.po_id));
+    const poId = escapeHtml(text(po.po_id));
+    return `
+      <div class="po-group" x-data="{ expanded: false }">
+        <table class="data-table detail-table">
+          <tbody>
+            <tr class="status-row status-${escapeHtml(po.status)} po-parent-row" @click="expanded = !expanded">
+              <td style="width: 36px;">
+                <span class="po-expand-icon" :class="expanded ? 'expanded' : ''">▶</span>
+              </td>
+              <td>${statusBadge(po.status)}</td>
+              <td>${escapeHtml(text(po.po_no ?? po.po_id))}</td>
+              <td>${escapeHtml(text(po.vendor_id))}</td>
+              <td class="amount">${money(po.po_amount)}</td>
+              <td class="amount">${money(po.open_po_amount)}</td>
+              <td>${date(po.contract_from)}</td>
+              <td>${date(po.contract_to)}</td>
+              <td>
+                <div class="row-actions">
+                  ${renderPoRowActions(po, detail, pending)}
+                </div>
+              </td>
+            </tr>
+            ${poGrs.map((gr) => `
+              <tr class="status-row status-${escapeHtml(gr.status)} gr-child-row" x-show="expanded">
+                <td></td>
+                <td>${statusBadge(gr.status)}</td>
+                <td>${escapeHtml(text(gr.gr_id))}</td>
+                <td>${escapeHtml(text(gr.requester_id))}</td>
+                <td class="amount">${money(gr.estimated_amount)}</td>
+                <td class="amount">${money(gr.con_value)}</td>
+                <td>${escapeHtml(text(gr.remark))}</td>
+                <td>${date(gr.created_at)}</td>
+                <td><div class="row-actions">${renderGrRowActions(gr, detail, pending)}</div></td>
+              </tr>
+            `).join("")}
+            ${poGrs.length === 0 ? `
+              <tr class="gr-child-row" x-show="expanded">
+                <td></td>
+                <td colspan="8"><span class="empty-note">No GRs for this PO.</span></td>
+              </tr>
+            ` : ""}
+          </tbody>
+        </table>
+        ${canManageGr ? `<div style="padding: 4px 0 4px 36px;" x-show="expanded"><button type="button" class="button compact" data-gr-form-open="create" data-po-id="${poId}"${pending ? " disabled" : ""}>Add GR</button></div>` : ""}
+        ${grFormState && String(grFormState.poId) === String(po.po_id) ? renderGrForm(detail, grFormState, pending, po.po_id) : ""}
+      </div>
+    `;
+  }).join("");
+
   return `
     <section class="detail-section po-section">
       <div class="section-toolbar">
-        <h3>PO</h3>
-        ${canManage && !formState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
+        <h3>PO / GR</h3>
+        ${canManagePo && !poFormState ? `<button type="button" class="button" data-po-form-open="create"${pending ? " disabled" : ""}>Add PO</button>` : ""}
       </div>
-      ${form}
-      ${simpleTable(rows, ["po_id", "po_no", "vendor_id", "status", "po_amount", "open_po_amount", "contract_from", "contract_to"], (row) => renderPoRowActions(row, detail, pending))}
+      ${poForm}
+      ${posHtml}
     </section>
   `;
 }
@@ -655,7 +726,7 @@ function renderGrRowActions(row, detail, pending) {
   const disabled = pending ? " disabled" : "";
   const buttons = visibleGrActions(row, detail).map((action) => {
     if (action === "edit") {
-      return `<button type="button" class="button compact" data-gr-form-open="edit" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Edit</button>`;
+      return `<button type="button" class="button compact" data-gr-form-open="edit" data-gr-id="${escapeHtml(row.gr_id)}" data-po-id="${escapeHtml(row.po_id)}"${disabled}>Edit</button>`;
     }
     if (action === "approve") {
       return `<button type="button" class="button compact" data-gr-action="approve" data-gr-id="${escapeHtml(row.gr_id)}"${disabled}>Approve${pending === `gr-approve-${row.gr_id}` ? "..." : ""}</button>`;
@@ -668,23 +739,21 @@ function renderGrRowActions(row, detail, pending) {
   return buttons.join("");
 }
 
-function renderGrForm(detail, formState, pending) {
+function renderGrForm(detail, formState, pending, parentPoId = null) {
   const record = formState.record ?? {};
-  const defaultPoId = formState.mode === "create"
-    ? (formState.poId ?? state.scDetail.poId ?? detail.pos?.[0]?.po_id ?? "")
-    : (record.po_id ?? "");
+  const poId = parentPoId ?? formState.poId ?? detail.pos?.[0]?.po_id ?? "";
   const disabled = pending ? " disabled" : "";
   return `
-    <form class="inline-record-form gr-form" data-gr-form data-mode="${escapeHtml(formState.mode)}">
+    <form class="inline-record-form gr-form" data-gr-form data-mode="${escapeHtml(formState.mode)}" data-po-id="${escapeHtml(poId)}">
       <div class="form-grid">
         ${field("gr_id", "GR ID", record.gr_id ?? "", "text", { readonly: formState.mode === "edit", required: true })}
-        ${renderPoIdControl(detail.pos ?? [], defaultPoId)}
+        ${field("po_id", "PO ID", poId, "hidden")}
         ${field("requester_id", "Requester ID", record.requester_id ?? state.user?.user_id ?? "")}
         ${field("estimated_amount", "Estimated Amount", record.estimated_amount ?? "", "number")}
         ${field("con_value", "Con Value", record.con_value ?? "", "number")}
         <label class="form-field full">
           <span>Remark</span>
-          <textarea name="remark">${escapeHtml(text(record.remark))}</textarea>
+          <textarea name="remark"${disabled}>${escapeHtml(text(record.remark))}</textarea>
         </label>
       </div>
       <div class="actions">

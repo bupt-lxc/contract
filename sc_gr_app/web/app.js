@@ -315,10 +315,11 @@ async function openGrForm(mode, row = null) {
   state.scDetail.editMode = false;
   state.scDetail.actionError = null;
   scDetailUi.poForm = null;
+  const poId = row?.poId ?? state.scDetail.poId ?? state.scDetail.record?.pos?.[0]?.po_id ?? null;
   scDetailUi.grForm = {
     mode,
     record: mode === "edit" ? row ?? {} : {},
-    poId: state.scDetail.poId ?? state.scDetail.record?.pos?.[0]?.po_id ?? null,
+    poId: poId,
   };
   await renderActiveView();
 }
