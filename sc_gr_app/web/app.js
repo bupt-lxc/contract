@@ -14,7 +14,7 @@ import {
   state,
   toggleSort,
 } from "./components/state.js";
-import { getViewTitle, renderDetail, renderLoginScreen, renderView } from "./components/views.js";
+import { getViewTitle, renderCloseModal, renderDetail, renderLoginScreen, renderView } from "./components/views.js";
 
 const elements = {
   nav: document.querySelector("#nav"),
@@ -173,8 +173,54 @@ async function handleScAction(action) {
   if (action === "deny" && !window.confirm("Deny this SC?")) {
     return;
   }
-  if (action === "close" && !window.confirm("Close this SC?")) {
-    return;
+  if (action === "close") {
+    // Show custom modal
+    const scNo = state.scDetail.record?.sc?.sc_no ?? scId;
+    const container = document.createElement("div");
+    container.innerHTML = renderCloseModal(scNo);
+    document.body.appendChild(container.firstElementChild);
+
+    const confirmed = await new Promise((resolve) => {
+      const input = document.getElementById("close-confirmation-input");
+      const confirmBtn = document.getElementById("close-confirm-btn");
+      const cancelBtn = document.getElementById("close-cancel-btn");
+      const modal = document.getElementById("close-modal");
+
+      input.addEventListener("input", () => {
+        confirmBtn.disabled = input.value !== "I CONFIRM CLOSE THIS SC";
+      });
+
+      confirmBtn.addEventListener("click", () => {
+        modal.remove();
+        resolve(true);
+      });
+
+      cancelBtn.addEventListener("click", () => {
+        modal.remove();
+        resolve(false);
+      });
+
+      // Close on Escape
+      document.addEventListener("keydown", function onEsc(e) {
+        if (e.key === "Escape") {
+          modal.remove();
+          document.removeEventListener("keydown", onEsc);
+          resolve(false);
+        }
+      });
+
+      // Close on overlay click
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          modal.remove();
+          resolve(false);
+        }
+      });
+    });
+
+    if (!confirmed) {
+      return;
+    }
   }
 
   const resolved = resolveScAction(action, scId, buildScUpdateData(state.scDetail.record?.sc ?? {}));

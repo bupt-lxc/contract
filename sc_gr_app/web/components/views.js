@@ -549,7 +549,9 @@ function scActionButton(action, label, enabled, pending = null, primary = false)
   }
   const disabled = pending ? " disabled" : "";
   const pendingText = pending === action ? "..." : "";
-  return `<button type="button" class="button${primary ? " primary" : ""}" data-sc-action="${escapeHtml(action)}"${disabled}>${escapeHtml(label)}${pendingText}</button>`;
+  const dangerClass = action === "close" ? " danger" : "";
+  const primaryClass = !dangerClass && primary ? " primary" : "";
+  return `<button type="button" class="button${primaryClass}${dangerClass}" data-sc-action="${escapeHtml(action)}"${disabled}>${escapeHtml(label)}${pendingText}</button>`;
 }
 
 function renderScEditForm(sc, pending) {
@@ -796,6 +798,41 @@ export function renderDetail(row, drawer) {
       <div class="detail-value">${escapeHtml(text(value))}</div>
     </div>
   `).join("");
+}
+
+export function renderCloseModal(scNo) {
+  return `
+    <div class="modal-overlay" id="close-modal" data-action="close-modal">
+      <div class="modal-card">
+        <h3>Close SC ${escapeHtml(scNo)}?</h3>
+        <div class="modal-body">
+          <p style="color: var(--danger); font-weight: 700;">This action cannot be undone.</p>
+          <p>This SC will be permanently closed. No further PO or GR operations will be possible.</p>
+          <p class="muted-text" style="margin-top: 12px;">Type <strong>I CONFIRM CLOSE THIS SC</strong> to proceed.</p>
+          <input
+            type="text"
+            id="close-confirmation-input"
+            placeholder="I CONFIRM CLOSE THIS SC"
+            style="margin-top: 8px;"
+            autofocus
+          >
+        </div>
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="button danger"
+            id="close-confirm-btn"
+            disabled
+          >Close SC</button>
+          <button
+            type="button"
+            class="button"
+            id="close-cancel-btn"
+          >Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 export async function renderLoginScreen() {
