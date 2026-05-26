@@ -682,6 +682,26 @@ function renderPoRowActions(row, detail, pending) {
   return buttons.join("");
 }
 
+function renderVendorSelect(vendors, currentValue) {
+  if (!vendors.length) {
+    return `<p class="empty-note">No vendors available. Add vendors in Vendor Management first.</p>`;
+  }
+  const options = [`<option value="">-- Select Vendor --</option>`]
+    .concat(vendors.map((v) => {
+      const vid = escapeHtml(text(v.vendor_id));
+      const label = escapeHtml(`${text(v.vendor_name)} — KSRM: ${text(v.ksrm_vendor_code)}`);
+      const selected = vid === currentValue ? " selected" : "";
+      return `<option value="${vid}"${selected}>${label}</option>`;
+    }))
+    .join("");
+  return `
+    <label class="form-field">
+      <span>Vendor</span>
+      <select name="vendor_id" required>${options}</select>
+    </label>
+  `;
+}
+
 function renderPoForm(sc, formState, pending) {
   const record = formState.record ?? {};
   const disabled = pending ? " disabled" : "";
@@ -690,7 +710,7 @@ function renderPoForm(sc, formState, pending) {
       <div class="form-grid">
         ${field("sc_id", "SC ID", sc.sc_id ?? "", "hidden")}
         ${field("po_id", "PO ID", record.po_id ?? "", "text", { readonly: formState.mode === "edit", required: true })}
-        ${field("vendor_id", "Vendor ID", record.vendor_id ?? "", "text", { required: true })}
+        ${renderVendorSelect(state.vendors, record.vendor_id ?? "")}
         ${field("po_no", "PO No", record.po_no ?? "")}
         ${field("po_amount", "PO Amount", record.po_amount ?? "", "number")}
         ${field("contract_from", "Contract From", record.contract_from ?? "", "date")}

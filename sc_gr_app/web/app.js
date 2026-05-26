@@ -144,6 +144,13 @@ async function loadScDetail() {
 
 async function refreshScDetail() {
   await loadScDetail();
+  if (state.scDetail.record && !state.vendors.length) {
+    try {
+      state.vendors = await callApi("search_vendors", { limit: 500 });
+    } catch {
+      state.vendors = [];
+    }
+  }
   await renderActiveView();
 }
 

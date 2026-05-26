@@ -13,6 +13,8 @@ export const state = {
   user: null,
   userError: null,
   globalSearch: "",
+  vendors: [],
+  users: [],
   scDetail: {
     scId: null,
     poId: null,
