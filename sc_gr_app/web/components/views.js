@@ -1086,42 +1086,55 @@ export function renderCloseModal(scNo) {
   `;
 }
 
+const MACHINE_ID_FALLBACK = "Bridge unavailable";
+
 export async function renderLoginScreen() {
   const loadingEl = document.getElementById("login-state-loading");
   const authorizedEl = document.getElementById("login-state-authorized");
   const unauthorizedEl = document.getElementById("login-state-unauthorized");
   const mainShell = document.getElementById("main-shell");
+  const loginBtn = document.getElementById("login-retry-btn");
+  const machineIdEl = document.getElementById("login-machine-id");
 
-  // Reset all states
-  loadingEl.hidden = false;
+  const bindLogin = () => {
+    const handler = () => {
+      doLogin();
+    };
+    loginBtn.addEventListener("click", handler, { once: true });
+  };
+
+  const doLogin = async () => {
+    loadingEl.hidden = false;
+    unauthorizedEl.hidden = true;
+    authorizedEl.hidden = true;
+
+    try {
+      const data = await callApi("current_user");
+      loadingEl.hidden = true;
+      document.getElementById("login-welcome-name").textContent = data.user_name;
+      document.getElementById("login-welcome-role").textContent = (data.role || "") + " | " + (data.machine_id || "");
+      authorizedEl.hidden = false;
+
+      const enterBtn = document.getElementById("login-enter-btn");
+      const enterHandler = () => {
+        document.getElementById("login-screen").hidden = true;
+        mainShell.hidden = false;
+        window.__loginComplete = true;
+      };
+      enterBtn.addEventListener("click", enterHandler, { once: true });
+    } catch (error) {
+      loadingEl.hidden = true;
+      machineIdEl.textContent = error.message || MACHINE_ID_FALLBACK;
+      unauthorizedEl.hidden = false;
+      bindLogin();
+    }
+  };
+
+  // Initial state: show login button, no auto-verify
+  machineIdEl.textContent = MACHINE_ID_FALLBACK;
+  loginBtn.textContent = "Login";
+  loadingEl.hidden = true;
+  unauthorizedEl.hidden = false;
   authorizedEl.hidden = true;
-  unauthorizedEl.hidden = true;
-
-  try {
-    const data = await callApi("current_user");
-    loadingEl.hidden = true;
-    document.getElementById("login-welcome-name").textContent = data.user_name;
-    document.getElementById("login-welcome-role").textContent = (data.role || "") + " | " + (data.machine_id || "");
-    authorizedEl.hidden = false;
-
-    const enterBtn = document.getElementById("login-enter-btn");
-    const boundEnter = () => {
-      document.getElementById("login-screen").hidden = true;
-      mainShell.hidden = false;
-      window.__loginComplete = true;
-      enterBtn.removeEventListener("click", boundEnter);
-    };
-    enterBtn.addEventListener("click", boundEnter);
-  } catch (error) {
-    loadingEl.hidden = true;
-    document.getElementById("login-machine-id").textContent = error.message || "Bridge unavailable";
-    unauthorizedEl.hidden = false;
-
-    const retryBtn = document.getElementById("login-retry-btn");
-    const boundRetry = () => {
-      retryBtn.removeEventListener("click", boundRetry);
-      renderLoginScreen();
-    };
-    retryBtn.addEventListener("click", boundRetry);
-  }
+  bindLogin();
 }
