@@ -387,7 +387,7 @@ function renderNewSc(regions, callbacks) {
       ${actionError}
       <form class="sc-form" data-new-sc-form>
         <div class="form-grid">
-          ${field("requester_id", "Requester", state.user?.user_id ?? "", "text", { readonly: true, required: true })}
+          ${renderRequesterSelect(state.users, state.user?.user_id ?? "")}
           ${field("sc_id", "SC ID", "", "text", { required: true })}
           ${field("sc_no", "SC No")}
           ${field("request_type", "Request Type")}
@@ -564,6 +564,7 @@ function renderScEditForm(sc, pending) {
     <form class="sc-form" data-sc-edit-form>
       <div class="form-grid">
         ${field("sc_no", "SC No", sc.sc_no ?? "")}
+        ${renderRequesterSelect(state.users, sc.requester_id ?? "")}
         ${field("request_type", "Request Type", sc.request_type ?? "")}
         ${field("cost_center", "Cost Center", sc.cost_center ?? "")}
         ${field("sc_amount", "SC Amount", sc.sc_amount ?? "", "number")}
@@ -579,6 +580,28 @@ function renderScEditForm(sc, pending) {
         <button type="button" class="button" data-sc-cancel-edit${disabled}>Cancel</button>
       </div>
     </form>
+  `;
+}
+
+function renderRequesterSelect(users, currentValue) {
+  const activeUsers = users || [];
+  if (!activeUsers.length) {
+    return field("requester_id", "Requester", currentValue, "text", { required: true });
+  }
+  const options = [`<option value="">-- Select Requester --</option>`]
+    .concat(activeUsers.map((u) => {
+      const uid = escapeHtml(text(u.user_id));
+      const mid = escapeHtml(text(u.machine_id));
+      const label = escapeHtml(`${text(u.user_name)} — ${mid}`);
+      const selected = uid === currentValue ? " selected" : "";
+      return `<option value="${uid}"${selected}>${label}</option>`;
+    }))
+    .join("");
+  return `
+    <label class="form-field">
+      <span>Requester</span>
+      <select name="requester_id" required>${options}</select>
+    </label>
   `;
 }
 

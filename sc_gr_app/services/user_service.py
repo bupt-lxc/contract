@@ -40,6 +40,14 @@ def seed_users(config: AppConfig) -> None:
         conn.commit()
 
 
+def list_active_users(config: AppConfig) -> list[dict]:
+    with connect(config) as conn:
+        rows = conn.execute(
+            "select user_id, machine_id, user_name, role, email, status from users where status = 'active' order by user_name"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_user_by_machine_id(config: AppConfig, machine_id: str) -> dict:
     with connect(config) as conn:
         row = conn.execute(

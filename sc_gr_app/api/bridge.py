@@ -200,6 +200,14 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def list_users(self, payload=None) -> dict:
+        try:
+            self._require_current_user()
+            from sc_gr_app.services.user_service import list_active_users
+            return ok(list_active_users(self.config))
+        except Exception as exc:
+            return fail(exc)
+
     def search_pos(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)

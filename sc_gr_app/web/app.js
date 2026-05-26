@@ -452,6 +452,12 @@ async function renderActiveView() {
   await loadCurrentUser();
   renderUserPanel();
 
+  try {
+    state.users = await callApi("list_users", {});
+  } catch {
+    state.users = [];
+  }
+
   if (state.user) {
     await routeTo("sc");
   } else {
