@@ -391,7 +391,7 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
     monkeypatch.setattr(app_shell, "migrate", lambda actual: calls.append(("migrate", actual)))
     monkeypatch.setattr(
         app_shell,
-        "seed_default_admin",
+        "seed_users",
         lambda actual: calls.append(("seed", actual)),
     )
 

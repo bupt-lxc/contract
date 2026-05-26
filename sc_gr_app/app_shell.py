@@ -5,13 +5,13 @@ import webview
 from sc_gr_app.api.bridge import ApiBridge
 from sc_gr_app.config import default_config
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.services.user_service import seed_default_admin
+from sc_gr_app.services.user_service import seed_users
 
 
 def run_app() -> None:
     config = default_config()
     migrate(config)
-    seed_default_admin(config)
+    seed_users(config)
     html_path = Path(__file__).parent / "web" / "index.html"
     bridge = ApiBridge(config)
 
