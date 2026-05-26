@@ -17,7 +17,7 @@ class ApiBridge:
     def __init__(self, config: AppConfig):
         self.config = config
 
-    def current_user(self) -> dict:
+    def current_user(self, payload=None) -> dict:
         try:
             machine_id = get_7_digit_id()
             return ok(get_user_by_machine_id(self.config, machine_id))

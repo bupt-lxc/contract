@@ -805,7 +805,7 @@ export async function renderLoginScreen() {
   const mainShell = document.getElementById("main-shell");
 
   try {
-    const data = await callApi("current_user", null);
+    const data = await callApi("current_user");
     loadingEl.hidden = true;
     document.getElementById("login-welcome-name").textContent = data.user_name;
     document.getElementById("login-welcome-role").textContent = (data.role || "") + " | " + (data.machine_id || "");
