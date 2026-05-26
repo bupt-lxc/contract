@@ -1092,6 +1092,11 @@ export async function renderLoginScreen() {
   const unauthorizedEl = document.getElementById("login-state-unauthorized");
   const mainShell = document.getElementById("main-shell");
 
+  // Reset all states
+  loadingEl.hidden = false;
+  authorizedEl.hidden = true;
+  unauthorizedEl.hidden = true;
+
   try {
     const data = await callApi("current_user");
     loadingEl.hidden = true;
@@ -1099,14 +1104,24 @@ export async function renderLoginScreen() {
     document.getElementById("login-welcome-role").textContent = (data.role || "") + " | " + (data.machine_id || "");
     authorizedEl.hidden = false;
 
-    document.getElementById("login-enter-btn").addEventListener("click", () => {
+    const enterBtn = document.getElementById("login-enter-btn");
+    const boundEnter = () => {
       document.getElementById("login-screen").hidden = true;
       mainShell.hidden = false;
       window.__loginComplete = true;
-    });
+      enterBtn.removeEventListener("click", boundEnter);
+    };
+    enterBtn.addEventListener("click", boundEnter);
   } catch (error) {
     loadingEl.hidden = true;
     document.getElementById("login-machine-id").textContent = error.message || "Bridge unavailable";
     unauthorizedEl.hidden = false;
+
+    const retryBtn = document.getElementById("login-retry-btn");
+    const boundRetry = () => {
+      retryBtn.removeEventListener("click", boundRetry);
+      renderLoginScreen();
+    };
+    retryBtn.addEventListener("click", boundRetry);
   }
 }
