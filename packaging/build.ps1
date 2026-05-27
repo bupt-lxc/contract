@@ -31,7 +31,21 @@ Write-Host "=== Building with PyInstaller ===" -ForegroundColor Cyan
 uv run pyinstaller packaging/app.spec
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
+# 6. Build Inno Setup installer
+$iscc = Join-Path $env:USERPROFILE "Utils\InnoSetup6\ISCC.exe"
+if (Test-Path $iscc) {
+    Write-Host "=== Building installer with Inno Setup ===" -ForegroundColor Cyan
+    & $iscc packaging/setup.iss
+    if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+} else {
+    Write-Host "=== Skipping Inno Setup (not found) ===" -ForegroundColor Yellow
+}
+
+$installerDir = Join-Path $distDir "installer"
 Write-Host "=== Done ===" -ForegroundColor Green
-Write-Host "Output: $distApp"
+Write-Host "App:    $distApp"
+if (Test-Path $installerDir) {
+    Write-Host "Setup:  $installerDir"
+}
 
 Pop-Location
