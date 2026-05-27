@@ -39,7 +39,6 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
