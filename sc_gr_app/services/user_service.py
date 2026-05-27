@@ -7,7 +7,7 @@ from sc_gr_app.services.audit_service import write_audit_log
 
 
 SEED_USERS = [
-    ("V2SE7PP", "Li, Xingchen (C/EV-L)", "requester", "xingchen.li@audi.com.cn"),
+    ("V2SE7PP", "Li, Xingchen (C/EV-L)", "admin", "xingchen.li@audi.com.cn"),
     ("UJWVFIH", "Su, Tong (C/EV-L)", "requester", "tong.su@audi.com.cn"),
     ("EYANQM0", "Yang, Qiaomin (C/EV-L)", "admin", "qiaomin.yang@audi.com.cn"),
     ("FO5LZ6P", "Ye, Xiaorui (C/EV-L)", "requester", "xiaorui.ye@audi.com.cn"),
@@ -160,6 +160,38 @@ def disable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict
         write_audit_log(
             conn,
             action_type="disable_user",
+            object_type="user",
+            object_id=before["user_id"],
+            sc_id=None,
+            operator_id=current_user["user_id"],
+            machine_id=current_user["machine_id"],
+            before=before,
+            after=after,
+        )
+        conn.commit()
+    return after
+
+
+def enable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict:
+    if current_user.get("role") != "admin":
+        raise PermissionDenied("Only admins can enable users")
+    with connect(config) as conn:
+        row = conn.execute(
+            "select * from users where machine_id = ? and status = 'disabled'",
+            (machine_id,),
+        ).fetchone()
+        if not row:
+            raise NotFound(f"Disabled user with machine_id {machine_id} not found")
+        before = dict(row)
+        timestamp = now()
+        conn.execute(
+            "update users set status = 'active', updated_at = ? where machine_id = ?",
+            (timestamp, machine_id),
+        )
+        after = {**before, "status": "active", "updated_at": timestamp}
+        write_audit_log(
+            conn,
+            action_type="enable_user",
             object_type="user",
             object_id=before["user_id"],
             sc_id=None,

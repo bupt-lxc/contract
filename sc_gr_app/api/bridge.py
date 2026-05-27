@@ -2,8 +2,8 @@ from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
-from sc_gr_app.services import gr_service, po_service, query_service, sc_service
-from sc_gr_app.services.user_service import get_user_by_machine_id
+from sc_gr_app.services import gr_service, po_service, query_service, sc_service, vendor_service
+from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
 
 
 def _require_payload_field(payload: dict, field: str):
@@ -200,6 +200,34 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def create_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            data = _require_payload_field(payload, "data")
+            return ok(vendor_service.create_vendor(self.config, current_user, data))
+        except Exception as exc:
+            return fail(exc)
+
+    def update_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            vendor_id = _require_payload_field(payload, "vendor_id")
+            data = _require_payload_field(payload, "data")
+            return ok(vendor_service.update_vendor(self.config, current_user, vendor_id, data))
+        except Exception as exc:
+            return fail(exc)
+
+    def disable_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            vendor_id = _require_payload_field(payload, "vendor_id")
+            return ok(vendor_service.disable_vendor(self.config, current_user, vendor_id))
+        except Exception as exc:
+            return fail(exc)
+
     def list_users(self, payload=None) -> dict:
         try:
             self._require_current_user()
@@ -236,6 +264,15 @@ class ApiBridge:
             machine_id = _require_payload_field(payload, "machine_id")
             from sc_gr_app.services.user_service import disable_user
             return ok(disable_user(self.config, current_user, machine_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def enable_user(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            machine_id = _require_payload_field(payload, "machine_id")
+            return ok(enable_user(self.config, current_user, machine_id))
         except Exception as exc:
             return fail(exc)
 

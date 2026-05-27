@@ -144,3 +144,80 @@ def search_vendors(config: AppConfig, text: str | None = None) -> list[dict]:
             ).fetchall()
 
     return [_row_to_dict(row) for row in rows]
+
+
+def update_vendor(config: AppConfig, current_user: dict, vendor_id: str, data: dict) -> dict:
+    require_requester_or_admin(current_user)
+    with LeaseLock(config.lock_dir, "system", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_vendor(conn, vendor_id)
+                if not before:
+                    raise ValidationError(f"Vendor {vendor_id} not found")
+
+                timestamp = utc_now()
+                fields = [
+                    "vendor_name", "ksrm_vendor_code", "contact_person", "phone",
+                    "service_scope", "email", "description", "inquiry_history"
+                ]
+                for field in fields:
+                    if field in data:
+                        conn.execute(
+                            f"update vendors set {field} = ?, updated_at = ? where vendor_id = ?",
+                            (data[field], timestamp, vendor_id)
+                        )
+
+                if "service_scope" in data and data["service_scope"] not in SUPPORTED_SERVICE_SCOPES:
+                    raise ValidationError("service_scope is invalid")
+
+                after = _get_vendor(conn, vendor_id)
+                write_audit_log(
+                    conn,
+                    action_type="update_vendor",
+                    object_type="vendor",
+                    object_id=vendor_id,
+                    sc_id=None,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+    return after
+
+
+def disable_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict:
+    require_requester_or_admin(current_user)
+    with LeaseLock(config.lock_dir, "system", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_vendor(conn, vendor_id)
+                if not before:
+                    raise ValidationError(f"Vendor {vendor_id} not found")
+                timestamp = utc_now()
+                conn.execute(
+                    "update vendors set status = 'disabled', updated_at = ? where vendor_id = ?",
+                    (timestamp, vendor_id)
+                )
+                after = _get_vendor(conn, vendor_id)
+                write_audit_log(
+                    conn,
+                    action_type="disable_vendor",
+                    object_type="vendor",
+                    object_id=vendor_id,
+                    sc_id=None,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+    return after
