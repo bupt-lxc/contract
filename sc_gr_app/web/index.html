@@ -1,91 +1,13 @@
-<!doctype html>
-<html lang="en" data-theme="light">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SC GR Management</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <link rel="stylesheet" href="./styles.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
-  </head>
-  <body>
-    <div class="app-shell">
-      <!-- Login screen (visible on startup) -->
-      <div id="login-screen" class="login-screen">
-        <div class="login-card">
-          <div class="login-icon">SG</div>
-          <h2>SC GR Operations</h2>
-          <div id="login-state-loading">
-            <p aria-busy="true">Verifying identity...</p>
-          </div>
-          <div id="login-state-authorized" hidden>
-            <p style="color: var(--success); font-weight: 700;">Identity Verified</p>
-            <p>Welcome, <strong id="login-welcome-name"></strong></p>
-            <p class="muted-text" id="login-welcome-role"></p>
-            <button type="button" class="button primary" id="login-enter-btn" style="margin-top: 16px;">Enter System</button>
-          </div>
-          <div id="login-state-unauthorized" hidden>
-            <p style="color: var(--danger); font-weight: 700;">Not Authorized</p>
-            <p>Your machine ID <strong id="login-machine-id"></strong> is not recognized.</p>
-            <p class="muted-text">Please contact an administrator to gain access.</p>
-            <button type="button" class="button" id="login-retry-btn" style="margin-top: 16px;">Retry</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Main shell (hidden until login complete) -->
-      <div id="main-shell" hidden>
-        <aside class="side-nav" aria-label="Primary navigation">
-          <div class="brand-block">
-            <div class="brand-mark">SG</div>
-            <div class="brand-text">
-              <div class="brand-title">SC GR</div>
-              <div class="brand-subtitle">Operations</div>
-            </div>
-          </div>
-          <nav id="nav" class="nav-list"></nav>
-          <button type="button" class="nav-toggle" id="nav-toggle" title="Toggle sidebar"><span>◀</span><span> Collapse</span></button>
-        </aside>
-
-        <div class="workspace">
-          <header class="top-toolbar">
-            <div class="toolbar-main" id="toolbar">
-              <div>
-                <div class="eyebrow">Workspace</div>
-                <h1 id="view-title">SC</h1>
-              </div>
-            </div>
-            <form id="global-search-form" class="search-box" role="search">
-              <label class="sr-only" for="global-search">Search current view</label>
-              <input id="global-search" type="search" autocomplete="off" placeholder="Search current view">
-              <button type="submit" class="button primary">Search</button>
-            </form>
-            <div id="user-panel" class="user-panel" aria-live="polite">
-              <span class="auth-dot waiting"></span>
-              <span>Checking authorization</span>
-            </div>
-          </header>
-
-          <main class="content" id="main-content">
-            <section id="home-view" class="view-region"></section>
-            <section id="filters" class="filter-region" aria-label="Filters"></section>
-            <section id="table-region" class="table-region"></section>
-          </main>
-        </div>
-      </div>
-    </div>
-
-    <aside id="detail-drawer" class="detail-drawer" aria-label="Record detail" hidden>
-      <div class="drawer-header">
-        <div>
-          <div class="eyebrow">Detail</div>
-          <h2 id="drawer-title">Record</h2>
-        </div>
-        <button id="drawer-close" type="button" class="icon-button" aria-label="Close detail drawer">x</button>
-      </div>
-      <div id="drawer-content" class="drawer-content"></div>
-    </aside>
-
-    <script type="module" src="./app.js"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SC GR Management</title>
+  <script type="module" crossorigin src="./assets/index-f15NaQ9G.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-rAdVNBzD.css">
+</head>
+<body>
+  <div id="app"></div>
+</body>
 </html>
