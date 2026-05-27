@@ -74,13 +74,15 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   if (to.name === 'login') return next()
+  if (window.__currentUser) return next()
 
   try {
     const { callApi } = await import('@/api/bridge.js')
     const user = await callApi('current_user')
     window.__currentUser = user
     next()
-  } catch {
+  } catch (e) {
+    console.error('Auth check failed:', e)
     next({ name: 'login', query: { redirect: to.fullPath } })
   }
 })
