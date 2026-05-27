@@ -103,13 +103,43 @@ def _setup_tray(window):
     return icon
 
 
+def _show_error_and_exit(title: str, message: str):
+    """Show a Windows error dialog and exit."""
+    try:
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)  # MB_ICONERROR
+    except Exception:
+        pass
+    sys.exit(1)
+
+
+def _init_database():
+    """Initialize database. Returns (config, error_message)."""
+    config = default_config()
+    try:
+        migrate(config)
+        seed_users(config)
+        return config, None
+    except Exception as exc:
+        if DEV_MODE:
+            return config, str(exc)
+        db_dir = config.db_path.parent
+        msg = (
+            f"Unable to connect to database.\n\n"
+            f"Location: {db_dir}\n"
+            f"Error: {exc}\n\n"
+            f"Verify the shared drive is accessible and try again.\n"
+            f"If you need offline access, set SC_GR_DEV=1."
+        )
+        return config, msg
+
+
 def run_app():
     _single_instance_check()
     _patch_webview2()
 
-    config = default_config()
-    migrate(config)
-    seed_users(config)
+    config, init_error = _init_database()
+    if init_error and not DEV_MODE:
+        _show_error_and_exit("SC GR Management — Database Error", init_error)
 
     html_path = Path(__file__).parent / "web" / "index.html"
     storage_path = _webview2_storage()

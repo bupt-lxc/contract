@@ -23,7 +23,7 @@ def test_response_schemas_wrap_unexpected_errors():
         "ok": False,
         "error": {
             "code": "UNEXPECTED_ERROR",
-            "message": "Unexpected application error",
+            "message": "boom",
         },
     }
 

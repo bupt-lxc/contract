@@ -35,6 +35,21 @@
           </template>
         </el-result>
       </div>
+
+      <!-- Error state (database unreachable, etc.) -->
+      <div v-if="state === 'error'" class="login-state">
+        <el-result icon="error" title="Connection Error">
+          <template #sub-title>
+            <p>{{ errorMessage }}</p>
+            <p style="color:#94a3b8;font-size:12px;margin-top:8px;">
+              The shared drive may be unreachable. Verify network connection and try again.
+            </p>
+          </template>
+          <template #extra>
+            <el-button @click="verify">Retry</el-button>
+          </template>
+        </el-result>
+      </div>
     </el-card>
     <p class="login-version">v2.0.0 &middot; Audi C/EV-L</p>
   </div>
@@ -43,20 +58,27 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { callApi } from '@/api/bridge.js'
+import { callApi, ApiError } from '@/api/bridge.js'
 
 const router = useRouter()
 const state = ref('loading')
 const user = ref(null)
+const errorMessage = ref('')
 
 async function verify() {
   state.value = 'loading'
+  errorMessage.value = ''
   try {
     user.value = await callApi('current_user')
     window.__currentUser = user.value
     state.value = 'authorized'
-  } catch {
-    state.value = 'unauthorized'
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
+      state.value = 'unauthorized'
+    } else {
+      state.value = 'error'
+      errorMessage.value = e.message || 'Unable to reach the database. The shared drive may be disconnected.'
+    }
   }
 }
 

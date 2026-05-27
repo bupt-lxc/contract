@@ -24,3 +24,7 @@ class LockError(AppError):
 
 class ConflictError(AppError):
     code = "CONFLICT_ERROR"
+
+
+class DatabaseError(AppError):
+    code = "DATABASE_ERROR"
