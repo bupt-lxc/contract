@@ -9,9 +9,15 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(project_root / "sc_gr_app" / "web"), "sc_gr_app/web"),
+        (str(project_root / "sc_gr_app" / "icons"), "sc_gr_app/icons"),
         (str(project_root / "sc_gr_app" / "db" / "schema.sql"), "sc_gr_app/db"),
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        "webview.platforms.edgechromium",
+        "pystray",
+        "PIL",
+        "PIL.Image",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -37,6 +43,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(project_root / "sc_gr_app" / "icons" / "tray.png"),
 )
 coll = COLLECT(
     exe,

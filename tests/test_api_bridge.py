@@ -397,8 +397,17 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
 
     fake_webview = types.SimpleNamespace()
 
+    fake_window = types.SimpleNamespace(
+        events=types.SimpleNamespace(closing=None),
+        show=lambda: None,
+        restore=lambda: None,
+        hide=lambda: None,
+        destroy=lambda: None,
+    )
+
     def create_window(*args, **kwargs):
         calls.append(("create_window", args, kwargs))
+        return fake_window
 
     def start(**kwargs):
         calls.append(("start", kwargs))
@@ -407,15 +416,19 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
     fake_webview.start = start
     monkeypatch.setattr(app_shell, "webview", fake_webview)
 
+    # Also patch _setup_tray to skip PIL/pystray calls
+    monkeypatch.setattr(app_shell, "_setup_tray", lambda w: None)
+    monkeypatch.setattr(app_shell, "_check_update", lambda w: None)
+
     app_shell.run_app()
 
     expected_url = Path(app_shell.__file__).parent / "web" / "index.html"
     assert calls[0:2] == [("migrate", config), ("seed", config)]
     assert calls[2][0:2] == ("create_window", ("SC GR Management",))
     window_kwargs = calls[2][2]
-    assert window_kwargs["url"] == str(expected_url)
+    assert window_kwargs["url"] == f"file://{expected_url}"
     assert window_kwargs["js_api"].config is config
     assert window_kwargs["width"] == 1280
     assert window_kwargs["height"] == 820
     assert window_kwargs["min_size"] == (1100, 700)
-    assert calls[3] == ("start", {"debug": True})
+    assert calls[3] == ("start", {"debug": False})

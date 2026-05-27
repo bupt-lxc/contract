@@ -4,6 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "pywebview>=6.2.1",
+    "pystray>=0.19.5",
+    "pillow>=11.0.0",
 ]
 
 [dependency-groups]
