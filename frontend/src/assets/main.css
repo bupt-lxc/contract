@@ -1,0 +1,59 @@
+:root {
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 2px;
+  --sidebar-bg: #1e293b;
+  --sidebar-text: #cbd5e1;
+  --sidebar-active: #3b82f6;
+  --header-height: 56px;
+  --table-header-bg: #f1f5f9;
+  --table-row-hover: #f8fafc;
+  --table-stripe: #fcfcfd;
+  --status-draft: #94a3b8;
+  --status-pending: #f59e0b;
+  --status-approved: #22c55e;
+  --status-denied: #ef4444;
+  --status-closed: #6b7280;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: system-ui, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f1f5f9;
+}
+
+/* Table status row left bar */
+.status-row-draft { border-left: 3px solid var(--status-draft); }
+.status-row-pending, .status-row-po_pending { border-left: 3px solid var(--status-pending); }
+.status-row-approved, .status-row-po_approved { border-left: 3px solid var(--status-approved); }
+.status-row-denied { border-left: 3px solid var(--status-denied); }
+.status-row-closed, .status-row-finished { border-left: 3px solid var(--status-closed); }
+.status-row-cancelled { border-left: 3px solid var(--status-denied); }
+
+/* Amount formatting */
+.amount-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Detail page */
+.detail-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.detail-page-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Card sections */
+.section-card {
+  background: #fff;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
