@@ -91,6 +91,7 @@ watch(() => props.visible, (val) => {
     Object.assign(form, props.record)
   } else if (val) {
     Object.assign(form, emptyForm())
+    formRef.value?.resetFields()
   }
 })
 
