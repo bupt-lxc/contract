@@ -58,7 +58,7 @@ def check_all_active_scs(conn: sqlite3.Connection) -> tuple[int, int]:
                 end_date = date.fromisoformat(sc_dict["service_period_end"])
                 remaining_days = (end_date - today).days
 
-                for threshold_months in sorted(date_thresholds, reverse=True):
+                for threshold_months in sorted(date_thresholds):
                     threshold_days = int(threshold_months * 30)
                     if remaining_days < threshold_days:
                         event_key = f"threshold_date:{threshold_months}m"
@@ -80,14 +80,15 @@ def check_all_active_scs(conn: sqlite3.Connection) -> tuple[int, int]:
                     """
                     SELECT COALESCE(SUM(gr.con_value), 0) as total
                     FROM gr_requests gr
-                    WHERE gr.sc_id = ? AND gr.status = 'approved'
+                    JOIN pos ON gr.po_id = pos.po_id
+                    WHERE pos.sc_id = ? AND gr.status = 'approved'
                     """,
                     (sc_id,),
                 ).fetchone()
                 spent = float(approved_gr_total_row["total"]) if approved_gr_total_row else 0.0
                 remaining_pct = ((float(sc_amount) - spent) / float(sc_amount)) * 100
 
-                for threshold_pct in sorted(amount_thresholds, reverse=True):
+                for threshold_pct in sorted(amount_thresholds):
                     if remaining_pct < threshold_pct:
                         event_key = f"threshold_amount:{threshold_pct}%"
                         if not q.is_threshold_sent(conn, "sc", sc_id, event_key):
