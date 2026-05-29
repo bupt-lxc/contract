@@ -107,7 +107,7 @@ function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updatePo(data)
+    await updatePo(data.po_id || poId.value, data)
     ElMessage.success('PO updated')
     await fetchDetail(scId.value)
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -133,8 +133,17 @@ async function handleFinish() {
 
 async function handleGrApprove(row) {
   try {
-    await ElMessageBox.confirm('Approve this GR?', 'Confirm', { type: 'warning' })
-    await approveGr(row.gr_id)
+    const { value } = await ElMessageBox.prompt(
+      'Enter contract value (con_value) for this GR:',
+      'Approve GR',
+      {
+        confirmButtonText: 'Approve',
+        type: 'warning',
+        inputPattern: /^\d+(\.\d{1,2})?$/,
+        inputErrorMessage: 'Enter a valid positive number'
+      }
+    )
+    await approveGr(row.gr_id, parseFloat(value))
     ElMessage.success('GR approved')
     await fetchDetail(scId.value)
   } catch {}
@@ -154,7 +163,7 @@ async function handleGrSave(data) {
     if (grDialogMode.value === 'create') {
       await createGr({ ...data, po_id: poId.value })
     } else {
-      await updateGr(data)
+      await updateGr(data.gr_id, data)
     }
     ElMessage.success('Saved')
     await fetchDetail(scId.value)

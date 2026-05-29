@@ -107,7 +107,8 @@ async function handleSaveDraft(data) {
 
 async function handleSaveSubmit(data) {
   try {
-    await submitSc(data)
+    const created = await createDraft(data)
+    await submitSc(created.sc_id, data)
     await searchScs()
   } catch (e) {
     ElMessage.error(e.message)
