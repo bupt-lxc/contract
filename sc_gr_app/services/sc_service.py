@@ -7,6 +7,7 @@ from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import (
     compute_po_budget,
     compute_sc_budget,
@@ -408,6 +409,9 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     before=before,
                     after=after,
                 )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "submit", before, current_user
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -528,6 +532,9 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     before=before,
                     after=after,
                 )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "deny", before, current_user
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -569,6 +576,9 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     machine_id=current_user["machine_id"],
                     before=before,
                     after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "close", before, current_user
                 )
                 conn.commit()
             except Exception:
@@ -665,6 +675,9 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     machine_id=current_user["machine_id"],
                     before=before,
                     after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "approve", before, current_user
                 )
                 conn.commit()
             except Exception:

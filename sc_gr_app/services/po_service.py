@@ -6,6 +6,7 @@ from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, ValidationError
 from sc_gr_app.rbac import require_admin
 from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
 
@@ -169,6 +170,10 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     before=None,
                     after=created,
                 )
+                notification_service.queue_status_change(
+                    conn, "po", po_id, "create",
+                    {"requester_id": sc["requester_id"]}, current_user
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -321,6 +326,14 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     before=before,
                     after=after,
                 )
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "po", po_id, "approve",
+                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -370,6 +383,14 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     machine_id=current_user["machine_id"],
                     before=before,
                     after=after,
+                )
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "po", po_id, "finish",
+                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
                 conn.commit()
             except Exception:
