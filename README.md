@@ -44,12 +44,23 @@ sc_gr_app/
     query_service.py    # Unified search across all entities
     audit_service.py    # Audit log writes with before/after snapshots
     lock_service.py     # File-based lease lock with TTL and heartbeat
+    notification_service.py  # Queue writer, recipient resolution, config CRUD
+  notification/         # Standalone notification script (runs on dedicated machine)
+    __main__.py         # CLI entry: --poll-interval, --run-once, --thresholds-only, --draft
+    engine.py           # Poll loop: send pending + retry failed + daily threshold check
+    sender.py           # Outlook COM sender (draft mode: mail.Save() instead of mail.Send())
+    queue.py            # Queue read/write helpers (fetch pending/failed, mark sent/failed)
+    config.py           # Read notification defaults and per-SC config from DB
+    templates.py        # Email subject and HTML body builders (Chinese)
+    thresholds.py       # Daily threshold check: date proximity + budget remaining
   web/                  # Built Vue frontend (served by pywebview)
 frontend/
   src/
-    views/              # Vue views: Home, Lists (SC/PO/GR/Vendor), Detail, System, Logs, Login
-    components/         # Reusable components: tables, forms, filters, status badges
-    composables/        # Composition API hooks: useSc, usePo, useGr, useVendor, useUser
+    views/              # Vue views: Home, Lists (SC/PO/GR/Vendor), Detail, System, Logs, EmailLogs, Login
+    components/
+      layout/           # SideNav, AppLayout
+      notification/     # ScNotificationCard, NotificationDefaults
+    composables/        # Composition API hooks: useSc, usePo, useGr, useVendor, useUser, useNotification
     api/bridge.js       # callApi() — thin wrapper over window.pywebview.api
     router/index.js     # Vue Router config
 packaging/
@@ -125,11 +136,69 @@ npm run build     # Build to ../sc_gr_app/web/
 
 When running the desktop app with `--dev`, pywebview loads from `http://localhost:5173` and you get hot module replacement. Without `--dev`, it loads from the built files in `sc_gr_app/web/`.
 
+## Email notification system
+
+The app includes an email notification system for status changes and daily threshold monitoring.
+
+### Architecture
+
+```
+Desktop app (any client)           Dedicated Windows machine (always-on)
+───────────────────────            ─────────────────────────────────────
+Writes queue entries to DB         python -m sc_gr_app.notification
+  inside existing transactions       ├─ Polls notification_queue every N sec
+  (never sends email)               ├─ Sends pending entries via Outlook COM
+                                     ├─ Retries failed entries every 15 min
+                                     └─ Daily: checks thresholds on approved SCs
+```
+
+- **Queue table** (`notification_queue`): desktops write entries on SC/PO/GR status transitions inside existing DB transactions. The desktop app never sends email.
+- **Notification script** (`sc_gr_app/notification/`): standalone process that runs on a dedicated always-on Windows machine with Outlook configured for the shared company mailbox. It polls the queue, sends emails via Outlook COM, and runs daily threshold checks.
+- **Per-SC config** overrides system-wide defaults — each SC can toggle notifications on/off and set custom CC recipients.
+- **Recipient resolution**: keywords `requester`, `actor`, and `notify.admin_recipients` (configurable list) are resolved to actual user IDs and then to email addresses at send time.
+- **Threshold dedup**: each threshold condition (e.g. "30% amount remaining on SC-001") fires at most once, tracked in `notification_sent_threshold`.
+
+### Configuration
+
+Admins configure notification defaults in **System → System Settings → Notification Defaults**:
+- **Admin recipients**: list of user IDs who receive all notifications (resolved via `notify.admin_recipients`)
+- **Transition rules**: enable/disable To and CC recipients for each entity type and event (status change, threshold date, threshold amount)
+- **Default CC**: extra recipients added to every notification
+- **Default thresholds**: date thresholds (6mo, 3mo, 1mo before contract end) and amount thresholds (50%, 30%, 10% budget remaining)
+
+Per-SC overrides are available in **SC → Detail → Notification Settings**: toggle on/off, custom CC list, and per-SC threshold selection.
+
+### Viewing sent emails
+
+Use **Email** in the sidebar to view the notification queue with status, type, and event filters.
+
+### Script usage
+
+```
+# Poll loop (default: every 5 minutes, sends pending + daily threshold check)
+uv run python -m sc_gr_app.notification
+
+# Custom poll interval (seconds)
+uv run python -m sc_gr_app.notification --poll-interval 60
+
+# Run one cycle and exit
+uv run python -m sc_gr_app.notification --run-once
+
+# Run only threshold check
+uv run python -m sc_gr_app.notification --thresholds-only
+
+# Dev mode — save to Outlook Drafts instead of sending
+uv run python -m sc_gr_app.notification --draft --poll-interval 60
+```
+
+In dev mode (`SC_GR_DEV=1`), the launcher scripts (`dev.bat` / `dev.ps1`) automatically start the notification script with `--draft --poll-interval 60`. Emails are saved to the Drafts folder in Outlook rather than being sent.
+
 ## Environment variables
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SC_GR_DATA_DIR` | Override data directory (DB + locks) | `./data` relative to executable |
+| `SC_GR_DATA_DIR` | Override data directory (DB + locks) | Shared drive UNC path |
+| `SC_GR_DEV` | Dev mode: local data dir, auto-create user, draft emails | (unset) |
 
 ## Windows installer build
 

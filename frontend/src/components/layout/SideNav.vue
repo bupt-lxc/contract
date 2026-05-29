@@ -33,6 +33,10 @@
         <el-icon><OfficeBuilding /></el-icon>
         <span>Vendor</span>
       </el-menu-item>
+      <el-menu-item index="/emails">
+        <el-icon><Message /></el-icon>
+        <span>Email</span>
+      </el-menu-item>
       <el-menu-item index="/logs">
         <el-icon><Notebook /></el-icon>
         <span>Logs</span>
@@ -56,7 +60,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Monitor, Document, ShoppingCart, CircleCheck, OfficeBuilding,
-  Notebook, Setting, DArrowLeft, DArrowRight
+  Message, Notebook, Setting, DArrowLeft, DArrowRight
 } from '@element-plus/icons-vue'
 
 defineProps({

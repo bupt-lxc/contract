@@ -56,6 +56,12 @@ const routes = [
     meta: { layout: 'default', title: 'Audit Logs' }
   },
   {
+    path: '/emails',
+    name: 'emails',
+    component: () => import('@/views/EmailLogsView.vue'),
+    meta: { layout: 'default', title: 'Email Logs' }
+  },
+  {
     path: '/system',
     name: 'system',
     component: () => import('@/views/SystemView.vue'),

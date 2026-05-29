@@ -4,10 +4,12 @@
       <h1 class="login-title">SC GR Operations</h1>
       <p class="login-subtitle">Budget & Purchase Order Management</p>
 
-      <!-- Loading state -->
-      <div v-if="state === 'loading'" class="login-state">
-        <el-skeleton :rows="3" animated />
-        <p style="margin-top:12px;color:#64748b">Detecting identity...</p>
+      <!-- Loading / Retrying state -->
+      <div v-if="state === 'loading' || state === 'retrying'" class="login-state">
+        <el-icon class="spinner" :size="32"><Loading /></el-icon>
+        <p style="margin-top:16px;color:#64748b">{{ state === 'loading' ? 'Detecting identity...' : 'Retrying...' }}</p>
+        <p v-if="lastError" style="color:#94a3b8;font-size:12px;margin-top:8px">{{ lastError }}</p>
+        <p v-if="retryCount > 0" style="color:#94a3b8;font-size:11px;margin-top:4px">Attempt {{ retryCount }}</p>
       </div>
 
       <!-- Authorized state -->
@@ -23,27 +25,12 @@
         </el-result>
       </div>
 
-      <!-- Unauthorized state -->
+      <!-- Unauthorized state (terminal, after retries exhausted) -->
       <div v-if="state === 'unauthorized'" class="login-state">
         <el-result icon="error" title="Not Authorized">
           <template #sub-title>
-            <p>This machine is not authorized to access the system.</p>
+            <p>{{ lastError || 'This machine is not authorized to access the system.' }}</p>
             <p style="color:#94a3b8;font-size:12px;margin-top:8px;">Contact your administrator.</p>
-          </template>
-          <template #extra>
-            <el-button @click="verify">Retry</el-button>
-          </template>
-        </el-result>
-      </div>
-
-      <!-- Error state (database unreachable, etc.) -->
-      <div v-if="state === 'error'" class="login-state">
-        <el-result icon="error" title="Connection Error">
-          <template #sub-title>
-            <p>{{ errorMessage }}</p>
-            <p style="color:#94a3b8;font-size:12px;margin-top:8px;">
-              The shared drive may be unreachable. Verify network connection and try again.
-            </p>
           </template>
           <template #extra>
             <el-button @click="verify">Retry</el-button>
@@ -56,38 +43,56 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { Loading } from '@element-plus/icons-vue'
 import { callApi, ApiError } from '@/api/bridge.js'
 
 const router = useRouter()
 const state = ref('loading')
 const user = ref(null)
-const errorMessage = ref('')
+const lastError = ref('')
+const retryCount = ref(0)
+let retryTimer = null
+
+function stopRetry() {
+  if (retryTimer) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
+}
 
 async function verify() {
-  state.value = 'loading'
-  errorMessage.value = ''
+  stopRetry()
+  if (state.value !== 'retrying') {
+    state.value = 'loading'
+  }
+  lastError.value = ''
+
   try {
     user.value = await callApi('current_user')
     window.__currentUser = user.value
     state.value = 'authorized'
   } catch (e) {
+    lastError.value = e.message || 'Unable to reach the database.'
     if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
       state.value = 'unauthorized'
     } else {
-      state.value = 'error'
-      errorMessage.value = e.message || 'Unable to reach the database. The shared drive may be disconnected.'
+      state.value = 'retrying'
+      retryCount.value++
+      retryTimer = setTimeout(verify, 2000)
     }
   }
 }
 
 function enterApp() {
+  stopRetry()
   const redirect = router.currentRoute.value.query?.redirect || '/workbench'
   router.push(redirect)
 }
 
 onMounted(verify)
+onUnmounted(stopRetry)
 </script>
 
 <style scoped>
@@ -121,5 +126,13 @@ onMounted(verify)
   margin-top: 16px;
   font-size: 12px;
   color: #94a3b8;
+}
+.spinner {
+  animation: spin 1s linear infinite;
+  color: #3b82f6;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
