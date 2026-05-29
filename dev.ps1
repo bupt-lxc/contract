@@ -1,17 +1,18 @@
 $ErrorActionPreference = "Stop"
 
 # ============================================
-# SC GR Management — Dev Mode Launcher
+# SC GR Management -- Dev Mode Launcher
 # Uses local database for offline development
 # ============================================
 $env:SC_GR_DEV = "1"
 
-Push-Location (Join-Path $PSScriptRoot)
+Push-Location $PSScriptRoot
 $projectRoot = Get-Location
+$env:SC_GR_DATA_DIR = $projectRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " SC GR Management — DEV MODE" -ForegroundColor Cyan
-Write-Host " Database: %APPDATA%\sc-gr-management-dev" -ForegroundColor Cyan
+Write-Host " SC GR Management -- DEV MODE" -ForegroundColor Cyan
+Write-Host " Database: $projectRoot\data\sc_gr.sqlite3" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # Start Vite dev server in background

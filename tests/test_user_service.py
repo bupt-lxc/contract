@@ -18,7 +18,7 @@ def test_seed_users_creates_users_when_empty(app_config):
     assert len(rows) == 6
     assert rows[0]["machine_id"] == "V2SE7PP"
     assert rows[0]["user_name"] == "Li, Xingchen (C/EV-L)"
-    assert rows[0]["role"] == "requester"
+    assert rows[0]["role"] == "admin"
     assert rows[0]["email"] == "xingchen.li@audi.com.cn"
 
 
