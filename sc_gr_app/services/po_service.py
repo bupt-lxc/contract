@@ -11,12 +11,28 @@ from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("po_id", "sc_id", "vendor_id", "po_amount")
+REQUIRED_FIELDS = ("sc_id", "vendor_id", "po_amount")
 SUPPORTED_STATUSES = {"po_pending", "po_approved", "finished"}
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _generate_po_id(config: AppConfig, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"PO-{machine_id}-{today}-%"
+    with connect(config) as conn:
+        row = conn.execute(
+            "SELECT po_id FROM pos WHERE po_id LIKE ? ORDER BY po_id DESC LIMIT 1",
+            (pattern,),
+        ).fetchone()
+    if row:
+        last_seq = int(row["po_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"PO-{machine_id}-{today}-{seq:03d}"
 
 
 def _require_fields(data: dict, fields: tuple[str, ...]) -> None:
@@ -97,7 +113,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
         raise ValidationError("status is invalid")
 
     sc_id = data["sc_id"]
-    po_id = data["po_id"]
+    po_id = _generate_po_id(config, current_user["machine_id"])
     timestamp = utc_now()
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):

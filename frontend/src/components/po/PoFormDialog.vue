@@ -7,12 +7,7 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="PO ID" prop="po_id">
-            <el-input v-model="form.po_id" :disabled="mode === 'edit'" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
+        <el-col :span="24">
           <el-form-item label="PO No">
             <el-input v-model="form.po_no" />
           </el-form-item>
@@ -75,15 +70,15 @@ const formRef = ref()
 const submitting = ref(false)
 
 const emptyForm = () => ({
-  po_id: '', po_no: '', vendor_id: '', po_amount: null,
+  po_no: '', vendor_id: '', po_amount: null,
   contract_from: null, contract_to: null, contract_no: '', payment_frequency: ''
 })
 
 const form = reactive(emptyForm())
 
 const rules = {
-  po_id: [{ required: true, message: 'PO ID is required', trigger: 'blur' }],
-  vendor_id: [{ required: true, message: 'Vendor is required', trigger: 'change' }]
+  vendor_id: [{ required: true, message: 'Vendor is required', trigger: 'change' }],
+  po_amount: [{ required: true, message: 'PO Amount is required', trigger: 'blur' }]
 }
 
 watch(() => props.visible, (val) => {

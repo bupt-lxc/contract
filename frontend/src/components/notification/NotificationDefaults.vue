@@ -11,6 +11,7 @@
           v-model="local.admin_recipients"
           multiple
           filterable
+          :teleported="false"
           placeholder="Select admins who receive notifications"
           style="width:100%"
           @change="emitSave"
@@ -32,7 +33,7 @@
           <el-table-column label="To" width="200">
             <template #default="{ row }">
               <el-select v-model="local.transitions.sc[row.transition].to" multiple filterable
-                style="width:100%" @change="emitSave">
+                :teleported="false" style="width:100%" @change="emitSave">
                 <el-option label="Admin Recipients" value="notify.admin_recipients" />
                 <el-option label="Requester" value="requester" />
                 <el-option label="Actor" value="actor" />
@@ -42,7 +43,7 @@
           <el-table-column label="CC" width="200">
             <template #default="{ row }">
               <el-select v-model="local.transitions.sc[row.transition].cc" multiple filterable
-                style="width:100%" @change="emitSave">
+                :teleported="false" style="width:100%" @change="emitSave">
                 <el-option label="Admin Recipients" value="notify.admin_recipients" />
                 <el-option label="Requester" value="requester" />
                 <el-option label="Actor" value="actor" />
@@ -56,7 +57,7 @@
       <div style="margin-bottom:16px">
         <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Default CC List</label>
         <el-select v-model="local.default_cc" multiple filterable
-          placeholder="Select users" style="width:100%" @change="emitSave">
+          :teleported="false" placeholder="Select users" style="width:100%" @change="emitSave">
           <el-option v-for="u in allUsers" :key="u.user_id"
             :label="`${u.user_name} -- ${u.machine_id}`" :value="u.user_id" />
         </el-select>

@@ -57,12 +57,12 @@ export function useSc(pageSize = 20) {
     return await callApi('create_sc_draft', { data })
   }
 
-  async function submitSc(data) {
-    return await callApi('submit_sc', { data })
+  async function submitSc(scId, data) {
+    return await callApi('submit_sc', { sc_id: scId, data })
   }
 
-  async function updateSc(data) {
-    return await callApi('update_sc', { data })
+  async function updateSc(scId, data) {
+    return await callApi('update_sc', { sc_id: scId, data })
   }
 
   async function approveSc(scId) {

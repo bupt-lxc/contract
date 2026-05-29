@@ -128,7 +128,7 @@ function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updateSc(data)
+    await updateSc(data.sc_id || scId.value, data)
     ElMessage.success('SC updated')
     await fetchDetail(scId.value)
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -137,7 +137,7 @@ async function handleEditSave(data) {
 async function handleSubmit() {
   try {
     await ElMessageBox.confirm('Submit this SC?', 'Confirm', { type: 'warning' })
-    await submitSc({ sc_id: scId.value })
+    await submitSc(scId.value, {})
     ElMessage.success('SC submitted')
     await fetchDetail(scId.value)
   } catch { /* cancelled */ }
@@ -198,7 +198,7 @@ async function handlePoSave(data) {
     if (poDialogMode.value === 'create') {
       await createPo({ ...data, sc_id: scId.value })
     } else {
-      await updatePo(data)
+      await updatePo(data.po_id, data)
     }
     ElMessage.success('Saved')
     await fetchDetail(scId.value)

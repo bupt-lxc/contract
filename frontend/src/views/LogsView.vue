@@ -1,13 +1,12 @@
 <template>
   <div>
-    <FilterBar @reset="handleReset">
-      <template #filters>
-        <el-date-picker v-model="filters.created_at" type="date" placeholder="Date" value-format="YYYY-MM-DD" @change="onFilterChange" />
-        <el-input v-model="filters.action_type" placeholder="Action type" clearable @change="onFilterChange" style="width:160px" />
-      </template>
-    </FilterBar>
+    <AdvancedFilterBar
+      :filter-config="logsFilterConfig"
+      @filter="handleFilter"
+      @reset="handleReset"
+    />
 
-    <el-table :data="filteredRows" v-loading="state.loading" stripe border>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="created_at" label="Created" width="160" sortable="custom">
         <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
       </el-table-column>
@@ -34,35 +33,27 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useLogs } from '@/composables/useLogs.js'
-import FilterBar from '@/components/common/FilterBar.vue'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 
 const { state, searchLogs, setFilters, resetFilters, onPageChange, onPageSizeChange } = useLogs()
 
-const filters = reactive({ created_at: '', action_type: '' })
+const logsFilterConfig = [
+  { name: 'action_type', label: 'Action', type: 'input' },
+  { name: 'object_type', label: 'Object Type', type: 'input' },
+  { name: 'object_id', label: 'Object ID', type: 'input' },
+  { name: 'sc_id', label: 'SC ID', type: 'input' },
+  { name: 'operator_id', label: 'Operator', type: 'input' },
+  { name: 'machine_id', label: 'Machine', type: 'input' },
+  { name: 'operation_mode', label: 'Mode', type: 'input' },
+]
 
-const filteredRows = computed(() => {
-  let rows = state.rows
-  if (filters.created_at) {
-    rows = rows.filter(r => (r.created_at || '').startsWith(filters.created_at))
-  }
-  if (filters.action_type) {
-    const t = filters.action_type.toLowerCase()
-    rows = rows.filter(r => (r.action_type || '').toLowerCase().includes(t))
-  }
-  return rows
-})
-
-function onFilterChange() {
-  const f = {}
-  if (filters.action_type) f.action_type = filters.action_type
-  setFilters(f)
-  searchLogs(null, f)
+function handleFilter({ text, filters }) {
+  searchLogs(text, filters)
 }
 
 function handleReset() {
-  Object.assign(filters, { created_at: '', action_type: '' })
   resetFilters()
   searchLogs()
 }
