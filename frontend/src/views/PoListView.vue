@@ -1,20 +1,13 @@
 <template>
   <div>
-    <FilterBar @reset="handleReset">
-      <template #filters>
-        <el-select v-model="filters.status" placeholder="Status" clearable @change="onFilterChange">
-          <el-option v-for="s in poStatuses" :key="s.value" :label="s.label" :value="s.value" />
-        </el-select>
-        <el-date-picker v-model="filters.contract_to" type="date" placeholder="Contract To" value-format="YYYY-MM-DD" @change="onFilterChange" />
-        <el-select v-model="filters.open_po" placeholder="OPEN PO" clearable @change="onFilterChange">
-          <el-option label="Open" value="open" />
-          <el-option label="Closed" value="closed" />
-        </el-select>
-      </template>
-    </FilterBar>
+    <AdvancedFilterBar
+      :filter-config="poFilterConfig"
+      @filter="handleFilter"
+      @reset="handleReset"
+    />
 
     <PoTable
-      :rows="filteredRows"
+      :rows="state.rows"
       :loading="state.loading"
       @row-click="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
@@ -44,10 +37,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
-import FilterBar from '@/components/common/FilterBar.vue'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -62,33 +55,27 @@ const poStatuses = [
   { label: 'Finished', value: 'finished' }
 ]
 
-const filters = reactive({ status: '', contract_to: '', open_po: '' })
+const poFilterConfig = [
+  { name: 'status', label: 'Status', type: 'select', options: poStatuses },
+  { name: 'po_id', label: 'PO ID', type: 'input' },
+  { name: 'po_no', label: 'PO No', type: 'input' },
+  { name: 'sc_id', label: 'SC ID', type: 'input' },
+  { name: 'vendor_id', label: 'Vendor ID', type: 'input' },
+  { name: 'vendor_name', label: 'Vendor Name', type: 'input' },
+  { name: 'po_amount', label: 'PO Amount', type: 'amount-range' },
+  { name: 'contract_from', label: 'Contract From', type: 'date-range' },
+  { name: 'contract_to', label: 'Contract To', type: 'date-range' },
+]
+
 const poDialogVisible = ref(false)
 const poDialogMode = ref('create')
 const poDialogRecord = ref(null)
 
-const filteredRows = computed(() => {
-  let rows = state.rows
-  if (filters.contract_to) {
-    rows = rows.filter(r => r.contract_to?.slice(0, 10) === filters.contract_to)
-  }
-  if (filters.open_po === 'open') {
-    rows = rows.filter(r => (r.open_po_amount || r.po_amount || 0) > 0)
-  } else if (filters.open_po === 'closed') {
-    rows = rows.filter(r => (r.open_po_amount || 0) <= 0)
-  }
-  return rows
-})
-
-function onFilterChange() {
-  const f = {}
-  if (filters.status) f.status = filters.status
-  setFilters(f)
-  searchPos(null, f)
+function handleFilter({ text, filters }) {
+  searchPos(text, filters)
 }
 
 function handleReset() {
-  Object.assign(filters, { status: '', contract_to: '', open_po: '' })
   resetFilters()
   searchPos()
 }

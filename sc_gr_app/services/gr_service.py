@@ -14,11 +14,27 @@ from sc_gr_app.services.budget_service import (
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("gr_id", "po_id", "requester_id", "estimated_amount")
+REQUIRED_FIELDS = ("po_id", "requester_id", "estimated_amount")
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _generate_gr_id(config: AppConfig, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"GR-{machine_id}-{today}-%"
+    with connect(config) as conn:
+        row = conn.execute(
+            "SELECT gr_id FROM gr_requests WHERE gr_id LIKE ? ORDER BY gr_id DESC LIMIT 1",
+            (pattern,),
+        ).fetchone()
+    if row:
+        last_seq = int(row["gr_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"GR-{machine_id}-{today}-{seq:03d}"
 
 
 def _require_fields(data: dict, fields: tuple[str, ...]) -> None:
@@ -160,7 +176,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
         sc_id = lookup["sc_id"]
 
     timestamp = utc_now()
-    gr_id = data["gr_id"]
+    gr_id = _generate_gr_id(config, current_user["machine_id"])
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:

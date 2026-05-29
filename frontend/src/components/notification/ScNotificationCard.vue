@@ -11,6 +11,7 @@
           v-model="local.cc_user_ids"
           multiple
           filterable
+          :teleported="false"
           placeholder="Select users to CC"
           style="width:100%"
           @change="emitSave"

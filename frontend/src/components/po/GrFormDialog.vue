@@ -7,13 +7,8 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="GR ID" prop="gr_id">
-            <el-input v-model="form.gr_id" :disabled="mode === 'edit'" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="Requester ID">
+        <el-col :span="24">
+          <el-form-item label="Requester ID" prop="requester_id">
             <el-input v-model="form.requester_id" />
           </el-form-item>
         </el-col>
@@ -57,13 +52,14 @@ const formRef = ref()
 const submitting = ref(false)
 
 const emptyForm = () => ({
-  gr_id: '', requester_id: '', estimated_amount: null, con_value: null, remark: ''
+  requester_id: '', estimated_amount: null, con_value: null, remark: ''
 })
 
 const form = reactive(emptyForm())
 
 const rules = {
-  gr_id: [{ required: true, message: 'GR ID is required', trigger: 'blur' }]
+  requester_id: [{ required: true, message: 'Requester is required', trigger: 'blur' }],
+  estimated_amount: [{ required: true, message: 'Estimated Amount is required', trigger: 'blur' }]
 }
 
 watch(() => props.visible, (val) => {

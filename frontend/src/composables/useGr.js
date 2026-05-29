@@ -38,8 +38,8 @@ export function useGr(pageSize = 20) {
   }
 
   async function createGr(data) { return await callApi('create_gr', { data }) }
-  async function updateGr(data) { return await callApi('update_gr', { data }) }
-  async function approveGr(grId) { await callApi('approve_gr', { gr_id: grId }) }
+  async function updateGr(grId, data) { return await callApi('update_gr', { gr_id: grId, data }) }
+  async function approveGr(grId, conValue) { await callApi('approve_gr', { gr_id: grId, con_value: conValue }) }
   async function cancelGr(grId) { await callApi('cancel_gr', { gr_id: grId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }

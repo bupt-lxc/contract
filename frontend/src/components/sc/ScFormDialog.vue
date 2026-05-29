@@ -7,12 +7,7 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="SC ID" prop="sc_id">
-            <el-input v-model="form.sc_id" :disabled="mode === 'edit'" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
+        <el-col :span="24">
           <el-form-item label="SC No">
             <el-input v-model="form.sc_no" />
           </el-form-item>
@@ -90,7 +85,6 @@ const formRef = ref()
 const submitting = ref(false)
 
 const emptyForm = () => ({
-  sc_id: '',
   sc_no: '',
   requester_id: '',
   request_type: '',
@@ -103,16 +97,27 @@ const emptyForm = () => ({
 
 const form = reactive(emptyForm())
 
-const rules = {
-  sc_id: [{ required: true, message: 'SC ID is required', trigger: 'blur' }],
+const draftRules = {
   requester_id: [{ required: true, message: 'Requester is required', trigger: 'change' }]
 }
+const submitRules = {
+  requester_id: [{ required: true, message: 'Requester is required', trigger: 'change' }],
+  request_type: [{ required: true, message: 'Request Type is required', trigger: 'change' }],
+  cost_center: [{ required: true, message: 'Cost Center is required', trigger: 'blur' }],
+  sc_amount: [{ required: true, message: 'SC Amount is required', trigger: 'blur' }],
+  service_period_start: [{ required: true, message: 'Service Period Start is required', trigger: 'change' }],
+  service_period_end: [{ required: true, message: 'Service Period End is required', trigger: 'change' }]
+}
+
+const rules = reactive({ ...draftRules })
 
 watch(() => props.visible, (val) => {
   if (val && props.mode === 'edit' && props.record) {
     Object.assign(form, props.record)
+    Object.assign(rules, submitRules)
   } else if (val) {
     Object.assign(form, emptyForm())
+    Object.assign(rules, draftRules)
   }
 })
 
@@ -131,6 +136,7 @@ async function saveDraft() {
 
 async function saveSubmit() {
   if (!formRef.value) return
+  Object.assign(rules, submitRules)
   try {
     await formRef.value.validate()
   } catch { return }
