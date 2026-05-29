@@ -2,7 +2,7 @@ from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
-from sc_gr_app.services import gr_service, po_service, query_service, sc_service, vendor_service
+from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
 from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
 
 
@@ -300,5 +300,60 @@ class ApiBridge:
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
             return ok(query_service.search_audit_logs(self.config, **payload))
+        except Exception as exc:
+            return fail(exc)
+
+    def get_sc_notification_config(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(notification_service.get_sc_notification_config(self.config, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def save_sc_notification_config(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            data = _require_payload_field(payload, "data")
+            notification_service.save_sc_notification_config(self.config, sc_id, data)
+            return ok()
+        except Exception as exc:
+            return fail(exc)
+
+    def get_notification_defaults(self, payload=None) -> dict:
+        try:
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            return ok(notification_service.get_notification_defaults(self.config))
+        except Exception as exc:
+            return fail(exc)
+
+    def save_notification_defaults(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            data = _require_payload_field(payload, "data")
+            notification_service.save_notification_defaults(self.config, data)
+            return ok()
+        except Exception as exc:
+            return fail(exc)
+
+    def list_notification_queue(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload) or {}
+            current_user = self._require_current_user()
+            return ok(notification_service.list_notification_queue(
+                self.config,
+                sc_id=payload.get("sc_id"),
+                status=payload.get("status"),
+                limit=payload.get("limit", 50),
+                offset=payload.get("offset", 0),
+            ))
         except Exception as exc:
             return fail(exc)
