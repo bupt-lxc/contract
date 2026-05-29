@@ -70,11 +70,42 @@ def _append_filters(
     if not filters:
         return
     for field, value in filters.items():
-        column = allowed_filters.get(field)
-        if column is None:
-            raise ValidationError("filter field is invalid")
-        clauses.append(f"{column} = ?")
-        params.append(value)
+        if value is None or value == "":
+            continue
+        if field.endswith("_from"):
+            base = field[:-5]
+            column = allowed_filters.get(base)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} >= ?")
+            params.append(value)
+        elif field.endswith("_to"):
+            base = field[:-3]
+            column = allowed_filters.get(base)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} <= ?")
+            params.append(value)
+        elif field.endswith("_min"):
+            base = field[:-4]
+            column = allowed_filters.get(base)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} >= ?")
+            params.append(value)
+        elif field.endswith("_max"):
+            base = field[:-4]
+            column = allowed_filters.get(base)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} <= ?")
+            params.append(value)
+        else:
+            column = allowed_filters.get(field)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} = ?")
+            params.append(value)
 
 
 def _sc_visibility_clauses(
@@ -174,6 +205,12 @@ def search_scs(
             "po.po_no",
             "vendor.vendor_name",
             "vendor.ksrm_vendor_code",
+            "cast(sc.sc_amount as text)",
+            "sc.service_period_start",
+            "sc.service_period_end",
+            "sc.created_at",
+            "sc.approved_at",
+            "sc.approved_by",
         ),
         filters=filters,
         allowed_filters={
@@ -184,6 +221,23 @@ def search_scs(
             "cost_center": "sc.cost_center",
             "status": "sc.status",
             "created_by": "sc.created_by",
+            "sc_amount": "sc.sc_amount",
+            "sc_amount_min": "sc.sc_amount",
+            "sc_amount_max": "sc.sc_amount",
+            "service_period_start": "sc.service_period_start",
+            "service_period_start_from": "sc.service_period_start",
+            "service_period_start_to": "sc.service_period_start",
+            "service_period_end": "sc.service_period_end",
+            "service_period_end_from": "sc.service_period_end",
+            "service_period_end_to": "sc.service_period_end",
+            "description": "sc.description",
+            "created_at": "sc.created_at",
+            "created_at_from": "sc.created_at",
+            "created_at_to": "sc.created_at",
+            "updated_at": "sc.updated_at",
+            "approved_by": "sc.approved_by",
+            "approved_at": "sc.approved_at",
+            "closed_at": "sc.closed_at",
         },
         sort=sort,
         allowed_sorts={
@@ -226,6 +280,8 @@ def search_vendors(
             "service_scope",
             "email",
             "description",
+            "phone",
+            "created_at",
         ),
         filters=filters,
         allowed_filters={
@@ -234,6 +290,12 @@ def search_vendors(
             "ksrm_vendor_code": "ksrm_vendor_code",
             "service_scope": "service_scope",
             "created_by": "created_by",
+            "contact_person": "contact_person",
+            "email": "email",
+            "phone": "phone",
+            "description": "description",
+            "created_at": "created_at",
+            "updated_at": "updated_at",
         },
         sort=sort,
         allowed_sorts={
@@ -293,6 +355,10 @@ def search_pos(
             "sc.sc_no",
             "vendor.vendor_name",
             "vendor.ksrm_vendor_code",
+            "cast(po.po_amount as text)",
+            "po.contract_from",
+            "po.contract_to",
+            "po.created_at",
         ),
         filters=filters,
         allowed_filters={
@@ -302,6 +368,19 @@ def search_pos(
             "vendor_id": "po.vendor_id",
             "status": "po.status",
             "vendor_name": "vendor.vendor_name",
+            "po_amount": "po.po_amount",
+            "po_amount_min": "po.po_amount",
+            "po_amount_max": "po.po_amount",
+            "contract_from": "po.contract_from",
+            "contract_from_from": "po.contract_from",
+            "contract_from_to": "po.contract_from",
+            "contract_to": "po.contract_to",
+            "contract_to_from": "po.contract_to",
+            "contract_to_to": "po.contract_to",
+            "contract_no": "po.contract_no",
+            "payment_frequency": "po.payment_frequency",
+            "created_at": "po.created_at",
+            "updated_at": "po.updated_at",
         },
         sort=sort,
         allowed_sorts={
@@ -357,6 +436,11 @@ def search_grs(
             "po.po_no",
             "sc.sc_no",
             "vendor.vendor_name",
+            "cast(gr.estimated_amount as text)",
+            "cast(gr.con_value as text)",
+            "gr.created_at",
+            "gr.created_by",
+            "gr.approved_by",
         ),
         filters=filters,
         allowed_filters={
@@ -366,6 +450,21 @@ def search_grs(
             "status": "gr.status",
             "sc_id": "po.sc_id",
             "vendor_id": "vendor.vendor_id",
+            "estimated_amount": "gr.estimated_amount",
+            "estimated_amount_min": "gr.estimated_amount",
+            "estimated_amount_max": "gr.estimated_amount",
+            "con_value": "gr.con_value",
+            "con_value_min": "gr.con_value",
+            "con_value_max": "gr.con_value",
+            "remark": "gr.remark",
+            "created_by": "gr.created_by",
+            "created_at": "gr.created_at",
+            "created_at_from": "gr.created_at",
+            "created_at_to": "gr.created_at",
+            "approved_by": "gr.approved_by",
+            "approved_at": "gr.approved_at",
+            "cancelled_by": "gr.cancelled_by",
+            "cancelled_at": "gr.cancelled_at",
         },
         sort=sort,
         allowed_sorts={
