@@ -16,7 +16,6 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = (
-    "sc_id",
     "requester_id",
     "request_type",
     "cost_center",
@@ -46,6 +45,22 @@ REQUIRED_BUSINESS_FIELDS = (
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _generate_sc_id(config: AppConfig, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"SC-{machine_id}-{today}-%"
+    with connect(config) as conn:
+        row = conn.execute(
+            "SELECT sc_id FROM sc_records WHERE sc_id LIKE ? ORDER BY sc_id DESC LIMIT 1",
+            (pattern,),
+        ).fetchone()
+    if row:
+        last_seq = int(row["sc_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"SC-{machine_id}-{today}-{seq:03d}"
 
 
 def _require_fields(data: dict, fields: tuple[str, ...]) -> None:
@@ -205,7 +220,7 @@ def create_sc(
         raise ValidationError("operation_mode is invalid")
 
     timestamp = utc_now()
-    sc_id = data["sc_id"]
+    sc_id = _generate_sc_id(config, current_user["machine_id"])
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -274,7 +289,7 @@ def create_sc(
 
 def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
-    _require_fields(data, ("sc_id", "requester_id"))
+    _require_fields(data, ("requester_id",))
     if (
         current_user["role"] == "requester"
         and data["requester_id"] != current_user["user_id"]
@@ -282,7 +297,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
         raise PermissionDenied("Requester can only create their own draft SC")
 
     timestamp = utc_now()
-    sc_id = data["sc_id"]
+    sc_id = _generate_sc_id(config, current_user["machine_id"])
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:

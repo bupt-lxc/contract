@@ -74,12 +74,12 @@ def seed_approved_sc_vendor_po(
     sc_amount=1000,
     po_amount=800,
 ):
+    """Create an approved SC with vendor and PO. Returns (sc_id, po_id)."""
     sc_no_for_approval = sc_no or "SC-TEMP"
-    create_sc(
+    created_sc = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": sc_no_for_approval,
             "requester_id": "U1",
             "request_type": "service",
@@ -89,12 +89,13 @@ def seed_approved_sc_vendor_po(
             "service_period_end": "2026-12-31",
         },
     )
-    approve_sc(app_config, ADMIN, "SC1")
+    sc_id = created_sc["sc_id"]
+    approve_sc(app_config, ADMIN, sc_id)
     if sc_no != sc_no_for_approval:
         with connect(app_config) as conn:
             conn.execute(
                 "update sc_records set sc_no = ? where sc_id = ?",
-                (sc_no, "SC1"),
+                (sc_no, sc_id),
             )
             conn.commit()
     create_vendor(
@@ -106,41 +107,43 @@ def seed_approved_sc_vendor_po(
             "service_scope": "General Service",
         },
     )
-    create_po(
+    created_po = create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO1",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_no": po_no,
             "po_amount": po_amount,
             "status": po_status,
         },
     )
+    po_id = created_po["po_id"]
+    return sc_id, po_id
 
 
 def test_sc_po_gr_happy_path(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
             "remark": "monthly service",
         },
     )
-    approved = approve_gr(app_config, ADMIN, "GR1", con_value=90)
+    gr_id = created_gr["gr_id"]
+    approved = approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
     with connect(app_config) as conn:
         row = conn.execute(
-            "select status, con_value from gr_requests where gr_id = 'GR1'"
+            "select status, con_value from gr_requests where gr_id = ?",
+            (gr_id,),
         ).fetchone()
 
     assert approved["status"] == "approved"
@@ -151,72 +154,71 @@ def test_sc_po_gr_happy_path(app_config):
 def test_approve_gr_rejects_closed_parent_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
         },
     )
-    close_sc(app_config, ADMIN, "SC1")
+    gr_id = created_gr["gr_id"]
+    close_sc(app_config, ADMIN, sc_id)
 
     with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
-        approve_gr(app_config, ADMIN, "GR1", con_value=90)
+        approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
 
 def test_update_gr_rejects_closed_parent_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
         },
     )
-    close_sc(app_config, ADMIN, "SC1")
+    gr_id = created_gr["gr_id"]
+    close_sc(app_config, ADMIN, sc_id)
 
     with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
-        update_gr(app_config, ADMIN, "GR1", {"remark": "after close"})
+        update_gr(app_config, ADMIN, gr_id, {"remark": "after close"})
 
 
 def test_cancel_gr_rejects_closed_parent_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
         },
     )
-    close_sc(app_config, ADMIN, "SC1")
+    gr_id = created_gr["gr_id"]
+    close_sc(app_config, ADMIN, sc_id)
 
     with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
-        cancel_gr(app_config, ADMIN, "GR1")
+        cancel_gr(app_config, ADMIN, gr_id)
 
 
 def test_requester_cannot_approve_sc_or_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    create_sc(
+    created = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
@@ -226,11 +228,12 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
             "service_period_end": "2026-12-31",
         },
     )
+    sc_id = created["sc_id"]
 
     with pytest.raises(PermissionDenied):
-        approve_sc(app_config, USER, "SC1")
+        approve_sc(app_config, USER, sc_id)
 
-    approve_sc(app_config, ADMIN, "SC1")
+    approve_sc(app_config, ADMIN, sc_id)
     create_vendor(
         app_config,
         USER,
@@ -240,26 +243,27 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
             "service_scope": "General Service",
         },
     )
-    create_po(
+    created_po = create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO1",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_no": "PO001",
             "po_amount": 500,
             "status": "po_approved",
         },
     )
-    create_gr(
+    po_id = created_po["po_id"]
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     with pytest.raises(PermissionDenied):
-        approve_gr(app_config, USER, "GR1", con_value=90)
+        approve_gr(app_config, USER, gr_id, con_value=90)
 
 
 def test_backfill_sc_status_requires_admin(app_config):
@@ -271,7 +275,6 @@ def test_backfill_sc_status_requires_admin(app_config):
             app_config,
             USER,
             {
-                "sc_id": "SC1",
                 "requester_id": "U1",
                 "request_type": "service",
                 "cost_center": 1001,
@@ -292,7 +295,6 @@ def test_normal_sc_creation_ignores_supplied_status(app_config):
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
@@ -316,7 +318,6 @@ def test_create_sc_validates_request_type(app_config):
             app_config,
             USER,
             {
-                "sc_id": "SC1",
                 "requester_id": "U1",
                 "request_type": "unsupported",
                 "cost_center": 1001,
@@ -337,7 +338,6 @@ def test_create_sc_rejects_non_finite_sc_amount(app_config, sc_amount):
             app_config,
             USER,
             {
-                "sc_id": "SC1",
                 "requester_id": "U1",
                 "request_type": "service",
                 "cost_center": 1001,
@@ -352,11 +352,10 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    create_sc(
+    created = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
@@ -366,7 +365,8 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
             "service_period_end": "2026-12-31",
         },
     )
-    approve_sc(app_config, ADMIN, "SC1")
+    sc_id = created["sc_id"]
+    approve_sc(app_config, ADMIN, sc_id)
     create_vendor(
         app_config,
         USER,
@@ -380,8 +380,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
         app_config,
         ADMIN,
         {
-            "po_id": "PO1",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_amount": 80,
         },
@@ -392,8 +391,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
             app_config,
             ADMIN,
             {
-                "po_id": "PO2",
-                "sc_id": "SC1",
+                "sc_id": sc_id,
                 "vendor_id": "V1",
                 "po_amount": 30,
             },
@@ -404,15 +402,14 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
 def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_amount=100)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=100)
 
     with pytest.raises(ValidationError, match="po_amount must be positive"):
         create_po(
             app_config,
             ADMIN,
             {
-                "po_id": "PO2",
-                "sc_id": "SC1",
+                "sc_id": sc_id,
                 "vendor_id": "V1",
                 "po_amount": po_amount,
             },
@@ -438,7 +435,7 @@ def test_create_gr_requires_complete_approved_sc_and_po(
 ):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(
+    sc_id, po_id = seed_approved_sc_vendor_po(
         app_config,
         sc_no=sc_no,
         po_no=po_no,
@@ -450,7 +447,7 @@ def test_create_gr_requires_complete_approved_sc_and_po(
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": amount},
+            {"po_id": po_id, "requester_id": "U1", "estimated_amount": amount},
         )
 
 
@@ -458,11 +455,10 @@ def test_create_po_requires_approved_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    create_sc(
+    created = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
@@ -472,6 +468,7 @@ def test_create_po_requires_approved_sc(app_config):
             "service_period_end": "2026-12-31",
         },
     )
+    sc_id = created["sc_id"]
     create_vendor(
         app_config,
         USER,
@@ -487,8 +484,7 @@ def test_create_po_requires_approved_sc(app_config):
             app_config,
             ADMIN,
             {
-                "po_id": "PO1",
-                "sc_id": "SC1",
+                "sc_id": sc_id,
                 "vendor_id": "V1",
                 "po_amount": 800,
             },
@@ -499,11 +495,10 @@ def test_create_gr_requires_approved_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    create_sc(
+    created = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC1",
             "sc_no": "SC001",
             "requester_id": "U1",
             "request_type": "service",
@@ -513,6 +508,7 @@ def test_create_gr_requires_approved_sc(app_config):
             "service_period_end": "2026-12-31",
         },
     )
+    sc_id = created["sc_id"]
     create_vendor(
         app_config,
         USER,
@@ -542,8 +538,8 @@ def test_create_gr_requires_approved_sc(app_config):
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "PO1",
-                "SC1",
+                "PO_DIRECT",
+                sc_id,
                 "V1",
                 "PO001",
                 800,
@@ -562,25 +558,25 @@ def test_create_gr_requires_approved_sc(app_config):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+            {"po_id": "PO_DIRECT", "requester_id": "U1", "estimated_amount": 100},
         )
 
 
 def test_create_gr_requires_enough_sc_available(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 900},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 900},
     )
 
     with pytest.raises(ConflictError, match="SC available amount is insufficient"):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 101},
+            {"po_id": po_id, "requester_id": "U1", "estimated_amount": 101},
         )
 
 
@@ -594,7 +590,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
 ):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     with pytest.raises(
         ValidationError,
@@ -604,8 +600,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
             app_config,
             ADMIN,
             {
-                "gr_id": "GR1",
-                "po_id": "PO1",
+                "po_id": po_id,
                 "requester_id": "U1",
                 "estimated_amount": estimated_amount,
             },
@@ -615,7 +610,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
 def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     with connect(app_config) as conn:
         conn.execute(
@@ -638,7 +633,7 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
             """,
             (
                 "GR_BAD",
-                "PO1",
+                po_id,
                 "U1",
                 100,
                 None,
@@ -658,64 +653,68 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
         create_gr(
             app_config,
             ADMIN,
-            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+            {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
         )
 
 
 def test_approve_gr_rechecks_extra_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    created_gr = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 900},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 900},
     )
+    gr_id = created_gr["gr_id"]
 
     with pytest.raises(ConflictError, match="SC available amount is insufficient"):
-        approve_gr(app_config, ADMIN, "GR1", con_value=1001)
+        approve_gr(app_config, ADMIN, gr_id, con_value=1001)
 
 
 def test_approve_gr_validates_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     with pytest.raises(ValidationError, match="con_value must be non-negative"):
-        approve_gr(app_config, ADMIN, "GR1", con_value=-1)
+        approve_gr(app_config, ADMIN, gr_id, con_value=-1)
 
 
 @pytest.mark.parametrize("con_value", [Decimal("NaN"), Decimal("Infinity")])
 def test_approve_gr_rejects_non_finite_con_value(app_config, con_value):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     with pytest.raises(ValidationError, match="con_value must be non-negative"):
-        approve_gr(app_config, ADMIN, "GR1", con_value=con_value)
+        approve_gr(app_config, ADMIN, gr_id, con_value=con_value)
 
 
 def test_sc_vendor_po_gr_writes_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
-    approve_gr(app_config, ADMIN, "GR1", con_value=90)
+    gr_id = created_gr["gr_id"]
+    approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
     with connect(app_config) as conn:
         actions = [
@@ -739,55 +738,55 @@ def test_create_po_allows_exact_decimal_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.1)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.1)
 
     created = create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO2",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_amount": 0.2,
             "status": "po_approved",
         },
     )
 
-    assert created["po_id"] == "PO2"
+    assert created["po_id"].startswith("PO-M")
 
 
 def test_create_gr_allows_exact_decimal_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.1},
     )
 
     created = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.2},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.2},
     )
 
-    assert created["gr_id"] == "GR2"
+    assert created["gr_id"].startswith("GR-M")
 
 
 def test_approve_gr_allows_exact_decimal_extra_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    created_gr = create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.1},
     )
+    gr_id = created_gr["gr_id"]
 
-    approved = approve_gr(app_config, ADMIN, "GR1", con_value=0.3)
+    approved = approve_gr(app_config, ADMIN, gr_id, con_value=0.3)
 
     assert approved["status"] == "approved"
     assert approved["con_value"] == 0.3
@@ -802,13 +801,14 @@ def test_requester_creates_minimal_draft_sc(app_config):
     created = create_sc_draft(
         app_config,
         USER,
-        {"sc_id": "SC_DRAFT", "requester_id": "U1"},
+        {"requester_id": "U1"},
     )
 
     assert created["status"] == "draft"
     assert created["requester_id"] == "U1"
     assert created["request_type"] is None
     assert created["sc_amount"] is None
+    assert created["sc_id"].startswith("SC-M")
 
 
 def test_requester_cannot_create_draft_for_another_owner(app_config):
@@ -822,7 +822,7 @@ def test_requester_cannot_create_draft_for_another_owner(app_config):
         create_sc_draft(
             app_config,
             USER,
-            {"sc_id": "SC_DRAFT", "requester_id": "U2"},
+            {"requester_id": "U2"},
         )
 
 
@@ -832,15 +832,16 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    sc_id = created["sc_id"]
 
     with pytest.raises(ValidationError, match="request_type is required"):
-        submit_sc(app_config, USER, "SC_DRAFT", {})
+        submit_sc(app_config, USER, sc_id, {})
 
     submitted = submit_sc(
         app_config,
         USER,
-        "SC_DRAFT",
+        sc_id,
         {
             "request_type": "service",
             "cost_center": 1001,
@@ -860,11 +861,12 @@ def test_owner_cannot_edit_pending_sc(app_config):
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    sc_id = created["sc_id"]
     submit_sc(
         app_config,
         USER,
-        "SC_DRAFT",
+        sc_id,
         {
             "request_type": "service",
             "cost_center": 1001,
@@ -875,7 +877,7 @@ def test_owner_cannot_edit_pending_sc(app_config):
     )
 
     with pytest.raises(PermissionDenied):
-        update_sc(app_config, USER, "SC_DRAFT", {"description": "late change"})
+        update_sc(app_config, USER, sc_id, {"description": "late change"})
 
 
 def test_admin_cannot_approve_sc_without_sc_no(app_config):
@@ -884,11 +886,12 @@ def test_admin_cannot_approve_sc_without_sc_no(app_config):
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    sc_id = created["sc_id"]
     submit_sc(
         app_config,
         USER,
-        "SC_DRAFT",
+        sc_id,
         {
             "request_type": "service",
             "cost_center": 1001,
@@ -899,7 +902,7 @@ def test_admin_cannot_approve_sc_without_sc_no(app_config):
     )
 
     with pytest.raises(ConflictError, match="SC No is required"):
-        approve_sc(app_config, ADMIN, "SC_DRAFT")
+        approve_sc(app_config, ADMIN, sc_id)
 
 
 def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
@@ -914,11 +917,12 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
         update_sc,
     )
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    draft_sc_id = created["sc_id"]
     submit_sc(
         app_config,
         USER,
-        "SC_DRAFT",
+        draft_sc_id,
         {
             "request_type": "service",
             "cost_center": 1001,
@@ -927,19 +931,18 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
             "service_period_end": "2026-12-31",
         },
     )
-    updated = update_sc(app_config, ADMIN, "SC_DRAFT", {"sc_no": "SC001"})
-    approved = approve_sc(app_config, ADMIN, "SC_DRAFT")
-    closed = close_sc(app_config, ADMIN, "SC_DRAFT")
+    updated = update_sc(app_config, ADMIN, draft_sc_id, {"sc_no": "SC001"})
+    approved = approve_sc(app_config, ADMIN, draft_sc_id)
+    closed = close_sc(app_config, ADMIN, draft_sc_id)
 
     assert updated["sc_no"] == "SC001"
     assert approved["status"] == "approved"
     assert closed["status"] == "closed"
 
-    create_sc(
+    created_sc = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC_DENY",
             "requester_id": "U1",
             "request_type": "service",
             "cost_center": 1001,
@@ -948,7 +951,8 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
             "service_period_end": "2026-12-31",
         },
     )
-    denied = deny_sc(app_config, ADMIN, "SC_DENY")
+    deny_sc_id = created_sc["sc_id"]
+    denied = deny_sc(app_config, ADMIN, deny_sc_id)
     assert denied["status"] == "denied"
 
 
@@ -958,25 +962,25 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
 
     from sc_gr_app.services.sc_service import get_sc_detail
 
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
         },
     )
+    gr_id = created_gr["gr_id"]
 
-    detail = get_sc_detail(app_config, ADMIN, "SC1")
-    requester_detail = get_sc_detail(app_config, USER, "SC1")
+    detail = get_sc_detail(app_config, ADMIN, sc_id)
+    requester_detail = get_sc_detail(app_config, USER, sc_id)
 
-    assert detail["sc"]["sc_id"] == "SC1"
+    assert detail["sc"]["sc_id"] == sc_id
     assert detail["budget"]["sc_amount"] == 1000
-    assert [po["po_id"] for po in detail["pos"]] == ["PO1"]
-    assert [gr["gr_id"] for gr in detail["grs"]] == ["GR1"]
+    assert [po["po_id"] for po in detail["pos"]] == [po_id]
+    assert [gr["gr_id"] for gr in detail["grs"]] == [gr_id]
     assert "create_sc" in [log["action_type"] for log in detail["audit_logs"]]
     assert detail["permissions"] == {
         "can_edit_sc": True,
@@ -994,16 +998,16 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
 def test_get_sc_detail_includes_po_budget_data(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_amount=800)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
     create_gr(
             app_config,
             ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
 
     from sc_gr_app.services.sc_service import get_sc_detail
 
-    detail = get_sc_detail(app_config, ADMIN, "SC1")
+    detail = get_sc_detail(app_config, ADMIN, sc_id)
 
     assert detail["pos"][0]["budget"]["po_amount"] == 800
     assert detail["pos"][0]["budget"]["open_po_amount"] == 700
@@ -1016,51 +1020,52 @@ def test_admin_cannot_view_draft_sc_detail(app_config):
 
     from sc_gr_app.services.sc_service import create_sc_draft, get_sc_detail
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    sc_id = created["sc_id"]
 
     with pytest.raises(PermissionDenied, match="SC is not visible"):
-        get_sc_detail(app_config, ADMIN, "SC_DRAFT")
+        get_sc_detail(app_config, ADMIN, sc_id)
 
 
 def test_update_sc_rejects_amount_below_allocated_po_amount(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
 
     from sc_gr_app.services.sc_service import update_sc
 
     with pytest.raises(ConflictError, match="below allocated PO amount"):
-        update_sc(app_config, ADMIN, "SC1", {"sc_amount": 799})
+        update_sc(app_config, ADMIN, sc_id, {"sc_amount": 799})
 
 
 def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    created_gr = create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 300})
-    approve_gr(app_config, ADMIN, "GR1", con_value=900)
+        ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 300})
+    gr_id = created_gr["gr_id"]
+    approve_gr(app_config, ADMIN, gr_id, con_value=900)
     with connect(app_config) as conn:
-        conn.execute("update pos set po_amount = ? where po_id = ?", (100, "PO1"))
+        conn.execute("update pos set po_amount = ? where po_id = ?", (100, po_id))
         conn.commit()
 
     from sc_gr_app.services.sc_service import update_sc
 
     with pytest.raises(ConflictError, match="below GR usage"):
-        update_sc(app_config, ADMIN, "SC1", {"sc_amount": 899})
+        update_sc(app_config, ADMIN, sc_id, {"sc_amount": 899})
 
 
 def test_update_sc_allows_exact_decimal_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
     create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO2",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_amount": 0.2,
             "status": "po_approved",
@@ -1069,7 +1074,7 @@ def test_update_sc_allows_exact_decimal_boundary(app_config):
 
     from sc_gr_app.services.sc_service import update_sc
 
-    updated = update_sc(app_config, ADMIN, "SC1", {"sc_amount": Decimal("0.3")})
+    updated = update_sc(app_config, ADMIN, sc_id, {"sc_amount": Decimal("0.3")})
 
     assert updated["sc_amount"] == 0.3
 
@@ -1080,13 +1085,14 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
 
-    create_sc_draft(app_config, USER, {"sc_id": "SC_DRAFT", "requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    sc_id = created["sc_id"]
 
     with pytest.raises(ValidationError, match="service period is invalid"):
         update_sc(
             app_config,
             USER,
-            "SC_DRAFT",
+            sc_id,
             {
                 "service_period_start": "2026-12-31",
                 "service_period_end": "2026-01-01",
@@ -1096,7 +1102,7 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
     submit_sc(
         app_config,
         USER,
-        "SC_DRAFT",
+        sc_id,
         {
             "request_type": "service",
             "cost_center": 1001,
@@ -1111,7 +1117,7 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
         update_sc(
             app_config,
             ADMIN,
-            "SC_DRAFT",
+            sc_id,
             {
                 "service_period_start": "2027-01-01",
                 "service_period_end": "2026-12-31",
@@ -1137,18 +1143,18 @@ def test_update_sc_rejects_clearing_required_fields_on_non_draft(
 ):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     from sc_gr_app.services.sc_service import update_sc
 
     with pytest.raises(ValidationError, match=f"{field} is required"):
-        update_sc(app_config, ADMIN, "SC1", {field: empty_value})
+        update_sc(app_config, ADMIN, sc_id, {field: empty_value})
 
 
 def test_po_writes_require_admin(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     from sc_gr_app.services.po_service import approve_po, finish_po, update_po
 
@@ -1157,37 +1163,36 @@ def test_po_writes_require_admin(app_config):
             app_config,
             USER,
             {
-                "po_id": "PO2",
-                "sc_id": "SC1",
+                "sc_id": sc_id,
                 "vendor_id": "V1",
                 "po_amount": 100,
             },
         )
     with pytest.raises(PermissionDenied):
-        update_po(app_config, USER, "PO1", {"po_no": "PO002"})
+        update_po(app_config, USER, po_id, {"po_no": "PO002"})
     with pytest.raises(PermissionDenied):
-        approve_po(app_config, USER, "PO1")
+        approve_po(app_config, USER, po_id)
     with pytest.raises(PermissionDenied):
-        finish_po(app_config, USER, "PO1")
+        finish_po(app_config, USER, po_id)
 
 
 def test_admin_updates_po_with_budget_validation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_amount=800)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 300})
+        ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 300})
 
     from sc_gr_app.services.po_service import update_po
 
     with pytest.raises(ConflictError, match="below GR usage"):
-        update_po(app_config, ADMIN, "PO1", {"po_amount": 299})
+        update_po(app_config, ADMIN, po_id, {"po_amount": 299})
 
     updated = update_po(
         app_config,
         ADMIN,
-        "PO1",
+        po_id,
         {
             "po_no": "PO002",
             "po_amount": 500,
@@ -1204,12 +1209,12 @@ def test_admin_updates_po_with_budget_validation(app_config):
 def test_admin_approves_and_finishes_po(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_status="po_pending")
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_status="po_pending")
 
     from sc_gr_app.services.po_service import approve_po, finish_po
 
-    approved = approve_po(app_config, ADMIN, "PO1")
-    finished = finish_po(app_config, ADMIN, "PO1")
+    approved = approve_po(app_config, ADMIN, po_id)
+    finished = finish_po(app_config, ADMIN, po_id)
 
     assert approved["status"] == "po_approved"
     assert finished["status"] == "finished"
@@ -1218,52 +1223,51 @@ def test_admin_approves_and_finishes_po(app_config):
 def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
 
     from sc_gr_app.services.po_service import update_po
 
     with pytest.raises(NotFound, match="Vendor not found"):
-        update_po(app_config, ADMIN, "PO1", {"vendor_id": "MISSING"})
+        update_po(app_config, ADMIN, po_id, {"vendor_id": "MISSING"})
 
     with pytest.raises(ConflictError, match="exceed SC amount"):
-        update_po(app_config, ADMIN, "PO1", {"po_amount": 1001})
+        update_po(app_config, ADMIN, po_id, {"po_amount": 1001})
 
     with connect(app_config) as conn:
-        conn.execute("update sc_records set status = 'closed' where sc_id = 'SC1'")
+        conn.execute("update sc_records set status = 'closed' where sc_id = ?", (sc_id,))
         conn.commit()
 
     with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
-        update_po(app_config, ADMIN, "PO1", {"po_no": "PO-CLOSED"})
+        update_po(app_config, ADMIN, po_id, {"po_no": "PO-CLOSED"})
 
 
 def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=0.6, po_amount=0.1)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.6, po_amount=0.1)
     create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO2",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_amount": 0.2,
         },
     )
-    create_po(
+    created = create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO3",
-            "sc_id": "SC1",
+            "sc_id": sc_id,
             "vendor_id": "V1",
             "po_amount": 0.1,
         },
     )
+    po3_id = created["po_id"]
 
     from sc_gr_app.services.po_service import update_po
 
-    updated = update_po(app_config, ADMIN, "PO3", {"po_amount": 0.3})
+    updated = update_po(app_config, ADMIN, po3_id, {"po_amount": 0.3})
 
     assert updated["po_amount"] == 0.3
 
@@ -1271,18 +1275,19 @@ def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
 def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
     create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.1})
-    create_gr(
+        ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.1})
+    created_gr = create_gr(
         app_config,
-        ADMIN, {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 0.2})
-    approve_gr(app_config, ADMIN, "GR2", con_value=0.2)
+        ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.2})
+    gr2_id = created_gr["gr_id"]
+    approve_gr(app_config, ADMIN, gr2_id, con_value=0.2)
 
     from sc_gr_app.services.po_service import update_po
 
-    updated = update_po(app_config, ADMIN, "PO1", {"po_amount": 0.3})
+    updated = update_po(app_config, ADMIN, po_id, {"po_amount": 0.3})
 
     assert updated["po_amount"] == 0.3
 
@@ -1290,29 +1295,29 @@ def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
 def test_po_status_transitions_require_current_status(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_status="po_approved")
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_status="po_approved")
 
     from sc_gr_app.services.po_service import approve_po, finish_po
 
     with pytest.raises(ConflictError, match="PO must be pending"):
-        approve_po(app_config, ADMIN, "PO1")
+        approve_po(app_config, ADMIN, po_id)
 
-    finish_po(app_config, ADMIN, "PO1")
+    finish_po(app_config, ADMIN, po_id)
 
     with pytest.raises(ConflictError, match="PO must be approved"):
-        finish_po(app_config, ADMIN, "PO1")
+        finish_po(app_config, ADMIN, po_id)
 
 
 def test_po_update_approve_finish_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, po_status="po_pending")
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_status="po_pending")
 
     from sc_gr_app.services.po_service import approve_po, finish_po, update_po
 
-    update_po(app_config, ADMIN, "PO1", {"po_no": "PO002"})
-    approve_po(app_config, ADMIN, "PO1")
-    finish_po(app_config, ADMIN, "PO1")
+    update_po(app_config, ADMIN, po_id, {"po_no": "PO002"})
+    approve_po(app_config, ADMIN, po_id)
+    finish_po(app_config, ADMIN, po_id)
 
     with connect(app_config) as conn:
         actions = [
@@ -1328,7 +1333,7 @@ def test_po_update_approve_finish_are_audited(app_config):
 def test_gr_writes_require_admin(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     from sc_gr_app.services.gr_service import cancel_gr, update_gr
 
@@ -1336,32 +1341,32 @@ def test_gr_writes_require_admin(app_config):
         create_gr(
             app_config,
             USER,
-            {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+            {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
         )
 
-    create_gr(
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     with pytest.raises(PermissionDenied):
-        update_gr(app_config, USER, "GR1", {"remark": "changed"})
+        update_gr(app_config, USER, gr_id, {"remark": "changed"})
     with pytest.raises(PermissionDenied):
-        cancel_gr(app_config, USER, "GR1")
+        cancel_gr(app_config, USER, gr_id)
 
 
 def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
     created = create_gr(
         app_config,
         ADMIN,
         {
-            "gr_id": "GR1",
-            "po_id": "PO1",
+            "po_id": po_id,
             "requester_id": "U1",
             "estimated_amount": 100,
         },
@@ -1374,22 +1379,23 @@ def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
 def test_admin_updates_pending_gr_with_budget_validation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     from sc_gr_app.services.gr_service import update_gr
 
     with pytest.raises(ConflictError, match="available amount is insufficient"):
-        update_gr(app_config, ADMIN, "GR1", {"estimated_amount": 600})
+        update_gr(app_config, ADMIN, gr_id, {"estimated_amount": 600})
 
     updated = update_gr(
         app_config,
         ADMIN,
-        "GR1",
+        gr_id,
         {"estimated_amount": 200, "remark": "updated"},
     )
 
@@ -1400,7 +1406,7 @@ def test_admin_updates_pending_gr_with_budget_validation(app_config):
 def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=300, po_amount=300)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=300, po_amount=300)
     with connect(app_config) as conn:
         conn.execute(
             """
@@ -1421,7 +1427,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
             """,
             (
                 "PO2",
-                "SC1",
+                sc_id,
                 "V1",
                 "PO002",
                 200,
@@ -1435,15 +1441,16 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
             ),
         )
         conn.commit()
-    create_gr(
+    created_gr1 = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr1_id = created_gr1["gr_id"]
     create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 150},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 150},
     )
 
     from sc_gr_app.services.gr_service import update_gr
@@ -1451,7 +1458,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
     updated = update_gr(
         app_config,
         ADMIN,
-        "GR1",
+        gr1_id,
         {"po_id": "PO2", "estimated_amount": 150},
     )
 
@@ -1462,12 +1469,11 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
 def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
-    create_sc(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
+    created_sc2 = create_sc(
         app_config,
         USER,
         {
-            "sc_id": "SC2",
             "sc_no": "SC002",
             "requester_id": "U1",
             "request_type": "service",
@@ -1477,28 +1483,30 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
             "service_period_end": "2026-12-31",
         },
     )
-    approve_sc(app_config, ADMIN, "SC2")
-    create_po(
+    sc2_id = created_sc2["sc_id"]
+    approve_sc(app_config, ADMIN, sc2_id)
+    created_po2 = create_po(
         app_config,
         ADMIN,
         {
-            "po_id": "PO2",
-            "sc_id": "SC2",
+            "sc_id": sc2_id,
             "vendor_id": "V1",
             "po_no": "PO002",
             "po_amount": 500,
             "status": "po_approved",
         },
     )
-    create_gr(
+    po2_id = created_po2["po_id"]
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     from sc_gr_app.services.gr_service import update_gr
 
-    update_gr(app_config, ADMIN, "GR1", {"po_id": "PO2"})
+    update_gr(app_config, ADMIN, gr_id, {"po_id": po2_id})
 
     with connect(app_config) as conn:
         audit_sc_ids = [
@@ -1507,73 +1515,80 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
                 """
                 select sc_id
                 from audit_logs
-                where action_type = 'update_gr' and object_id = 'GR1'
+                where action_type = 'update_gr' and object_id = ?
                 order by sc_id
-                """
+                """,
+                (gr_id,),
             )
         ]
 
-    assert audit_sc_ids == ["SC1", "SC2"]
+    assert len(audit_sc_ids) == 2
+    assert sc_id in audit_sc_ids
+    assert sc2_id in audit_sc_ids
 
 
 @pytest.mark.parametrize("requester_id", [None, ""])
 def test_update_pending_gr_rejects_blank_requester_id(app_config, requester_id):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     from sc_gr_app.services.gr_service import update_gr
 
     with pytest.raises(ValidationError, match="requester_id is required"):
-        update_gr(app_config, ADMIN, "GR1", {"requester_id": requester_id})
+        update_gr(app_config, ADMIN, gr_id, {"requester_id": requester_id})
 
 
 def test_update_pending_gr_rejects_unknown_requester_id(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
+    gr_id = created_gr["gr_id"]
 
     from sc_gr_app.services.gr_service import update_gr
 
     with pytest.raises(NotFound, match="User not found: MISSING"):
-        update_gr(app_config, ADMIN, "GR1", {"requester_id": "MISSING"})
+        update_gr(app_config, ADMIN, gr_id, {"requester_id": "MISSING"})
 
 
 def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
-    seed_approved_sc_vendor_po(app_config)
-    create_gr(
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    created_gr1 = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR1", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 100},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
-    approve_gr(app_config, ADMIN, "GR1", con_value=90)
-    create_gr(
+    gr1_id = created_gr1["gr_id"]
+    approve_gr(app_config, ADMIN, gr1_id, con_value=90)
+    created_gr2 = create_gr(
         app_config,
         ADMIN,
-        {"gr_id": "GR2", "po_id": "PO1", "requester_id": "U1", "estimated_amount": 50},
+        {"po_id": po_id, "requester_id": "U1", "estimated_amount": 50},
     )
+    gr2_id = created_gr2["gr_id"]
 
     from sc_gr_app.services.gr_service import cancel_gr, update_gr
 
     updated = update_gr(
         app_config,
         ADMIN,
-        "GR1",
+        gr1_id,
         {"con_value": 95, "remark": "invoice adjusted"},
     )
-    cancelled = cancel_gr(app_config, ADMIN, "GR2")
+    cancelled = cancel_gr(app_config, ADMIN, gr2_id)
 
     assert updated["con_value"] == 95
     assert updated["remark"] == "invoice adjusted"
