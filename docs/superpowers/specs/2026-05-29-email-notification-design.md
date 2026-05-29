@@ -86,7 +86,8 @@ UNIQUE(entity_type, entity_id, event_key)
 
 | Key | Value example |
 |---|---|
-| `notify.transitions.sc` | `{"submit":{"to":["admin"],"cc":["requester"]},"approve":{"to":["requester"],"cc":["admin"]},"deny":{"to":["requester"],"cc":["admin"]},"close":{"to":["requester"],"cc":["admin"]}}` |
+| `notify.admin_recipients` | `["user_id_1", "user_id_2"]` — JSON array of admin user IDs who receive notifications |
+| `notify.transitions.sc` | `{"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},"approve":{"to":["requester"],"cc":["actor"]},"deny":{"to":["requester"],"cc":["actor"]},"close":{"to":["requester","notify.admin_recipients"],"cc":[]}}` |
 | `notify.transitions.po` | same structure |
 | `notify.transitions.gr` | same structure |
 | `notify.default_cc` | `[]` (JSON array of user IDs) |
@@ -99,28 +100,33 @@ UNIQUE(entity_type, entity_id, event_key)
 
 | Entity | Transition | To | CC |
 |---|---|---|---|
-| SC | submit | admin users | CC list + requester |
-| SC | approve | requester | CC list + approving admin |
-| SC | deny | requester | CC list + denying admin |
-| SC | close | requester, admin users | CC list |
-| PO | submit | admin users | CC list + requester |
-| PO | approve | requester | CC list + approving admin |
+| SC | submit | admin recipients | CC list + requester |
+| SC | approve | requester | CC list + actor |
+| SC | deny | requester | CC list + actor |
+| SC | close | requester, admin recipients | CC list |
+| PO | submit | admin recipients | CC list + requester |
+| PO | approve | requester | CC list + actor |
 | PO | deny | requester | CC list |
-| GR | submit | admin users | CC list + requester |
-| GR | approve | requester | CC list + approving user |
-| GR | cancel | requester, admin users | CC list |
+| GR | submit | admin recipients | CC list + requester |
+| GR | approve | requester | CC list + actor |
+| GR | cancel | requester, admin recipients | CC list |
 
 ### Threshold notification recipients
 
-- To: requester + admin users
+- To: requester + admin recipients
 - CC: per-SC CC list + default CC list
 
-### Resolution rules
+### Resolution keywords
 
-- `admin` → all users with role='admin'
-- `requester` → the entity's requester_id field
-- `approving admin` → the user who performed the approve/deny action
-- User IDs → email addresses from `users` table
+Transition rules in `app_settings` support these keywords in `to` and `cc` arrays:
+
+| Keyword | Resolves to |
+|---|---|
+| `notify.admin_recipients` | User IDs listed in `notify.admin_recipients` app_setting (configurable subset of admins) |
+| `requester` | The entity's `requester_id` field (dynamic, one per SC) |
+| `actor` | The user who performed the transition — approver, denier, closer (dynamic) |
+
+Direct user IDs can also be used in `to`/`cc` arrays. All user IDs are ultimately resolved to email addresses from the `users` table.
 
 Recipient rules are stored as JSON in `app_settings` and editable from the UI.
 
@@ -218,7 +224,7 @@ Entry point: `uv run python -m sc_gr_app.notification`
 | `get_sc_notification_config` | `{sc_id}` | config or null | Falls back to defaults if null |
 | `save_sc_notification_config` | `{sc_id, enabled, cc_user_ids, date_thresholds, amount_thresholds}` | `{ok: true}` | Upsert. Requires SC ownership or admin |
 | `get_notification_defaults` | `{}` | defaults object | Admin only |
-| `save_notification_defaults` | `{transitions, default_cc, date_thresholds, amount_thresholds}` | `{ok: true}` | Admin only |
+| `save_notification_defaults` | `{admin_recipients, transitions, default_cc, date_thresholds, amount_thresholds}` | `{ok: true}` | Admin only |
 | `list_notification_queue` | `{sc_id?, status?, limit?, offset?}` | `{items, total}` | View sent/failed history |
 
 ## UI Design
@@ -237,7 +243,8 @@ New collapsible card below Audit Log in `ScDetailView.vue`:
 
 New card in `SystemView.vue` (admin only):
 
-- Transition rules table: for each transition (submit/approve/deny/close), configure To and CC role selections
+- Admin recipients: multi-select user picker (which admins receive notifications)
+- Transition rules table: for each transition (submit/approve/deny/close), configure To and CC selections (keywords: admin_recipients / requester / actor / specific users)
 - Default CC list: multi-select user picker
 - Default date thresholds: checkboxes
 - Default amount thresholds: checkboxes
