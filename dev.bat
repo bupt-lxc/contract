@@ -16,4 +16,5 @@ echo.
 cd /d "%~dp0"
 start "Vite Dev Server" cmd /c "cd frontend && npm run dev"
 timeout /t 3 /nobreak >nul
+start "Email Notification (Draft)" cmd /c "uv run python -m sc_gr_app.notification --draft --poll-interval 60"
 uv run python -m sc_gr_app.main

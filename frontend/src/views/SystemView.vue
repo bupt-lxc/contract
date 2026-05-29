@@ -40,6 +40,14 @@
       </el-table>
     </div>
 
+    <NotificationDefaults
+      v-if="isAdmin"
+      :defaults="notifState.defaults"
+      :loading="notifState.defaultsLoading"
+      :users="state.users"
+      @save="handleNotifDefaultsSave"
+    />
+
     <UserFormDialog
       v-model:visible="dialogVisible"
       :mode="dialogMode"
@@ -55,9 +63,12 @@ import { Plus } from '@element-plus/icons-vue'
 import { useUser } from '@/composables/useUser.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import UserFormDialog from '@/components/system/UserFormDialog.vue'
+import NotificationDefaults from '@/components/notification/NotificationDefaults.vue'
+import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage } from 'element-plus'
 
 const { state, fetchUsers, createUser, updateUser, disableUser, enableUser } = useUser()
+const { state: notifState, fetchDefaults, saveDefaults } = useNotification()
 
 const user = computed(() => window.__currentUser || {})
 const isAdmin = computed(() => user.value?.role === 'admin')
@@ -91,7 +102,17 @@ async function handleEnable(row) {
   } catch (e) { ElMessage.error(e.message) }
 }
 
+async function handleNotifDefaultsSave(data) {
+  try {
+    await saveDefaults(data)
+    ElMessage.success('Notification defaults saved')
+  } catch (e) {
+    ElMessage.error('Failed to save notification defaults')
+  }
+}
+
 onMounted(() => {
   if (isAdmin.value) fetchUsers()
+  fetchDefaults()
 })
 </script>

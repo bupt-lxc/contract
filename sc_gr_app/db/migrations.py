@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -283,6 +283,93 @@ def _migrate_v2(conn) -> None:
     _record(conn, 2)
 
 
+def _migrate_v3(conn) -> None:
+    # notification_queue: pending email tasks for the notification script
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notification_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            event_key TEXT NOT NULL,
+            to_recipients TEXT NOT NULL,
+            cc_recipients TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            sent_at TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            error_msg TEXT,
+            UNIQUE(entity_type, entity_id, event_key, status)
+        )
+    """)
+
+    # notification_config: per-SC notification strategy
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notification_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL DEFAULT 'sc',
+            entity_id TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            cc_user_ids TEXT NOT NULL DEFAULT '[]',
+            date_thresholds TEXT NOT NULL DEFAULT '[]',
+            amount_thresholds TEXT NOT NULL DEFAULT '[]',
+            UNIQUE(entity_type, entity_id)
+        )
+    """)
+
+    # notification_sent_threshold: dedup tracker (each threshold fires once per SC)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notification_sent_threshold (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            event_key TEXT NOT NULL,
+            sent_at TEXT NOT NULL,
+            UNIQUE(entity_type, entity_id, event_key)
+        )
+    """)
+
+    # Default notification settings (only if app_settings table exists)
+    if conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='app_settings'"
+    ).fetchone():
+        defaults = [
+            (
+                "notify.admin_recipients",
+                "[]",
+            ),
+            (
+                "notify.transitions.sc",
+                '{"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"approve":{"to":["requester"],"cc":["actor"]},'
+                '"deny":{"to":["requester"],"cc":["actor"]},'
+                '"close":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
+            ),
+            (
+                "notify.transitions.po",
+                '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"approve":{"to":["requester"],"cc":["actor"]},'
+                '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
+            ),
+            (
+                "notify.transitions.gr",
+                '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"approve":{"to":["requester"],"cc":["actor"]},'
+                '"cancel":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
+            ),
+            ("notify.default_cc", "[]"),
+            ("notify.default_date_thresholds", "[6, 3, 1, 0.5]"),
+            ("notify.default_amount_thresholds", "[50, 30, 10]"),
+        ]
+        timestamp = utc_now()
+        for key, value in defaults:
+            conn.execute(
+                "INSERT OR IGNORE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                (key, value, timestamp),
+            )
+
+    _record(conn, 3)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -307,6 +394,10 @@ def migrate(config: AppConfig) -> None:
                 conn.commit()
                 conn.execute("PRAGMA legacy_alter_table = OFF")
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 3 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v3(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
