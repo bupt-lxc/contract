@@ -8,11 +8,11 @@ export function useVendor() {
     error: null
   })
 
-  async function searchVendors(text = null) {
+  async function searchVendors(text = null, filters = null) {
     state.loading = true
     state.error = null
     try {
-      state.rows = await callApi('search_vendors', { text })
+      state.rows = await callApi('search_vendors', { text, filters })
     } catch (e) {
       state.error = e.message
       state.rows = []

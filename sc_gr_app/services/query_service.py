@@ -66,9 +66,11 @@ def _append_filters(
     params: list,
     filters: dict | None,
     allowed_filters: dict[str, str],
+    like_fields: set[str] | None = None,
 ) -> None:
     if not filters:
         return
+    like_fields = like_fields or set()
     for field, value in filters.items():
         if value is None or value == "":
             continue
@@ -100,6 +102,12 @@ def _append_filters(
                 raise ValidationError("filter field is invalid")
             clauses.append(f"{column} <= ?")
             params.append(value)
+        elif field in like_fields:
+            column = allowed_filters.get(field)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"{column} like ?")
+            params.append(f"%{value}%")
         else:
             column = allowed_filters.get(field)
             if column is None:
@@ -145,6 +153,7 @@ def _search(
     offset: int,
     base_clauses: list[str] | None = None,
     base_params: list | None = None,
+    like_fields: set[str] | None = None,
 ) -> list[dict]:
     sort_column = allowed_sorts.get(sort)
     if sort_column is None:
@@ -153,7 +162,7 @@ def _search(
     clauses: list[str] = list(base_clauses or [])
     params: list = list(base_params or [])
     _append_text_search(clauses, params, text, text_columns)
-    _append_filters(clauses, params, filters, allowed_filters)
+    _append_filters(clauses, params, filters, allowed_filters, like_fields)
 
     where_sql = f" where {' and '.join(clauses)}" if clauses else ""
     sql = (
@@ -187,11 +196,12 @@ def search_scs(
     return _search(
         config,
         select_sql="""
-        select
+        select distinct
           sc.*,
           requester.user_name as requester_name
         from sc_records sc
         join users requester on requester.user_id = sc.requester_id
+        join users creator on creator.user_id = sc.created_by
         left join pos po on po.sc_id = sc.sc_id
         left join vendors vendor on vendor.vendor_id = po.vendor_id
         """,
@@ -202,6 +212,7 @@ def search_scs(
             "sc.request_type",
             "cast(sc.cost_center as text)",
             "requester.user_name",
+            "creator.user_name",
             "po.po_no",
             "vendor.vendor_name",
             "vendor.ksrm_vendor_code",
@@ -221,6 +232,8 @@ def search_scs(
             "cost_center": "sc.cost_center",
             "status": "sc.status",
             "created_by": "sc.created_by",
+            "requester_name": "requester.user_name",
+            "created_by_name": "creator.user_name",
             "sc_amount": "sc.sc_amount",
             "sc_amount_min": "sc.sc_amount",
             "sc_amount_max": "sc.sc_amount",
@@ -257,6 +270,7 @@ def search_scs(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
+        like_fields={"requester_id", "created_by", "requester_name", "created_by_name"},
     )
 
 
@@ -309,6 +323,7 @@ def search_vendors(
         direction=direction,
         limit=limit,
         offset=offset,
+        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "service_scope", "contact_person", "email"},
     )
 
 

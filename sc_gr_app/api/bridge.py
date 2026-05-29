@@ -354,8 +354,6 @@ class ApiBridge:
     def get_notification_defaults(self, payload=None) -> dict:
         try:
             current_user = self._require_current_user()
-            from sc_gr_app.rbac import require_admin
-            require_admin(current_user)
             return ok(notification_service.get_notification_defaults(self.config))
         except Exception as exc:
             return fail(exc)
@@ -364,8 +362,6 @@ class ApiBridge:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
-            from sc_gr_app.rbac import require_admin
-            require_admin(current_user)
             data = _require_payload_field(payload, "data")
             notification_service.save_notification_defaults(self.config, data)
             return ok()

@@ -103,7 +103,7 @@ async function handlePoSave(data) {
     if (poDialogMode.value === 'create') {
       await createPo(data)
     } else {
-      await updatePo(data)
+      await updatePo(poDialogRecord.value?.po_id, data)
     }
     await searchPos()
   } catch (e) {

@@ -53,6 +53,7 @@ const state = ref('loading')
 const user = ref(null)
 const lastError = ref('')
 const retryCount = ref(0)
+const MAX_RETRIES = 10
 let retryTimer = null
 
 function stopRetry() {
@@ -77,6 +78,9 @@ async function verify() {
     lastError.value = e.message || 'Unable to reach the database.'
     if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
       state.value = 'unauthorized'
+    } else if (retryCount.value >= MAX_RETRIES) {
+      state.value = 'unauthorized'
+      lastError.value = 'Server unreachable. Please check your connection and try again.'
     } else {
       state.value = 'retrying'
       retryCount.value++

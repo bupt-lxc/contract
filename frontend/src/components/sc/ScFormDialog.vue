@@ -8,7 +8,7 @@
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
-          <el-form-item label="SC No">
+          <el-form-item label="SC No" prop="sc_no">
             <el-input v-model="form.sc_no" />
           </el-form-item>
         </el-col>
@@ -22,7 +22,7 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Request Type">
+          <el-form-item label="Request Type" prop="request_type">
             <el-select v-model="form.request_type">
               <el-option v-for="t in requestTypes" :key="t" :label="t" :value="t" />
             </el-select>
@@ -31,24 +31,24 @@
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="Cost Center">
+          <el-form-item label="Cost Center" prop="cost_center">
             <el-input v-model="form.cost_center" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="SC Amount">
+          <el-form-item label="SC Amount" prop="sc_amount">
             <el-input-number v-model="form.sc_amount" :precision="2" :min="0" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="Service Period Start">
+          <el-form-item label="Service Period Start" prop="service_period_start">
             <el-date-picker v-model="form.service_period_start" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Service Period End">
+          <el-form-item label="Service Period End" prop="service_period_end">
             <el-date-picker v-model="form.service_period_end" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
@@ -98,30 +98,49 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const draftRules = {
-  requester_id: [{ required: true, message: 'Requester is required', trigger: 'change' }]
+  requester_id: [{ required: true, message: 'Requester is required', trigger: 'change' }],
+  sc_no: [{ required: true, message: 'SC No is required', trigger: 'change' }]
 }
 const submitRules = {
   requester_id: [{ required: true, message: 'Requester is required', trigger: 'change' }],
+  sc_no: [{ required: true, message: 'SC No is required', trigger: 'change' }],
   request_type: [{ required: true, message: 'Request Type is required', trigger: 'change' }],
-  cost_center: [{ required: true, message: 'Cost Center is required', trigger: 'blur' }],
-  sc_amount: [{ required: true, message: 'SC Amount is required', trigger: 'blur' }],
+  cost_center: [{ required: true, message: 'Cost Center is required', trigger: 'change' }],
+  sc_amount: [{ required: true, message: 'SC Amount is required', trigger: 'change' }],
   service_period_start: [{ required: true, message: 'Service Period Start is required', trigger: 'change' }],
   service_period_end: [{ required: true, message: 'Service Period End is required', trigger: 'change' }]
 }
 
-const rules = reactive({ ...draftRules })
+const rules = reactive({})
+
+function _setRules(source) {
+  // Clear stale keys left by a previous rule-set, then assign the new ones
+  Object.keys(rules).forEach(k => delete rules[k])
+  Object.assign(rules, source)
+}
 
 watch(() => props.visible, (val) => {
-  if (val && props.mode === 'edit' && props.record) {
-    Object.assign(form, props.record)
-    Object.assign(rules, submitRules)
-  } else if (val) {
-    Object.assign(form, emptyForm())
-    Object.assign(rules, draftRules)
+  if (val) {
+    formRef.value?.clearValidate()
+    if (props.mode === 'edit' && props.record) {
+      Object.assign(form, props.record)
+    } else {
+      Object.assign(form, emptyForm())
+    }
+    _setRules(draftRules)
   }
 })
 
 async function saveDraft() {
+  if (!formRef.value) return
+  _setRules(draftRules)
+  formRef.value.clearValidate()
+  try {
+    await formRef.value.validate()
+  } catch (err) {
+    console.log('saveDraft validation failed:', err)
+    return
+  }
   submitting.value = true
   try {
     emit('save-draft', { ...form })
@@ -136,10 +155,16 @@ async function saveDraft() {
 
 async function saveSubmit() {
   if (!formRef.value) return
-  Object.assign(rules, submitRules)
-  try {
-    await formRef.value.validate()
-  } catch { return }
+  if (props.mode === 'create') {
+    _setRules(submitRules)
+    formRef.value.clearValidate()
+    try {
+      await formRef.value.validate()
+    } catch (err) {
+      console.log('saveSubmit validation failed:', err)
+      return
+    }
+  }
   submitting.value = true
   try {
     emit('save-submit', { ...form })

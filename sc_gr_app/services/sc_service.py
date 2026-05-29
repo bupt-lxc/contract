@@ -35,6 +35,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "description",
 )
 REQUIRED_BUSINESS_FIELDS = (
+    "sc_no",
     "request_type",
     "cost_center",
     "sc_amount",
@@ -106,12 +107,12 @@ def _require_submit_fields(data: dict) -> None:
 
 
 def _assert_can_view_sc(user: dict, sc: dict) -> None:
-    if sc["status"] == "draft":
-        if user.get("role") != "requester" or user.get("user_id") != sc["requester_id"]:
-            raise PermissionDenied("SC is not visible")
-        return
     if user.get("role") == "admin":
         return
+    if sc["status"] == "draft":
+        if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
+            return
+        raise PermissionDenied("SC is not visible")
     if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
         return
     raise PermissionDenied("SC is not visible")
@@ -289,7 +290,7 @@ def create_sc(
 
 def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
-    _require_fields(data, ("requester_id",))
+    _require_fields(data, ("requester_id", "sc_no"))
     if (
         current_user["role"] == "requester"
         and data["requester_id"] != current_user["user_id"]
@@ -377,11 +378,15 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 before = _get_sc(conn, sc_id)
                 if before["status"] != "draft":
                     raise ConflictError("SC must be draft")
+                # Admin can submit any draft; requester can only submit their own
                 if (
-                    current_user["role"] != "requester"
-                    or before["requester_id"] != current_user["user_id"]
+                    current_user["role"] != "admin"
+                    and (
+                        current_user["role"] != "requester"
+                        or before["requester_id"] != current_user["user_id"]
+                    )
                 ):
-                    raise PermissionDenied("Only the draft owner can submit this SC")
+                    raise PermissionDenied("Only the draft owner or admin can submit this SC")
                 merged = {**before, **data}
                 _require_submit_fields(merged)
 

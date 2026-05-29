@@ -67,8 +67,10 @@ const scFilterConfig = [
   { name: 'cost_center', label: 'Cost Center', type: 'input' },
   { name: 'sc_id', label: 'SC ID', type: 'input' },
   { name: 'sc_no', label: 'SC No', type: 'input' },
-  { name: 'requester_id', label: 'Requester', type: 'input' },
-  { name: 'created_by', label: 'Created By', type: 'input' },
+  { name: 'requester_id', label: 'Requester ID', type: 'input' },
+  { name: 'requester_name', label: 'Requester Name', type: 'input' },
+  { name: 'created_by', label: 'Created By ID', type: 'input' },
+  { name: 'created_by_name', label: 'Created By Name', type: 'input' },
   { name: 'service_period_start', label: 'Service Start', type: 'date-range' },
   { name: 'sc_amount', label: 'SC Amount', type: 'amount-range' },
 ]
