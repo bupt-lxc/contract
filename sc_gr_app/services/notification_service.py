@@ -1,0 +1,245 @@
+import json
+import time
+
+from sc_gr_app.config import AppConfig
+from sc_gr_app.db.connection import connect
+from sc_gr_app.errors import AppError
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class QueueWriteError(AppError):
+    code = "QUEUE_WRITE_ERROR"
+
+
+def _read_app_setting(conn, key):
+    row = conn.execute(
+        "SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,)
+    ).fetchone()
+    return json.loads(row["setting_value"]) if row else None
+
+
+def _resolve_keyword(keyword, entity, current_user):
+    """Resolve a single recipient keyword to a list of user IDs."""
+    if keyword == "requester":
+        requester_id = entity.get("requester_id")
+        return [requester_id] if requester_id else []
+    if keyword == "actor":
+        return [current_user["user_id"]]
+    if keyword == "notify.admin_recipients":
+        return []
+    return [keyword]
+
+
+def resolve_recipients(conn, rule_to_or_cc, entity, current_user):
+    """Resolve a to/cc rule array to a list of user IDs.
+
+    Keywords: 'requester', 'actor', 'notify.admin_recipients', or direct user IDs.
+    'notify.admin_recipients' is looked up from app_settings at resolve time.
+    """
+    result = []
+    for item in rule_to_or_cc:
+        if item == "notify.admin_recipients":
+            admin_setting = _read_app_setting(conn, "notify.admin_recipients")
+            if admin_setting:
+                result.extend(admin_setting)
+        else:
+            resolved = _resolve_keyword(item, entity, current_user)
+            result.extend(resolved)
+    seen = set()
+    unique = []
+    for uid in result:
+        if uid and uid not in seen:
+            seen.add(uid)
+            unique.append(uid)
+    return unique
+
+
+def queue_status_change(conn, entity_type, entity_id, transition, entity, current_user):
+    """Insert a notification queue entry into the current transaction.
+
+    Args:
+        conn: Active sqlite3 connection (inside BEGIN IMMEDIATE)
+        entity_type: 'sc' / 'po' / 'gr'
+        entity_id: The entity's ID
+        transition: 'submit' / 'approve' / 'deny' / 'close' / 'create' / 'finish' / 'cancel'
+        entity: The entity dict (sc_record / po / gr) — used for requester_id
+        current_user: The user dict performing the action — used for actor
+    """
+    transitions_key = f"notify.transitions.{entity_type}"
+    rules_json = _read_app_setting(conn, transitions_key)
+    if not rules_json:
+        return
+
+    rules = rules_json.get(transition)
+    if not rules:
+        return
+
+    to_rule = rules.get("to", [])
+    cc_rule = rules.get("cc", [])
+
+    to_ids = resolve_recipients(conn, to_rule, entity, current_user)
+    cc_ids = resolve_recipients(conn, cc_rule, entity, current_user)
+
+    # Merge per-SC CC list
+    if entity_type == "sc":
+        config_row = conn.execute(
+            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'sc' AND entity_id = ? AND enabled = 1",
+            (entity_id,),
+        ).fetchone()
+        if config_row:
+            extra_cc = json.loads(config_row["cc_user_ids"])
+            for uid in extra_cc:
+                if uid and uid not in cc_ids:
+                    cc_ids.append(uid)
+
+    # Merge default CC list
+    default_cc = _read_app_setting(conn, "notify.default_cc")
+    if default_cc:
+        for uid in default_cc:
+            if uid and uid not in cc_ids:
+                cc_ids.append(uid)
+
+    # Remove primary recipients from CC
+    cc_ids = [uid for uid in cc_ids if uid not in to_ids]
+
+    if not to_ids:
+        return
+
+    timestamp = _utc_now()
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO notification_queue
+            (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
+        VALUES (?, ?, 'status_change', ?, ?, ?, ?)
+        """,
+        (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+    )
+
+
+def get_sc_notification_config(config: AppConfig, sc_id: str) -> dict | None:
+    with connect(config) as conn:
+        row = conn.execute(
+            "SELECT enabled, cc_user_ids, date_thresholds, amount_thresholds "
+            "FROM notification_config WHERE entity_type = 'sc' AND entity_id = ?",
+            (sc_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "enabled": bool(row["enabled"]),
+            "cc_user_ids": json.loads(row["cc_user_ids"]),
+            "date_thresholds": json.loads(row["date_thresholds"]),
+            "amount_thresholds": json.loads(row["amount_thresholds"]),
+        }
+
+
+def save_sc_notification_config(config: AppConfig, sc_id: str, data: dict) -> None:
+    with connect(config) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids, date_thresholds, amount_thresholds)
+                VALUES ('sc', ?, ?, ?, ?, ?)
+                ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    cc_user_ids = excluded.cc_user_ids,
+                    date_thresholds = excluded.date_thresholds,
+                    amount_thresholds = excluded.amount_thresholds
+                """,
+                (
+                    sc_id,
+                    1 if data.get("enabled", True) else 0,
+                    json.dumps(data.get("cc_user_ids", [])),
+                    json.dumps(data.get("date_thresholds", [])),
+                    json.dumps(data.get("amount_thresholds", [])),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def get_notification_defaults(config: AppConfig) -> dict:
+    with connect(config) as conn:
+        keys = [
+            "notify.admin_recipients",
+            "notify.transitions.sc",
+            "notify.transitions.po",
+            "notify.transitions.gr",
+            "notify.default_cc",
+            "notify.default_date_thresholds",
+            "notify.default_amount_thresholds",
+        ]
+        result = {}
+        for key in keys:
+            row = conn.execute(
+                "SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,)
+            ).fetchone()
+            result[key] = json.loads(row["setting_value"]) if row else None
+        return result
+
+
+def save_notification_defaults(config: AppConfig, data: dict) -> None:
+    field_map = {
+        "admin_recipients": "notify.admin_recipients",
+        "transitions": None,
+        "default_cc": "notify.default_cc",
+        "date_thresholds": "notify.default_date_thresholds",
+        "amount_thresholds": "notify.default_amount_thresholds",
+    }
+    with connect(config) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            timestamp = _utc_now()
+            for data_key, setting_key in field_map.items():
+                if setting_key and data_key in data:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                        (setting_key, json.dumps(data[data_key]), timestamp),
+                    )
+            if "transitions" in data:
+                transitions = data["transitions"]
+                for entity_type in ("sc", "po", "gr"):
+                    key = f"notify.transitions.{entity_type}"
+                    if entity_type in transitions:
+                        conn.execute(
+                            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                            (key, json.dumps(transitions[entity_type]), timestamp),
+                        )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def list_notification_queue(
+    config: AppConfig, sc_id: str | None = None, status: str | None = None,
+    limit: int = 50, offset: int = 0,
+) -> dict:
+    with connect(config) as conn:
+        conditions = []
+        params = []
+        if sc_id:
+            conditions.append("entity_id = ?")
+            params.append(sc_id)
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        count_row = conn.execute(
+            f"SELECT COUNT(*) as cnt FROM notification_queue {where}", params
+        ).fetchone()
+        rows = conn.execute(
+            f"SELECT * FROM notification_queue {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        return {
+            "items": [dict(r) for r in rows],
+            "total": count_row["cnt"],
+        }
