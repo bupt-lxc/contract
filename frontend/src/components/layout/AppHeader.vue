@@ -2,19 +2,13 @@
   <div class="header-left">
     <span class="header-title">SC GR Operations</span>
     <el-breadcrumb separator="/">
-      <el-breadcrumb-item :to="{ path: '/workbench' }">Workbench</el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'sc-list'">SC List</el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'sc-detail'">
-        <router-link :to="{ path: '/sc' }">SC List</router-link>
+      <el-breadcrumb-item
+        v-for="(item, index) in breadcrumbs"
+        :key="index"
+        :to="index < breadcrumbs.length - 1 ? item.to : undefined"
+      >
+        {{ item.title }}
       </el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'sc-detail'">SC Detail</el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'po-detail'">
-        <router-link :to="{ path: '/sc' }">SC List</router-link>
-      </el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'po-detail'">
-        <router-link :to="{ path: `/sc/${$route.params.scId}` }">SC Detail</router-link>
-      </el-breadcrumb-item>
-      <el-breadcrumb-item v-if="routeName === 'po-detail'">PO Detail</el-breadcrumb-item>
     </el-breadcrumb>
   </div>
   <div class="header-right">
@@ -39,8 +33,49 @@ import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 
-const routeName = computed(() => route.name)
 const user = computed(() => window.__currentUser || null)
+
+const breadcrumbs = computed(() => {
+  const name = route.name
+  const params = route.params
+
+  const map = {
+    'workbench': [
+      { title: 'Workbench', to: '/workbench' }
+    ],
+    'sc-list': [
+      { title: 'SC List', to: '/sc' }
+    ],
+    'sc-detail': [
+      { title: 'SC List', to: '/sc' },
+      { title: 'SC Detail', to: '' }
+    ],
+    'po-list': [
+      { title: 'PO List', to: '/po' }
+    ],
+    'po-detail': [
+      { title: 'SC List', to: '/sc' },
+      { title: 'SC Detail', to: `/sc/${params.scId}` },
+      { title: 'PO Detail', to: '' }
+    ],
+    'gr-list': [
+      { title: 'GR List', to: '/gr' }
+    ],
+    'vendor-list': [
+      { title: 'Vendor List', to: '/vendor' }
+    ],
+    'logs': [
+      { title: 'Audit Logs', to: '/logs' }
+    ],
+    'emails': [
+      { title: 'Email Logs', to: '/emails' }
+    ],
+    'system': [
+      { title: 'System', to: '/system' }
+    ]
+  }
+  return map[name] || []
+})
 
 function handleLogout() {
   window.__currentUser = null

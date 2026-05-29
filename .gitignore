@@ -6,5 +6,10 @@ __pycache__/
 build/
 dist/
 *.spec~
+node_modules/
+package-lock.json
 data/
 .worktrees/
+.github/workflows/
+CLAUDE.md
+.claude/
