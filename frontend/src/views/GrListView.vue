@@ -1,16 +1,12 @@
 <template>
   <div>
-    <FilterBar @reset="handleReset">
-      <template #filters>
-        <el-select v-model="filters.status" placeholder="Status" clearable @change="onFilterChange">
-          <el-option v-for="s in grStatuses" :key="s.label" :label="s.label" :value="s.value" />
-        </el-select>
-        <el-input-number v-model="filters.amount_min" placeholder="Amount min" :min="0" controls-position="right" @change="onFilterChange" style="width:160px" />
-        <el-input-number v-model="filters.amount_max" placeholder="Amount max" :min="0" controls-position="right" @change="onFilterChange" style="width:160px" />
-      </template>
-    </FilterBar>
+    <AdvancedFilterBar
+      :filter-config="grFilterConfig"
+      @filter="handleFilter"
+      @reset="handleReset"
+    />
 
-    <el-table :data="filteredRows" v-loading="state.loading" stripe border>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column label="Status" width="100">
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
@@ -41,9 +37,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useGr } from '@/composables/useGr.js'
-import FilterBar from '@/components/common/FilterBar.vue'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
@@ -53,28 +49,22 @@ const grStatuses = [
   { label: 'Pending', value: 'pending' }, { label: 'Approved', value: 'approved' }, { label: 'Cancelled', value: 'cancelled' }
 ]
 
-const filters = reactive({ status: '', amount_min: null, amount_max: null })
+const grFilterConfig = [
+  { name: 'status', label: 'Status', type: 'select', options: grStatuses },
+  { name: 'gr_id', label: 'GR ID', type: 'input' },
+  { name: 'po_id', label: 'PO ID', type: 'input' },
+  { name: 'sc_id', label: 'SC ID', type: 'input' },
+  { name: 'requester_id', label: 'Requester', type: 'input' },
+  { name: 'vendor_id', label: 'Vendor ID', type: 'input' },
+  { name: 'estimated_amount', label: 'Est. Amount', type: 'amount-range' },
+  { name: 'con_value', label: 'Con Value', type: 'amount-range' },
+]
 
-const filteredRows = computed(() => {
-  let rows = state.rows
-  if (filters.amount_min != null) {
-    rows = rows.filter(r => (Number(r.estimated_amount) || 0) >= filters.amount_min)
-  }
-  if (filters.amount_max != null) {
-    rows = rows.filter(r => (Number(r.estimated_amount) || 0) <= filters.amount_max)
-  }
-  return rows
-})
-
-function onFilterChange() {
-  const f = {}
-  if (filters.status) f.status = filters.status
-  setFilters(f)
-  searchGrs(null, f)
+function handleFilter({ text, filters }) {
+  searchGrs(text, filters)
 }
 
 function handleReset() {
-  Object.assign(filters, { status: '', amount_min: null, amount_max: null })
   resetFilters()
   searchGrs()
 }

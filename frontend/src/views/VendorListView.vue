@@ -1,20 +1,18 @@
 <template>
   <div>
-    <FilterBar @reset="handleReset">
-      <template #filters>
-        <el-select v-model="filters.service_scope" placeholder="Service Scope" clearable @change="onFilterChange">
-          <el-option v-for="s in serviceScopes" :key="s" :label="s" :value="s" />
-        </el-select>
-        <el-input v-model="filters.text" placeholder="Vendor name / KSRM code" clearable @change="onFilterChange" style="width:220px" />
-      </template>
+    <AdvancedFilterBar
+      :filter-config="vendorFilterConfig"
+      @filter="handleFilter"
+      @reset="handleReset"
+    >
       <template #actions>
         <el-button type="primary" @click="dialogVisible = true; dialogMode = 'create'">
           <el-icon><Plus /></el-icon> Add Vendor
         </el-button>
       </template>
-    </FilterBar>
+    </AdvancedFilterBar>
 
-    <el-table :data="filteredRows" v-loading="state.loading" stripe border>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="vendor_name" label="Vendor" sortable="custom" min-width="160" />
       <el-table-column prop="ksrm_vendor_code" label="KSRM Code" width="110" />
       <el-table-column prop="service_scope" label="Service Scope" width="180" />
@@ -46,43 +44,36 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { useVendor } from '@/composables/useVendor.js'
-import FilterBar from '@/components/common/FilterBar.vue'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import VendorFormDialog from '@/components/vendor/VendorFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { state, searchVendors, createVendor, updateVendor, disableVendor } = useVendor()
 
-const serviceScopes = [
-  'Transportation', 'engineering Service', 'Equipment', 'Parts', 'Driver',
-  'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
-  'Insurance', 'Harness', 'Maintenance', 'Security', 'Testing support', 'Others'
+const vendorFilterConfig = [
+  { name: 'vendor_name', label: 'Vendor Name', type: 'input' },
+  { name: 'vendor_id', label: 'Vendor ID', type: 'input' },
+  { name: 'ksrm_vendor_code', label: 'KSRM Code', type: 'input' },
+  { name: 'service_scope', label: 'Service Scope', type: 'input' },
+  { name: 'created_by', label: 'Created By', type: 'input' },
+  { name: 'contact_person', label: 'Contact', type: 'input' },
+  { name: 'email', label: 'Email', type: 'input' },
 ]
 
-const filters = reactive({ service_scope: '', text: '' })
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
 const dialogRecord = ref(null)
 
-const filteredRows = computed(() => {
-  let rows = state.rows
-  if (filters.service_scope) {
-    rows = rows.filter(r => r.service_scope === filters.service_scope)
-  }
-  if (filters.text) {
-    const t = filters.text.toLowerCase()
-    rows = rows.filter(r =>
-      (r.vendor_name || '').toLowerCase().includes(t) ||
-      (r.ksrm_vendor_code || '').toLowerCase().includes(t)
-    )
-  }
-  return rows
-})
+function handleFilter({ text, filters }) {
+  searchVendors(text, filters)
+}
 
-function onFilterChange() { /* client-side filters, no server re-fetch needed */ }
-function handleReset() { Object.assign(filters, { service_scope: '', text: '' }) }
+function handleReset() {
+  searchVendors()
+}
 
 async function handleSave(data) {
   try {

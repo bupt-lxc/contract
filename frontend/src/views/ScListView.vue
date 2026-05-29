@@ -1,21 +1,16 @@
 <template>
   <div>
-    <FilterBar @reset="handleReset">
-      <template #filters>
-        <el-select v-model="filters.status" placeholder="Status" clearable @change="onFilterChange">
-          <el-option v-for="s in scStatuses" :key="s.value" :label="s.label" :value="s.value" />
-        </el-select>
-        <el-select v-model="filters.request_type" placeholder="Request Type" clearable @change="onFilterChange">
-          <el-option v-for="t in requestTypes" :key="t" :label="t" :value="t" />
-        </el-select>
-        <el-input v-model="filters.cost_center" placeholder="Cost Center" clearable @change="onFilterChange" style="width:150px" />
-      </template>
+    <AdvancedFilterBar
+      :filter-config="scFilterConfig"
+      @filter="handleFilter"
+      @reset="handleReset"
+    >
       <template #actions>
         <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
           <el-icon><Plus /></el-icon> New SC
         </el-button>
       </template>
-    </FilterBar>
+    </AdvancedFilterBar>
 
     <ScTable
       :rows="state.rows"
@@ -48,11 +43,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { callApi } from '@/api/bridge.js'
-import FilterBar from '@/components/common/FilterBar.vue'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { ElMessage } from 'element-plus'
@@ -66,23 +61,27 @@ const scStatuses = [
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
 
-const filters = reactive({ status: '', request_type: '', cost_center: '' })
+const scFilterConfig = [
+  { name: 'status', label: 'Status', type: 'select', options: scStatuses },
+  { name: 'request_type', label: 'Request Type', type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'cost_center', label: 'Cost Center', type: 'input' },
+  { name: 'sc_id', label: 'SC ID', type: 'input' },
+  { name: 'sc_no', label: 'SC No', type: 'input' },
+  { name: 'requester_id', label: 'Requester', type: 'input' },
+  { name: 'created_by', label: 'Created By', type: 'input' },
+  { name: 'service_period_start', label: 'Service Start', type: 'date-range' },
+  { name: 'sc_amount', label: 'SC Amount', type: 'amount-range' },
+]
 
 const scDialogVisible = ref(false)
 const scDialogMode = ref('create')
 const scDialogRecord = ref(null)
 
-function onFilterChange() {
-  const f = {}
-  if (filters.status) f.status = filters.status
-  if (filters.request_type) f.request_type = filters.request_type
-  if (filters.cost_center) f.cost_center = filters.cost_center
-  setFilters(f)
-  searchScs(null, f)
+function handleFilter({ text, filters }) {
+  searchScs(text, filters)
 }
 
 function handleReset() {
-  Object.assign(filters, { status: '', request_type: '', cost_center: '' })
   resetFilters()
   searchScs()
 }
