@@ -5,6 +5,7 @@ Usage:
     uv run python -m sc_gr_app.notification --poll-interval 60 # custom interval
     uv run python -m sc_gr_app.notification --run-once         # one cycle + exit
     uv run python -m sc_gr_app.notification --thresholds-only  # only threshold check
+    uv run python -m sc_gr_app.notification --draft            # save to Drafts folder (dev mode)
 """
 
 import argparse
@@ -12,7 +13,7 @@ import logging
 import sys
 
 from sc_gr_app.config import default_config
-from sc_gr_app.notification import engine
+from sc_gr_app.notification import engine, sender
 
 
 def main():
@@ -23,6 +24,8 @@ def main():
                         help="Run one cycle and exit")
     parser.add_argument("--thresholds-only", action="store_true",
                         help="Run only the threshold check and exit")
+    parser.add_argument("--draft", action="store_true",
+                        help="Save emails to Drafts folder instead of sending (dev mode)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -32,6 +35,9 @@ def main():
             logging.StreamHandler(sys.stdout),
         ],
     )
+
+    if args.draft:
+        sender.set_draft_mode(True)
 
     config = default_config()
     logging.info("Using database: %s", config.db_path)

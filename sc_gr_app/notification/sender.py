@@ -9,6 +9,16 @@ from sc_gr_app.notification import queue, templates
 
 logger = logging.getLogger(__name__)
 
+_draft_mode = False
+
+
+def set_draft_mode(enabled: bool) -> None:
+    """Enable draft mode: emails are saved to Drafts folder instead of being sent."""
+    global _draft_mode
+    _draft_mode = enabled
+    if enabled:
+        logger.info("Draft mode enabled — emails will be saved to Drafts folder")
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -78,8 +88,12 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         mail.To = "; ".join(to_addresses)
         if cc_addresses:
             mail.CC = "; ".join(cc_addresses)
-        mail.Send()
-        logger.info("Sent queue entry %s: %s", entry["id"], subject)
+        if _draft_mode:
+            mail.Save()
+            logger.info("Saved queue entry %s to Drafts: %s", entry["id"], subject)
+        else:
+            mail.Send()
+            logger.info("Sent queue entry %s: %s", entry["id"], subject)
         return True
     finally:
         pythoncom.CoUninitialize()
