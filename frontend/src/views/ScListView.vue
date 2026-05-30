@@ -9,6 +9,9 @@
         <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
           <el-icon><Plus /></el-icon> New SC
         </el-button>
+        <el-button @click="handleExport" :loading="exporting">
+          <el-icon><Download /></el-icon> Export
+        </el-button>
       </template>
     </AdvancedFilterBar>
 
@@ -44,8 +47,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
+import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
@@ -53,6 +57,8 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
+const { exportAll } = useExport()
+const exporting = ref(false)
 
 const scStatuses = [
   { label: 'Pending', value: 'pending' }, { label: 'Approved', value: 'approved' },
@@ -114,6 +120,32 @@ async function handleSaveSubmit(data) {
   } catch (e) {
     ElMessage.error(e.message)
     throw e
+  }
+}
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'status', label: 'Status' },
+      { key: 'sc_no', label: 'SC No' },
+      { key: 'requester_name', label: 'Requester' },
+      { key: 'request_type', label: 'Type' },
+      { key: 'cost_center', label: 'Cost Center' },
+      { key: 'sc_amount', label: 'SC Amount' },
+      { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'description', label: 'Description' }
+    ]
+    await exportAll('search_scs', {
+      filters: state.filters,
+      sort: state.sort,
+      direction: state.direction
+    }, columns, `SC_List_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
   }
 }
 

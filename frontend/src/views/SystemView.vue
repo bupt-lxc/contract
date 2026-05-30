@@ -16,6 +16,9 @@
         <el-button type="primary" size="small" @click="dialogVisible = true; dialogMode = 'create'; dialogRecord = null">
           <el-icon><Plus /></el-icon> Add User
         </el-button>
+        <el-button size="small" @click="handleExport" :loading="exporting">
+          <el-icon><Download /></el-icon> Export
+        </el-button>
       </div>
       <el-table :data="state.users" v-loading="state.loading" stripe border>
         <el-table-column prop="machine_id" label="Machine ID" width="120" />
@@ -59,8 +62,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useUser } from '@/composables/useUser.js'
+import { useExport } from '@/composables/useExport.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import UserFormDialog from '@/components/system/UserFormDialog.vue'
 import NotificationDefaults from '@/components/notification/NotificationDefaults.vue'
@@ -69,6 +73,8 @@ import { ElMessage } from 'element-plus'
 
 const { state, fetchUsers, createUser, updateUser, disableUser, enableUser } = useUser()
 const { state: notifState, fetchDefaults, saveDefaults } = useNotification()
+const { exportRows } = useExport()
+const exporting = ref(false)
 
 const user = computed(() => window.__currentUser || {})
 const isAdmin = computed(() => user.value?.role === 'admin')
@@ -100,6 +106,25 @@ async function handleEnable(row) {
     await enableUser(row.machine_id)
     ElMessage.success('User enabled')
   } catch (e) { ElMessage.error(e.message) }
+}
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'machine_id', label: 'Machine ID' },
+      { key: 'user_name', label: 'Name' },
+      { key: 'email', label: 'Email' },
+      { key: 'role', label: 'Role' },
+      { key: 'status', label: 'Status' }
+    ]
+    exportRows(state.users, columns, `Users_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function handleNotifDefaultsSave(data) {

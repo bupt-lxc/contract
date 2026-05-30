@@ -18,6 +18,9 @@
         <el-input v-model="filters.entity_id" placeholder="Entity ID" clearable style="width:160px" @change="onFilterChange" />
         <el-button @click="handleRefresh" :loading="state.queueLoading">Refresh</el-button>
         <el-button @click="handleReset">Reset</el-button>
+        <el-button @click="handleExport" :loading="exporting">
+          <el-icon><Download /></el-icon> Export
+        </el-button>
       </div>
     </div>
 
@@ -81,11 +84,17 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import { useNotification } from '@/composables/useNotification.js'
+import { useExport } from '@/composables/useExport.js'
+import { callApi } from '@/api/bridge.js'
+import { ElMessage } from 'element-plus'
 
 const { state, fetchQueue } = useNotification()
+const { exportAll } = useExport()
 const pageSize = 50
 const currentPage = ref(1)
+const exporting = ref(false)
 
 const filters = reactive({
   status: '',
@@ -132,6 +141,34 @@ function handleRefresh() {
 function handlePageChange(page) {
   currentPage.value = page
   loadQueue()
+}
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'entity_type', label: 'Type' },
+      { key: 'entity_id', label: 'Entity ID' },
+      { key: 'event_type', label: 'Event Type' },
+      { key: 'event_key', label: 'Event' },
+      { key: 'to_recipients', label: 'To', getValue: r => formatRecipients(r.to_recipients) },
+      { key: 'cc_recipients', label: 'CC', getValue: r => formatRecipients(r.cc_recipients) },
+      { key: 'status', label: 'Status' },
+      { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'sent_at', label: 'Sent', getValue: r => (r.sent_at || '').slice(0, 19) || '-' },
+      { key: 'error_msg', label: 'Error', getValue: r => r.error_msg || '-' }
+    ]
+    await exportAll('list_notification_queue', {
+      status: filters.status || null,
+      entity_type: filters.entity_type || null,
+      entity_id: filters.entity_id || null
+    }, columns, `Email_Logs_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(() => loadQueue())

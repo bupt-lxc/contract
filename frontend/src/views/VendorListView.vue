@@ -9,6 +9,9 @@
         <el-button type="primary" @click="dialogVisible = true; dialogMode = 'create'">
           <el-icon><Plus /></el-icon> Add Vendor
         </el-button>
+        <el-button @click="handleExport" :loading="exporting">
+          <el-icon><Download /></el-icon> Export
+        </el-button>
       </template>
     </AdvancedFilterBar>
 
@@ -45,13 +48,16 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useVendor } from '@/composables/useVendor.js'
+import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import VendorFormDialog from '@/components/vendor/VendorFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { state, searchVendors, createVendor, updateVendor, disableVendor } = useVendor()
+const { exportRows } = useExport()
+const exporting = ref(false)
 
 const vendorFilterConfig = [
   { name: 'vendor_name', label: 'Vendor Name', type: 'input' },
@@ -73,6 +79,26 @@ function handleFilter({ text, filters }) {
 
 function handleReset() {
   searchVendors()
+}
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'vendor_name', label: 'Vendor Name' },
+      { key: 'ksrm_vendor_code', label: 'KSRM Code' },
+      { key: 'service_scope', label: 'Service Scope' },
+      { key: 'contact_person', label: 'Contact' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'email', label: 'Email' }
+    ]
+    exportRows(state.rows, columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function handleSave(data) {

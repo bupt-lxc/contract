@@ -6,6 +6,12 @@
       @reset="handleReset"
     />
 
+    <div style="margin-bottom:12px">
+      <el-button @click="handleExport" :loading="exporting">
+        <el-icon><Download /></el-icon> Export
+      </el-button>
+    </div>
+
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="created_at" label="Created" width="160" sortable="custom">
         <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
@@ -33,11 +39,16 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import { useLogs } from '@/composables/useLogs.js'
+import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
+import { ElMessage } from 'element-plus'
 
 const { state, searchLogs, setFilters, resetFilters, onPageChange, onPageSizeChange } = useLogs()
+const { exportAll } = useExport()
+const exporting = ref(false)
 
 const logsFilterConfig = [
   { name: 'action_type', label: 'Action', type: 'input' },
@@ -60,6 +71,31 @@ function handleReset() {
 
 function handlePageChange(page) { onPageChange(page); searchLogs() }
 function handleSizeChange(size) { onPageSizeChange(size); searchLogs() }
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'action_type', label: 'Action' },
+      { key: 'object_type', label: 'Object Type' },
+      { key: 'object_id', label: 'Object ID' },
+      { key: 'sc_id', label: 'SC ID' },
+      { key: 'operator_id', label: 'Operator' },
+      { key: 'machine_id', label: 'Machine' }
+    ]
+    await exportAll('search_audit_logs', {
+      filters: state.filters,
+      sort: state.sort,
+      direction: state.direction
+    }, columns, `Audit_Logs_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
+}
 
 onMounted(() => searchLogs())
 </script>
