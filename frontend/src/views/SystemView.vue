@@ -118,7 +118,7 @@ async function handleExport() {
       { key: 'role', label: 'Role' },
       { key: 'status', label: 'Status' }
     ]
-    exportRows(state.users, columns, `Users_${new Date().toISOString().slice(0, 10)}`)
+    await exportRows(state.users, columns, `Users_${new Date().toISOString().slice(0, 10)}`)
     ElMessage.success('Exported successfully')
   } catch (e) {
     ElMessage.error(e.message || 'Export failed')

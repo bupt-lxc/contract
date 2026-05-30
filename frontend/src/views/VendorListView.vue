@@ -92,7 +92,7 @@ async function handleExport() {
       { key: 'phone', label: 'Phone' },
       { key: 'email', label: 'Email' }
     ]
-    exportRows(state.rows, columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
+    await exportRows(state.rows, columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
     ElMessage.success('Exported successfully')
   } catch (e) {
     ElMessage.error(e.message || 'Export failed')

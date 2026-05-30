@@ -368,6 +368,41 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def save_file(self, payload) -> dict:
+        """Receive base64 data, show native save dialog, write to chosen path."""
+        try:
+            import base64
+            import tkinter.filedialog as fd
+            import tkinter as tk
+
+            payload = self._required_payload(payload)
+            filename = _require_payload_field(payload, "filename")
+            data_b64 = _require_payload_field(payload, "data")
+
+            file_bytes = base64.b64decode(data_b64)
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+
+            file_path = fd.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                initialfile=filename,
+                title="Save Excel File",
+            )
+            root.destroy()
+
+            if not file_path:
+                return ok({"cancelled": True})
+
+            with open(file_path, "wb") as f:
+                f.write(file_bytes)
+
+            return ok({"path": file_path})
+        except Exception as exc:
+            return fail(exc)
+
     def list_notification_queue(self, payload=None) -> dict:
         try:
             payload = self._payload(payload) or {}

@@ -26,7 +26,7 @@ export function useExport() {
    * @param {Array}    columns  – [{ key, label, getValue? }]
    * @param {string}   filename – without extension
    */
-  function exportRows(rows, columns, filename) {
+  async function exportRows(rows, columns, filename) {
     const sheetData = rows.map(row => {
       const obj = {}
       columns.forEach(col => {
@@ -41,7 +41,12 @@ export function useExport() {
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+
+    // Write workbook to ArrayBuffer, encode as base64, send to Python for native save dialog
+    const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    const binary = String.fromCharCode(...new Uint8Array(wbArray))
+    const b64 = btoa(binary)
+    await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
   }
 
   /**
@@ -66,7 +71,7 @@ export function useExport() {
       offset += limit
     }
 
-    exportRows(allRows, columns, filename)
+    await exportRows(allRows, columns, filename)
   }
 
   return { exportRows, exportAll }

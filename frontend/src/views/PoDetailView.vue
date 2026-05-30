@@ -163,7 +163,7 @@ async function handleGrCancel(row) {
   } catch {}
 }
 
-function handleExportGrs() {
+async function handleExportGrs() {
   const columns = [
     { key: 'status', label: 'Status' },
     { key: 'gr_id', label: 'GR ID' },
@@ -173,7 +173,7 @@ function handleExportGrs() {
     { key: 'remark', label: 'Remark' }
   ]
   const poNo = po.value?.po_no || po.value?.po_id || 'PO'
-  exportRows(grs.value, columns, `${poNo}_GRs`)
+  await exportRows(grs.value, columns, `${poNo}_GRs`)
   ElMessage.success('Exported successfully')
 }
 
