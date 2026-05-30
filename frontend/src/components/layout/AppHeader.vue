@@ -1,25 +1,26 @@
 <template>
   <div class="header-left">
-    <span class="header-title">SC GR Operations</span>
+    <span class="header-title">{{ $t('app.title') }}</span>
     <el-breadcrumb separator="/">
       <el-breadcrumb-item
         v-for="(item, index) in breadcrumbs"
         :key="index"
         :to="index < breadcrumbs.length - 1 ? item.to : undefined"
       >
-        {{ item.title }}
+        {{ $t(item.i18nKey) }}
       </el-breadcrumb-item>
     </el-breadcrumb>
   </div>
   <div class="header-right">
+    <LocaleSwitcher />
     <el-dropdown trigger="click">
       <span class="user-info">
-        {{ user?.user_name || 'User' }}
-        <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ user?.role }}</el-tag>
+        {{ user?.user_name || $t('common.user') }}
+        <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ $t(`role.${user?.role}`, user?.role) }}</el-tag>
       </span>
       <template #dropdown>
         <el-dropdown-menu>
-          <el-dropdown-item @click="handleLogout">Exit</el-dropdown-item>
+          <el-dropdown-item @click="handleLogout">{{ $t('common.exit') }}</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
@@ -29,6 +30,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import LocaleSwitcher from './LocaleSwitcher.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,37 +43,37 @@ const breadcrumbs = computed(() => {
 
   const map = {
     'workbench': [
-      { title: 'Workbench', to: '/workbench' }
+      { i18nKey: 'breadcrumb.workbench', to: '/workbench' }
     ],
     'sc-list': [
-      { title: 'SC List', to: '/sc' }
+      { i18nKey: 'breadcrumb.scList', to: '/sc' }
     ],
     'sc-detail': [
-      { title: 'SC List', to: '/sc' },
-      { title: 'SC Detail', to: '' }
+      { i18nKey: 'breadcrumb.scList', to: '/sc' },
+      { i18nKey: 'breadcrumb.scDetail', to: '' }
     ],
     'po-list': [
-      { title: 'PO List', to: '/po' }
+      { i18nKey: 'breadcrumb.poList', to: '/po' }
     ],
     'po-detail': [
-      { title: 'SC List', to: '/sc' },
-      { title: 'SC Detail', to: `/sc/${params.scId}` },
-      { title: 'PO Detail', to: '' }
+      { i18nKey: 'breadcrumb.scList', to: '/sc' },
+      { i18nKey: 'breadcrumb.scDetail', to: `/sc/${params.scId}` },
+      { i18nKey: 'breadcrumb.poDetail', to: '' }
     ],
     'gr-list': [
-      { title: 'GR List', to: '/gr' }
+      { i18nKey: 'breadcrumb.grList', to: '/gr' }
     ],
     'vendor-list': [
-      { title: 'Vendor List', to: '/vendor' }
+      { i18nKey: 'breadcrumb.vendorList', to: '/vendor' }
     ],
     'logs': [
-      { title: 'Audit Logs', to: '/logs' }
+      { i18nKey: 'breadcrumb.auditLogs', to: '/logs' }
     ],
     'emails': [
-      { title: 'Email Logs', to: '/emails' }
+      { i18nKey: 'breadcrumb.emailLogs', to: '/emails' }
     ],
     'system': [
-      { title: 'System', to: '/system' }
+      { i18nKey: 'breadcrumb.system', to: '/system' }
     ]
   }
   return map[name] || []

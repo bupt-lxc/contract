@@ -1,44 +1,47 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="mode === 'edit' ? 'Edit GR' : 'Add GR'"
+    :title="mode === 'edit' ? $t('gr.editGr') : $t('gr.addGr')"
     width="520px"
     @update:model-value="$emit('update:visible', $event)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
-          <el-form-item label="Requester ID" prop="requester_id">
+          <el-form-item :label="$t('gr.requesterId')" prop="requester_id">
             <el-input v-model="form.requester_id" />
           </el-form-item>
         </el-col>
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="Estimated Amount">
+          <el-form-item :label="$t('gr.estimatedAmount')">
             <el-input-number v-model="form.estimated_amount" :precision="2" :min="0" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Con Value">
+          <el-form-item :label="$t('gr.conValue')">
             <el-input-number v-model="form.con_value" :precision="2" :min="0" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item label="Remark">
+      <el-form-item :label="$t('gr.remark')">
         <el-input v-model="form.remark" type="textarea" :rows="3" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="$emit('update:visible', false)" :disabled="submitting">Cancel</el-button>
-      <el-button type="primary" @click="handleSave" :loading="submitting">Save</el-button>
+      <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="handleSave" :loading="submitting">{{ $t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: Boolean,
@@ -58,8 +61,8 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const rules = {
-  requester_id: [{ required: true, message: 'Requester is required', trigger: 'blur' }],
-  estimated_amount: [{ required: true, message: 'Estimated Amount is required', trigger: 'blur' }]
+  requester_id: [{ required: true, message: t('gr.requesterRequired'), trigger: 'blur' }],
+  estimated_amount: [{ required: true, message: t('gr.estimatedAmountRequired'), trigger: 'blur' }]
 }
 
 watch(() => props.visible, (val) => {
@@ -78,7 +81,7 @@ async function handleSave() {
   try {
     emit('save', { ...form })
     emit('update:visible', false)
-    ElMessage.success('Saved')
+    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

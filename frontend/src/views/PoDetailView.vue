@@ -2,43 +2,43 @@
   <div>
     <div class="detail-page-header">
       <div>
-        <h2>{{ po.po_no || po.po_id || 'PO Detail' }}</h2>
+        <h2>{{ po.po_no || po.po_id || $t('po.poDetail') }}</h2>
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po" @click="openEditDialog">Edit</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">Approve</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">Finish</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
       </div>
     </div>
 
     <div v-if="!po.po_id" class="section-card">
-      <el-empty description="PO not found." />
+      <el-empty :description="$t('po.poNotFound')" />
     </div>
 
     <template v-if="po.po_id">
       <div class="section-card">
-        <h3 style="margin-bottom:12px">PO Information</h3>
+        <h3 style="margin-bottom:12px">{{ $t('po.poInformation') }}</h3>
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="PO ID">{{ po.po_id }}</el-descriptions-item>
-          <el-descriptions-item label="PO No">{{ po.po_no || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Vendor">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
-          <el-descriptions-item label="PO Amount"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
-          <el-descriptions-item label="Contract From">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Contract To">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Contract No">{{ po.contract_no || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Payment Freq">{{ po.payment_frequency || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.poId')">{{ po.po_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.poNo')">{{ po.po_no || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.paymentFreq')">{{ po.payment_frequency || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
 
       <div class="section-card">
         <div class="section-header">
-          <h3>GR Records</h3>
+          <h3>{{ $t('gr.grRecords') }}</h3>
           <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
-            <el-icon><Plus /></el-icon> Add GR
+            <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
           <el-button size="small" @click="handleExportGrs">
-            <el-icon><Download /></el-icon> Export
+            <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
         </div>
         <GrTable
@@ -69,6 +69,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
@@ -84,6 +85,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updatePo, approvePo, finishPo } = usePo()
 const { createGr, updateGr, approveGr, cancelGr } = useGr()
@@ -113,25 +115,25 @@ function openEditDialog() { editDialogVisible.value = true }
 async function handleEditSave(data) {
   try {
     await updatePo(data.po_id || poId.value, data)
-    ElMessage.success('PO updated')
+    ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
 async function handleApprove() {
   try {
-    await ElMessageBox.confirm('Approve this PO?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('po.approveConfirm'), t('common.confirm'), { type: 'warning' })
     await approvePo(poId.value)
-    ElMessage.success('PO approved')
+    ElMessage.success(t('po.poApproved'))
     await fetchDetail(scId.value)
   } catch {}
 }
 
 async function handleFinish() {
   try {
-    await ElMessageBox.confirm('Finish this PO?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('po.finishConfirm'), t('common.confirm'), { type: 'warning' })
     await finishPo(poId.value)
-    ElMessage.success('PO finished')
+    ElMessage.success(t('po.poFinished'))
     await fetchDetail(scId.value)
   } catch {}
 }
@@ -139,42 +141,42 @@ async function handleFinish() {
 async function handleGrApprove(row) {
   try {
     const { value } = await ElMessageBox.prompt(
-      'Enter contract value (con_value) for this GR:',
-      'Approve GR',
+      t('gr.enterConValue'),
+      t('gr.approveGr'),
       {
-        confirmButtonText: 'Approve',
+        confirmButtonText: t('common.approve'),
         type: 'warning',
         inputPattern: /^\d+(\.\d{1,2})?$/,
-        inputErrorMessage: 'Enter a valid positive number'
+        inputErrorMessage: t('gr.invalidNumber')
       }
     )
     await approveGr(row.gr_id, parseFloat(value))
-    ElMessage.success('GR approved')
+    ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
   } catch {}
 }
 
 async function handleGrCancel(row) {
   try {
-    await ElMessageBox.confirm('Cancel this GR?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
     await cancelGr(row.gr_id)
-    ElMessage.success('GR cancelled')
+    ElMessage.success(t('gr.grCancelled'))
     await fetchDetail(scId.value)
   } catch {}
 }
 
 async function handleExportGrs() {
   const columns = [
-    { key: 'status', label: 'Status' },
-    { key: 'gr_id', label: 'GR ID' },
-    { key: 'requester_id', label: 'Requester' },
-    { key: 'estimated_amount', label: 'Estimated' },
-    { key: 'con_value', label: 'Con Value' },
-    { key: 'remark', label: 'Remark' }
+    { key: 'status', label: t('common.status') },
+    { key: 'gr_id', label: t('gr.grId') },
+    { key: 'requester_id', label: t('gr.requester') },
+    { key: 'estimated_amount', label: t('gr.estimated') },
+    { key: 'con_value', label: t('gr.conValue') },
+    { key: 'remark', label: t('common.remark') }
   ]
   const poNo = po.value?.po_no || po.value?.po_id || 'PO'
   await exportRows(grs.value, columns, `${poNo}_GRs`)
-  ElMessage.success('Exported successfully')
+  ElMessage.success(t('common.exportedSuccessfully'))
 }
 
 async function handleGrSave(data) {
@@ -184,7 +186,7 @@ async function handleGrSave(data) {
     } else {
       await updateGr(data.gr_id, data)
     }
-    ElMessage.success('Saved')
+    ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
     grDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }

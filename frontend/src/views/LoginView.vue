@@ -1,54 +1,56 @@
 <template>
   <div class="login-screen">
     <el-card class="login-card" shadow="always">
-      <h1 class="login-title">SC GR Operations</h1>
-      <p class="login-subtitle">Budget & Purchase Order Management</p>
+      <h1 class="login-title">{{ $t('login.title') }}</h1>
+      <p class="login-subtitle">{{ $t('login.subtitle') }}</p>
 
       <!-- Loading / Retrying state -->
       <div v-if="state === 'loading' || state === 'retrying'" class="login-state">
         <el-icon class="spinner" :size="32"><Loading /></el-icon>
-        <p style="margin-top:16px;color:#64748b">{{ state === 'loading' ? 'Detecting identity...' : 'Retrying...' }}</p>
+        <p style="margin-top:16px;color:#64748b">{{ state === 'loading' ? $t('login.detecting') : $t('login.retrying') }}</p>
         <p v-if="lastError" style="color:#94a3b8;font-size:12px;margin-top:8px">{{ lastError }}</p>
-        <p v-if="retryCount > 0" style="color:#94a3b8;font-size:11px;margin-top:4px">Attempt {{ retryCount }}</p>
+        <p v-if="retryCount > 0" style="color:#94a3b8;font-size:11px;margin-top:4px">{{ $t('login.attempt', { count: retryCount }) }}</p>
       </div>
 
       <!-- Authorized state -->
       <div v-if="state === 'authorized'" class="login-state">
-        <el-result icon="success" title="Identity Verified">
+        <el-result icon="success" :title="$t('login.identityVerified')">
           <template #sub-title>
             <p>{{ user?.user_name }} <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ user?.role }}</el-tag></p>
             <p style="color:#94a3b8;font-size:12px;">{{ user?.machine_id }}</p>
           </template>
           <template #extra>
-            <el-button type="primary" size="large" @click="enterApp">Enter</el-button>
+            <el-button type="primary" size="large" @click="enterApp">{{ $t('common.enter') }}</el-button>
           </template>
         </el-result>
       </div>
 
       <!-- Unauthorized state (terminal, after retries exhausted) -->
       <div v-if="state === 'unauthorized'" class="login-state">
-        <el-result icon="error" title="Not Authorized">
+        <el-result icon="error" :title="$t('login.notAuthorized')">
           <template #sub-title>
-            <p>{{ lastError || 'This machine is not authorized to access the system.' }}</p>
-            <p style="color:#94a3b8;font-size:12px;margin-top:8px;">Contact your administrator.</p>
+            <p>{{ lastError || $t('login.notAuthorizedMsg') }}</p>
+            <p style="color:#94a3b8;font-size:12px;margin-top:8px;">{{ $t('login.contactAdmin') }}</p>
           </template>
           <template #extra>
-            <el-button @click="verify">Retry</el-button>
+            <el-button @click="verify">{{ $t('common.retry') }}</el-button>
           </template>
         </el-result>
       </div>
     </el-card>
-    <p class="login-version">v2.0.0 &middot; Audi C/EV-L</p>
+    <p class="login-version">{{ $t('app.version') }}</p>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 import { callApi, ApiError } from '@/api/bridge.js'
 
 const router = useRouter()
+const { t } = useI18n()
 const state = ref('loading')
 const user = ref(null)
 const lastError = ref('')
@@ -75,12 +77,12 @@ async function verify() {
     window.__currentUser = user.value
     state.value = 'authorized'
   } catch (e) {
-    lastError.value = e.message || 'Unable to reach the database.'
+    lastError.value = e.message || t('login.unableToReach')
     if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
       state.value = 'unauthorized'
     } else if (retryCount.value >= MAX_RETRIES) {
       state.value = 'unauthorized'
-      lastError.value = 'Server unreachable. Please check your connection and try again.'
+      lastError.value = t('login.serverUnreachable')
     } else {
       state.value = 'retrying'
       retryCount.value++

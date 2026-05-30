@@ -1,18 +1,18 @@
 <template>
   <div class="section-card">
-    <h3 style="margin-bottom:12px">Notification Defaults</h3>
+    <h3 style="margin-bottom:12px">{{ $t('notification.notificationDefaults') }}</h3>
 
-    <div v-if="loading">Loading...</div>
+    <div v-if="loading">{{ $t('common.loading') }}</div>
     <template v-else>
       <!-- Admin Recipients -->
       <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Admin Recipients</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.adminRecipients') }}</label>
         <el-select
           v-model="local.admin_recipients"
           multiple
           filterable
           :teleported="false"
-          placeholder="Select admins who receive notifications"
+          :placeholder="$t('notification.selectAdminsPlaceholder')"
           style="width:100%"
           @change="emitSave"
         >
@@ -27,26 +27,26 @@
 
       <!-- Transition Rules -->
       <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">SC Transition Rules</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.scTransitionRules') }}</label>
         <el-table :data="transitionRows('sc')" border size="small">
-          <el-table-column prop="transition" label="Transition" width="100" />
-          <el-table-column label="To" width="200">
+          <el-table-column prop="transition" :label="$t('notification.transition')" width="100" />
+          <el-table-column :label="$t('notification.to')" width="200">
             <template #default="{ row }">
               <el-select v-model="local.transitions.sc[row.transition].to" multiple filterable
                 :teleported="false" style="width:100%" @change="emitSave">
-                <el-option label="Admin Recipients" value="notify.admin_recipients" />
-                <el-option label="Requester" value="requester" />
-                <el-option label="Actor" value="actor" />
+                <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
+                <el-option :label="$t('notification.requester')" value="requester" />
+                <el-option :label="$t('notification.actor')" value="actor" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="CC" width="200">
+          <el-table-column :label="$t('notification.cc')" width="200">
             <template #default="{ row }">
               <el-select v-model="local.transitions.sc[row.transition].cc" multiple filterable
                 :teleported="false" style="width:100%" @change="emitSave">
-                <el-option label="Admin Recipients" value="notify.admin_recipients" />
-                <el-option label="Requester" value="requester" />
-                <el-option label="Actor" value="actor" />
+                <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
+                <el-option :label="$t('notification.requester')" value="requester" />
+                <el-option :label="$t('notification.actor')" value="actor" />
               </el-select>
             </template>
           </el-table-column>
@@ -55,9 +55,9 @@
 
       <!-- Default CC -->
       <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Default CC List</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultCcList') }}</label>
         <el-select v-model="local.default_cc" multiple filterable
-          :teleported="false" placeholder="Select users" style="width:100%" @change="emitSave">
+          :teleported="false" :placeholder="$t('notification.selectUsersPlaceholder')" style="width:100%" @change="emitSave">
           <el-option v-for="u in allUsers" :key="u.user_id"
             :label="`${u.user_name} -- ${u.machine_id}`" :value="u.user_id" />
         </el-select>
@@ -65,20 +65,20 @@
 
       <!-- Thresholds -->
       <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Default Date Thresholds</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultDateThresholds') }}</label>
         <el-checkbox-group v-model="local.date_thresholds" @change="emitSave">
-          <el-checkbox :label="6">6 months</el-checkbox>
-          <el-checkbox :label="3">3 months</el-checkbox>
-          <el-checkbox :label="1">1 month</el-checkbox>
-          <el-checkbox :label="0.5">2 weeks</el-checkbox>
+          <el-checkbox :label="6">{{ $t('notification.sixMonths') }}</el-checkbox>
+          <el-checkbox :label="3">{{ $t('notification.threeMonths') }}</el-checkbox>
+          <el-checkbox :label="1">{{ $t('notification.oneMonth') }}</el-checkbox>
+          <el-checkbox :label="0.5">{{ $t('notification.twoWeeks') }}</el-checkbox>
         </el-checkbox-group>
       </div>
       <div>
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Default Amount Thresholds</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultAmountThresholds') }}</label>
         <el-checkbox-group v-model="local.amount_thresholds" @change="emitSave">
-          <el-checkbox :label="50">50%</el-checkbox>
-          <el-checkbox :label="30">30%</el-checkbox>
-          <el-checkbox :label="10">10%</el-checkbox>
+          <el-checkbox :label="50">{{ $t('notification.fiftyPercent') }}</el-checkbox>
+          <el-checkbox :label="30">{{ $t('notification.thirtyPercent') }}</el-checkbox>
+          <el-checkbox :label="10">{{ $t('notification.tenPercent') }}</el-checkbox>
         </el-checkbox-group>
       </div>
     </template>

@@ -1,8 +1,8 @@
 <template>
   <div class="sidenav-container">
     <div class="sidenav-brand">
-      <span v-if="!collapsed" class="brand-text">SC GR Ops</span>
-      <span v-else class="brand-icon">SC</span>
+      <span v-if="!collapsed" class="brand-text">{{ $t('app.brand') }}</span>
+      <span v-else class="brand-icon">{{ $t('app.brandShort') }}</span>
     </div>
     <el-menu
       :default-active="activeRoute"
@@ -15,35 +15,35 @@
     >
       <el-menu-item index="/workbench">
         <el-icon><Monitor /></el-icon>
-        <span>Workbench</span>
+        <span>{{ $t('nav.workbench') }}</span>
       </el-menu-item>
       <el-menu-item index="/sc">
         <el-icon><Document /></el-icon>
-        <span>SC</span>
+        <span>{{ $t('nav.sc') }}</span>
       </el-menu-item>
       <el-menu-item index="/po">
         <el-icon><ShoppingCart /></el-icon>
-        <span>PO</span>
+        <span>{{ $t('nav.po') }}</span>
       </el-menu-item>
       <el-menu-item index="/gr">
         <el-icon><CircleCheck /></el-icon>
-        <span>GR</span>
+        <span>{{ $t('nav.gr') }}</span>
       </el-menu-item>
       <el-menu-item index="/vendor">
         <el-icon><OfficeBuilding /></el-icon>
-        <span>Vendor</span>
+        <span>{{ $t('nav.vendor') }}</span>
       </el-menu-item>
       <el-menu-item index="/emails">
         <el-icon><Message /></el-icon>
-        <span>Email</span>
+        <span>{{ $t('nav.email') }}</span>
       </el-menu-item>
       <el-menu-item index="/logs">
         <el-icon><Notebook /></el-icon>
-        <span>Logs</span>
+        <span>{{ $t('nav.logs') }}</span>
       </el-menu-item>
       <el-menu-item v-if="isAdmin" index="/system">
         <el-icon><Setting /></el-icon>
-        <span>System</span>
+        <span>{{ $t('nav.system') }}</span>
       </el-menu-item>
     </el-menu>
     <div class="sidenav-footer" @click="$emit('toggle')">

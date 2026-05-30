@@ -3,7 +3,7 @@
     <div class="filter-controls">
       <el-input
         v-model="searchText"
-        placeholder="Search all fields..."
+        :placeholder="$t('common.search')"
         :prefix-icon="Search"
         clearable
         style="width: 260px"
@@ -14,7 +14,7 @@
         type="primary"
         @click="showAdvanced = !showAdvanced"
       >
-        {{ showAdvanced ? 'Hide' : 'Advanced' }} Filters
+        {{ showAdvanced ? $t('common.hide') + ' ' + $t('common.filters') : $t('common.advanced') + ' ' + $t('common.filters') }}
       </el-button>
     </div>
     <div class="filter-actions">
@@ -54,7 +54,7 @@
         <template v-else-if="f.type === 'date-range'">
           <el-date-picker
             v-model="filterValues[f.name + '_from']"
-            :placeholder="f.label + ' from'"
+            :placeholder="f.label + ' ' + $t('common.from')"
             type="date"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
@@ -63,7 +63,7 @@
           />
           <el-date-picker
             v-model="filterValues[f.name + '_to']"
-            :placeholder="f.label + ' to'"
+            :placeholder="f.label + ' ' + $t('common.to')"
             type="date"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
@@ -76,7 +76,7 @@
         <template v-else-if="f.type === 'amount-range'">
           <el-input-number
             v-model="filterValues[f.name + '_min']"
-            :placeholder="f.label + ' min'"
+            :placeholder="f.label + ' ' + $t('common.min')"
             :precision="2"
             :min="0"
             controls-position="right"
@@ -85,7 +85,7 @@
           />
           <el-input-number
             v-model="filterValues[f.name + '_max']"
-            :placeholder="f.label + ' max'"
+            :placeholder="f.label + ' ' + $t('common.max')"
             :precision="2"
             :min="0"
             controls-position="right"
@@ -95,7 +95,7 @@
         </template>
       </template>
 
-      <el-button @click="handleReset">Reset</el-button>
+      <el-button @click="handleReset">{{ $t('common.reset') }}</el-button>
     </div>
   </div>
 </template>

@@ -1,37 +1,40 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="mode === 'edit' ? 'Edit User' : 'Add User'"
+    :title="mode === 'edit' ? $t('user.editUser') : $t('user.addUser')"
     width="480px"
     @update:model-value="$emit('update:visible', $event)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-      <el-form-item label="Machine ID" prop="machine_id">
+      <el-form-item :label="$t('user.machineId')" prop="machine_id">
         <el-input v-model="form.machine_id" :disabled="mode === 'edit'" maxlength="7" />
       </el-form-item>
-      <el-form-item label="Name" prop="user_name">
+      <el-form-item :label="$t('user.name')" prop="user_name">
         <el-input v-model="form.user_name" />
       </el-form-item>
-      <el-form-item label="Email">
+      <el-form-item :label="$t('user.email')">
         <el-input v-model="form.email" />
       </el-form-item>
-      <el-form-item label="Role" prop="role">
+      <el-form-item :label="$t('user.role')" prop="role">
         <el-select v-model="form.role">
-          <el-option label="Requester" value="requester" />
-          <el-option label="Admin" value="admin" />
+          <el-option :label="$t('role.Requester')" value="requester" />
+          <el-option :label="$t('role.Admin')" value="admin" />
         </el-select>
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="$emit('update:visible', false)" :disabled="submitting">Cancel</el-button>
-      <el-button type="primary" @click="handleSave" :loading="submitting">Save</el-button>
+      <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="handleSave" :loading="submitting">{{ $t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: Boolean,
@@ -51,9 +54,9 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const rules = {
-  machine_id: [{ required: true, message: 'Machine ID is required', trigger: 'blur' }],
-  user_name: [{ required: true, message: 'Name is required', trigger: 'blur' }],
-  role: [{ required: true, message: 'Role is required', trigger: 'change' }]
+  machine_id: [{ required: true, message: () => t('user.machineIdRequired'), trigger: 'blur' }],
+  user_name: [{ required: true, message: () => t('user.nameRequired'), trigger: 'blur' }],
+  role: [{ required: true, message: () => t('user.roleRequired'), trigger: 'change' }]
 }
 
 watch(() => props.visible, (val) => {
@@ -72,7 +75,7 @@ async function handleSave() {
   try {
     emit('save', { ...form })
     emit('update:visible', false)
-    ElMessage.success('Saved')
+    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

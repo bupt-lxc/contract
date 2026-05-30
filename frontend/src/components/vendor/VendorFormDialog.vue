@@ -1,62 +1,62 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="mode === 'edit' ? 'Edit Vendor' : 'Add Vendor'"
+    :title="mode === 'edit' ? $t('vendor.editVendor') : $t('vendor.addVendor')"
     width="520px"
     @update:model-value="$emit('update:visible', $event)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="Vendor ID" prop="vendor_id">
+          <el-form-item :label="$t('vendor.vendorId')" prop="vendor_id">
             <el-input v-model="form.vendor_id" :disabled="mode === 'edit'" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Vendor Name" prop="vendor_name">
+          <el-form-item :label="$t('vendor.vendorName')" prop="vendor_name">
             <el-input v-model="form.vendor_name" />
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item label="Service Scope" prop="service_scope">
+      <el-form-item :label="$t('vendor.serviceScope')" prop="service_scope">
         <el-select v-model="form.service_scope" filterable>
           <el-option v-for="s in serviceScopes" :key="s" :label="s" :value="s" />
         </el-select>
       </el-form-item>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="KSRM Code">
+          <el-form-item :label="$t('vendor.ksrmCode')">
             <el-input v-model="form.ksrm_vendor_code" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Contact Person">
+          <el-form-item :label="$t('vendor.contactPerson')">
             <el-input v-model="form.contact_person" />
           </el-form-item>
         </el-col>
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="Phone">
+          <el-form-item :label="$t('vendor.phone')">
             <el-input v-model="form.phone" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Email">
+          <el-form-item :label="$t('vendor.email')">
             <el-input v-model="form.email" />
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item label="Description">
+      <el-form-item :label="$t('vendor.description')">
         <el-input v-model="form.description" type="textarea" :rows="2" />
       </el-form-item>
-      <el-form-item label="Inquiry History">
+      <el-form-item :label="$t('vendor.inquiryHistory')">
         <el-input v-model="form.inquiry_history" type="textarea" :rows="2" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="$emit('update:visible', false)" :disabled="submitting">Cancel</el-button>
-      <el-button type="primary" @click="handleSave" :loading="submitting">Save</el-button>
+      <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="handleSave" :loading="submitting">{{ $t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -64,6 +64,7 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   visible: Boolean,
@@ -72,6 +73,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:visible', 'save'])
+const { t } = useI18n()
 
 const formRef = ref()
 const submitting = ref(false)
@@ -90,9 +92,9 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const rules = {
-  vendor_id: [{ required: true, message: 'Vendor ID is required', trigger: 'blur' }],
-  vendor_name: [{ required: true, message: 'Vendor Name is required', trigger: 'blur' }],
-  service_scope: [{ required: true, message: 'Service Scope is required', trigger: 'change' }]
+  vendor_id: [{ required: true, message: t('vendor.vendorIdRequired'), trigger: 'blur' }],
+  vendor_name: [{ required: true, message: t('vendor.vendorNameRequired'), trigger: 'blur' }],
+  service_scope: [{ required: true, message: t('vendor.serviceScopeRequired'), trigger: 'change' }]
 }
 
 watch(() => props.visible, (val) => {
@@ -111,7 +113,7 @@ async function handleSave() {
   try {
     emit('save', { ...form })
     emit('update:visible', false)
-    ElMessage.success('Saved')
+    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

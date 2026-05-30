@@ -1,18 +1,18 @@
 <template>
   <div class="section-card">
     <div class="section-header">
-      <h3>Notification Settings</h3>
+      <h3>{{ $t('notification.notificationSettings') }}</h3>
       <el-switch v-model="local.enabled" @change="emitSave" />
     </div>
     <template v-if="local.enabled">
       <div style="margin-top:12px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">CC List</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.ccList') }}</label>
         <el-select
           v-model="local.cc_user_ids"
           multiple
           filterable
           :teleported="false"
-          placeholder="Select users to CC"
+          :placeholder="$t('notification.selectCcUsers')"
           style="width:100%"
           @change="emitSave"
         >
@@ -25,20 +25,20 @@
         </el-select>
       </div>
       <div style="margin-top:12px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Date Thresholds</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.dateThresholds') }}</label>
         <el-checkbox-group v-model="local.date_thresholds" @change="emitSave">
-          <el-checkbox :label="6">6 months</el-checkbox>
-          <el-checkbox :label="3">3 months</el-checkbox>
-          <el-checkbox :label="1">1 month</el-checkbox>
-          <el-checkbox :label="0.5">2 weeks</el-checkbox>
+          <el-checkbox :label="6">{{ $t('notification.sixMonths') }}</el-checkbox>
+          <el-checkbox :label="3">{{ $t('notification.threeMonths') }}</el-checkbox>
+          <el-checkbox :label="1">{{ $t('notification.oneMonth') }}</el-checkbox>
+          <el-checkbox :label="0.5">{{ $t('notification.twoWeeks') }}</el-checkbox>
         </el-checkbox-group>
       </div>
       <div style="margin-top:12px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">Amount Thresholds</label>
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.amountThresholds') }}</label>
         <el-checkbox-group v-model="local.amount_thresholds" @change="emitSave">
-          <el-checkbox :label="50">50%</el-checkbox>
-          <el-checkbox :label="30">30%</el-checkbox>
-          <el-checkbox :label="10">10%</el-checkbox>
+          <el-checkbox :label="50">{{ $t('notification.fiftyPercent') }}</el-checkbox>
+          <el-checkbox :label="30">{{ $t('notification.thirtyPercent') }}</el-checkbox>
+          <el-checkbox :label="10">{{ $t('notification.tenPercent') }}</el-checkbox>
         </el-checkbox-group>
       </div>
     </template>

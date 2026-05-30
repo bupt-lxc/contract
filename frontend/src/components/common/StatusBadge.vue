@@ -6,10 +6,13 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   status: { type: String, required: true }
 })
+
+const { t } = useI18n()
 
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -36,5 +39,5 @@ const STATUS_TYPES = {
 }
 
 const tagType = computed(() => STATUS_TYPES[props.status] || 'info')
-const label = computed(() => STATUS_LABELS[props.status] || props.status)
+const label = computed(() => t('status.' + props.status, props.status))
 </script>

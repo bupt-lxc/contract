@@ -8,7 +8,7 @@
 
     <div style="margin-bottom:12px">
       <el-button @click="handleExport" :loading="exporting">
-        <el-icon><Download /></el-icon> Export
+        <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
     </div>
 
@@ -44,6 +44,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Download } from '@element-plus/icons-vue'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
@@ -53,6 +54,8 @@ import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const { t } = useI18n()
+
 const { state, searchPos, createPo, updatePo, approvePo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
@@ -61,20 +64,21 @@ const exporting = ref(false)
 const vendors = computed(() => vendorState.rows)
 
 const poStatuses = [
-  { label: 'Pending', value: 'po_pending' }, { label: 'Approved', value: 'po_approved' },
-  { label: 'Finished', value: 'finished' }
+  { label: t('status.pending'), value: 'po_pending' },
+  { label: t('status.approved'), value: 'po_approved' },
+  { label: t('status.finished'), value: 'finished' }
 ]
 
 const poFilterConfig = [
-  { name: 'status', label: 'Status', type: 'select', options: poStatuses },
-  { name: 'po_id', label: 'PO ID', type: 'input' },
-  { name: 'po_no', label: 'PO No', type: 'input' },
-  { name: 'sc_id', label: 'SC ID', type: 'input' },
-  { name: 'vendor_id', label: 'Vendor ID', type: 'input' },
-  { name: 'vendor_name', label: 'Vendor Name', type: 'input' },
-  { name: 'po_amount', label: 'PO Amount', type: 'amount-range' },
-  { name: 'contract_from', label: 'Contract From', type: 'date-range' },
-  { name: 'contract_to', label: 'Contract To', type: 'date-range' },
+  { name: 'status', label: t('filter.status'), type: 'select', options: poStatuses },
+  { name: 'po_id', label: t('filter.poId'), type: 'input' },
+  { name: 'po_no', label: t('filter.poNo'), type: 'input' },
+  { name: 'sc_id', label: t('filter.scId'), type: 'input' },
+  { name: 'vendor_id', label: t('filter.vendorId'), type: 'input' },
+  { name: 'vendor_name', label: t('filter.vendorName'), type: 'input' },
+  { name: 'po_amount', label: t('filter.poAmount'), type: 'amount-range' },
+  { name: 'contract_from', label: t('filter.contractFrom'), type: 'date-range' },
+  { name: 'contract_to', label: t('filter.contractTo'), type: 'date-range' },
 ]
 
 const poDialogVisible = ref(false)
@@ -92,18 +96,18 @@ function handleReset() {
 
 async function handleApprovePo(row) {
   try {
-    await ElMessageBox.confirm('Approve this PO?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('confirm.approvePo'), t('common.confirm'), { type: 'warning' })
     await approvePo(row.po_id)
-    ElMessage.success('PO approved')
+    ElMessage.success(t('msg.poApproved'))
     await searchPos()
   } catch { /* cancelled */ }
 }
 
 async function handleFinishPo(row) {
   try {
-    await ElMessageBox.confirm('Finish this PO?', 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(t('confirm.finishPo'), t('common.confirm'), { type: 'warning' })
     await finishPo(row.po_id)
-    ElMessage.success('PO finished')
+    ElMessage.success(t('msg.poFinished'))
     await searchPos()
   } catch { /* cancelled */ }
 }
@@ -129,23 +133,23 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'status', label: 'Status' },
-      { key: 'po_no', label: 'PO No' },
-      { key: 'sc_no', label: 'SC No' },
-      { key: 'vendor_name', label: 'Vendor' },
-      { key: 'po_amount', label: 'PO Amount' },
-      { key: 'open_po_amount', label: 'Open PO Amount' },
-      { key: 'contract_from', label: 'Contract From', getValue: r => (r.contract_from || '').slice(0, 10) },
-      { key: 'contract_to', label: 'Contract To', getValue: r => (r.contract_to || '').slice(0, 10) }
+      { key: 'status', label: t('export.status') },
+      { key: 'po_no', label: t('export.poNo') },
+      { key: 'sc_no', label: t('export.scNo') },
+      { key: 'vendor_name', label: t('export.vendor') },
+      { key: 'po_amount', label: t('export.poAmount') },
+      { key: 'open_po_amount', label: t('export.openPoAmount') },
+      { key: 'contract_from', label: t('export.contractFrom'), getValue: r => (r.contract_from || '').slice(0, 10) },
+      { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) }
     ]
     await exportAll('search_pos', {
       filters: state.filters,
       sort: state.sort,
       direction: state.direction
     }, columns, `PO_List_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success('Exported successfully')
+    ElMessage.success(t('msg.exportedSuccessfully'))
   } catch (e) {
-    ElMessage.error(e.message || 'Export failed')
+    ElMessage.error(e.message || t('msg.exportFailed'))
   } finally {
     exporting.value = false
   }

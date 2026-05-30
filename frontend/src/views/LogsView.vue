@@ -8,21 +8,21 @@
 
     <div style="margin-bottom:12px">
       <el-button @click="handleExport" :loading="exporting">
-        <el-icon><Download /></el-icon> Export
+        <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
     </div>
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
-      <el-table-column prop="created_at" label="Created" width="160" sortable="custom">
+      <el-table-column prop="created_at" :label="$t('audit.created')" width="160" sortable="custom">
         <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
       </el-table-column>
-      <el-table-column prop="action_type" label="Action" width="150" />
-      <el-table-column prop="object_type" label="Object" width="100" />
-      <el-table-column prop="object_id" label="Object ID" width="130" />
-      <el-table-column prop="sc_id" label="SC ID" width="130" />
-      <el-table-column prop="operator_id" label="Operator" width="130" />
-      <el-table-column prop="machine_id" label="Machine" min-width="130" />
-      <template #empty><el-empty :description="state.error || 'No audit logs found.'" /></template>
+      <el-table-column prop="action_type" :label="$t('audit.action')" width="150" />
+      <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
+      <el-table-column prop="object_id" :label="$t('audit.objectId')" width="130" />
+      <el-table-column prop="sc_id" :label="$t('audit.scId')" width="130" />
+      <el-table-column prop="operator_id" :label="$t('audit.operator')" width="130" />
+      <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="130" />
+      <template #empty><el-empty :description="state.error || $t('audit.noRecords')" /></template>
     </el-table>
 
     <el-pagination
@@ -45,19 +45,21 @@ import { useLogs } from '@/composables/useLogs.js'
 import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 
 const { state, searchLogs, setFilters, resetFilters, onPageChange, onPageSizeChange } = useLogs()
 const { exportAll } = useExport()
+const { t } = useI18n()
 const exporting = ref(false)
 
 const logsFilterConfig = [
-  { name: 'action_type', label: 'Action', type: 'input' },
-  { name: 'object_type', label: 'Object Type', type: 'input' },
-  { name: 'object_id', label: 'Object ID', type: 'input' },
-  { name: 'sc_id', label: 'SC ID', type: 'input' },
-  { name: 'operator_id', label: 'Operator', type: 'input' },
-  { name: 'machine_id', label: 'Machine', type: 'input' },
-  { name: 'operation_mode', label: 'Mode', type: 'input' },
+  { name: 'action_type', label: t('audit.action'), type: 'input' },
+  { name: 'object_type', label: t('audit.objectType'), type: 'input' },
+  { name: 'object_id', label: t('audit.objectId'), type: 'input' },
+  { name: 'sc_id', label: t('audit.scId'), type: 'input' },
+  { name: 'operator_id', label: t('audit.operator'), type: 'input' },
+  { name: 'machine_id', label: t('audit.machine'), type: 'input' },
+  { name: 'operation_mode', label: t('audit.mode'), type: 'input' },
 ]
 
 function handleFilter({ text, filters }) {
@@ -76,22 +78,22 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
-      { key: 'action_type', label: 'Action' },
-      { key: 'object_type', label: 'Object Type' },
-      { key: 'object_id', label: 'Object ID' },
-      { key: 'sc_id', label: 'SC ID' },
-      { key: 'operator_id', label: 'Operator' },
-      { key: 'machine_id', label: 'Machine' }
+      { key: 'created_at', label: t('audit.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'action_type', label: t('audit.action') },
+      { key: 'object_type', label: t('audit.objectType') },
+      { key: 'object_id', label: t('audit.objectId') },
+      { key: 'sc_id', label: t('audit.scId') },
+      { key: 'operator_id', label: t('audit.operator') },
+      { key: 'machine_id', label: t('audit.machine') }
     ]
     await exportAll('search_audit_logs', {
       filters: state.filters,
       sort: state.sort,
       direction: state.direction
     }, columns, `Audit_Logs_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success('Exported successfully')
+    ElMessage.success(t('audit.exportSuccess'))
   } catch (e) {
-    ElMessage.error(e.message || 'Export failed')
+    ElMessage.error(e.message || t('audit.exportFailed'))
   } finally {
     exporting.value = false
   }

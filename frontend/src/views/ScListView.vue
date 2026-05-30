@@ -7,10 +7,10 @@
     >
       <template #actions>
         <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
-          <el-icon><Plus /></el-icon> New SC
+          <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
         </el-button>
         <el-button @click="handleExport" :loading="exporting">
-          <el-icon><Download /></el-icon> Export
+          <el-icon><Download /></el-icon> {{ $t('common.export') }}
         </el-button>
       </template>
     </AdvancedFilterBar>
@@ -18,7 +18,7 @@
     <ScTable
       :rows="state.rows"
       :loading="state.loading"
-      :empty-text="state.error || 'No SC records match the search and filters.'"
+      :empty-text="state.error || $t('sc.noRecords')"
       @sort-change="handleSortChange"
       @row-click="row => $router.push(`/sc/${row.sc_id}`)"
     />
@@ -47,6 +47,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
@@ -58,27 +59,28 @@ import { ElMessage } from 'element-plus'
 
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
 const { exportAll } = useExport()
+const { t } = useI18n()
 const exporting = ref(false)
 
 const scStatuses = [
-  { label: 'Pending', value: 'pending' }, { label: 'Approved', value: 'approved' },
-  { label: 'Denied', value: 'denied' }, { label: 'Closed', value: 'closed' }
+  { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
+  { label: t('status.denied'), value: 'denied' }, { label: t('status.closed'), value: 'closed' }
 ]
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
 
 const scFilterConfig = [
-  { name: 'status', label: 'Status', type: 'select', options: scStatuses },
-  { name: 'request_type', label: 'Request Type', type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
-  { name: 'cost_center', label: 'Cost Center', type: 'input' },
-  { name: 'sc_id', label: 'SC ID', type: 'input' },
-  { name: 'sc_no', label: 'SC No', type: 'input' },
-  { name: 'requester_id', label: 'Requester ID', type: 'input' },
-  { name: 'requester_name', label: 'Requester Name', type: 'input' },
-  { name: 'created_by', label: 'Created By ID', type: 'input' },
-  { name: 'created_by_name', label: 'Created By Name', type: 'input' },
-  { name: 'service_period_start', label: 'Service Start', type: 'date-range' },
-  { name: 'sc_amount', label: 'SC Amount', type: 'amount-range' },
+  { name: 'status', label: t('filter.status'), type: 'select', options: scStatuses },
+  { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
+  { name: 'sc_id', label: t('filter.scId'), type: 'input' },
+  { name: 'sc_no', label: t('filter.scNo'), type: 'input' },
+  { name: 'requester_id', label: t('filter.requesterId'), type: 'input' },
+  { name: 'requester_name', label: t('filter.requesterName'), type: 'input' },
+  { name: 'created_by', label: t('filter.createdById'), type: 'input' },
+  { name: 'created_by_name', label: t('filter.createdByName'), type: 'input' },
+  { name: 'service_period_start', label: t('filter.serviceStart'), type: 'date-range' },
+  { name: 'sc_amount', label: t('filter.scAmount'), type: 'amount-range' },
 ]
 
 const scDialogVisible = ref(false)
@@ -127,23 +129,23 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'status', label: 'Status' },
-      { key: 'sc_no', label: 'SC No' },
-      { key: 'requester_name', label: 'Requester' },
-      { key: 'request_type', label: 'Type' },
-      { key: 'cost_center', label: 'Cost Center' },
-      { key: 'sc_amount', label: 'SC Amount' },
-      { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
-      { key: 'description', label: 'Description' }
+      { key: 'status', label: t('exportCol.status') },
+      { key: 'sc_no', label: t('exportCol.scNo') },
+      { key: 'requester_name', label: t('exportCol.requester') },
+      { key: 'request_type', label: t('exportCol.type') },
+      { key: 'cost_center', label: t('exportCol.costCenter') },
+      { key: 'sc_amount', label: t('exportCol.scAmount') },
+      { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'description', label: t('exportCol.description') }
     ]
     await exportAll('search_scs', {
       filters: state.filters,
       sort: state.sort,
       direction: state.direction
     }, columns, `SC_List_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success('Exported successfully')
+    ElMessage.success(t('export.exported'))
   } catch (e) {
-    ElMessage.error(e.message || 'Export failed')
+    ElMessage.error(e.message || t('export.failed'))
   } finally {
     exporting.value = false
   }
