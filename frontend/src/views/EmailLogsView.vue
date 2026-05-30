@@ -27,7 +27,7 @@
     <el-table :data="state.queue" v-loading="state.queueLoading" stripe border>
       <el-table-column prop="entity_type" label="Type" width="70">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.entity_type === 'sc' ? '' : row.entity_type === 'po' ? 'warning' : 'info'">
+          <el-tag size="small" :type="row.entity_type === 'sc' ? 'primary' : row.entity_type === 'po' ? 'warning' : 'info'">
             {{ row.entity_type.toUpperCase() }}
           </el-tag>
         </template>

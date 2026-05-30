@@ -15,7 +15,7 @@
     <el-dropdown trigger="click">
       <span class="user-info">
         {{ user?.user_name || 'User' }}
-        <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : ''">{{ user?.role }}</el-tag>
+        <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ user?.role }}</el-tag>
       </span>
       <template #dropdown>
         <el-dropdown-menu>
