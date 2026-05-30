@@ -24,7 +24,7 @@ const STATUS_LABELS = {
 }
 
 const STATUS_TYPES = {
-  draft: '',
+  draft: 'info',
   pending: 'warning',
   approved: 'success',
   denied: 'danger',

@@ -216,7 +216,7 @@ async function handlePoSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
-function handleExportPos() {
+async function handleExportPos() {
   const columns = [
     { key: 'status', label: 'Status' },
     { key: 'po_no', label: 'PO No' },
@@ -226,11 +226,11 @@ function handleExportPos() {
     { key: 'contract_to', label: 'Contract To', getValue: r => (r.contract_to || '').slice(0, 10) }
   ]
   const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
-  exportRows(detail.value.pos || [], columns, `${scNo}_POs`)
+  await exportRows(detail.value.pos || [], columns, `${scNo}_POs`)
   ElMessage.success('Exported successfully')
 }
 
-function handleExportAudit() {
+async function handleExportAudit() {
   const columns = [
     { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
     { key: 'action_type', label: 'Action' },
@@ -240,7 +240,7 @@ function handleExportAudit() {
     { key: 'machine_id', label: 'Machine' }
   ]
   const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
-  exportRows(detail.value.audit_logs || [], columns, `${scNo}_Audit`)
+  await exportRows(detail.value.audit_logs || [], columns, `${scNo}_Audit`)
   ElMessage.success('Exported successfully')
 }
 

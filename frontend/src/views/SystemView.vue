@@ -5,7 +5,7 @@
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="Machine ID">{{ user?.machine_id }}</el-descriptions-item>
         <el-descriptions-item label="Name">{{ user?.user_name }}</el-descriptions-item>
-        <el-descriptions-item label="Role"><el-tag size="small" :type="user?.role === 'admin' ? 'danger' : ''">{{ user?.role }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="Role"><el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ user?.role }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="Email">{{ user?.email || '-' }}</el-descriptions-item>
       </el-descriptions>
     </div>
@@ -118,7 +118,7 @@ async function handleExport() {
       { key: 'role', label: 'Role' },
       { key: 'status', label: 'Status' }
     ]
-    exportRows(state.users, columns, `Users_${new Date().toISOString().slice(0, 10)}`)
+    await exportRows(state.users, columns, `Users_${new Date().toISOString().slice(0, 10)}`)
     ElMessage.success('Exported successfully')
   } catch (e) {
     ElMessage.error(e.message || 'Export failed')

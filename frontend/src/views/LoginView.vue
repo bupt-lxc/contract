@@ -16,7 +16,7 @@
       <div v-if="state === 'authorized'" class="login-state">
         <el-result icon="success" title="Identity Verified">
           <template #sub-title>
-            <p>{{ user?.user_name }} <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : ''">{{ user?.role }}</el-tag></p>
+            <p>{{ user?.user_name }} <el-tag size="small" :type="user?.role === 'admin' ? 'danger' : 'info'">{{ user?.role }}</el-tag></p>
             <p style="color:#94a3b8;font-size:12px;">{{ user?.machine_id }}</p>
           </template>
           <template #extra>
