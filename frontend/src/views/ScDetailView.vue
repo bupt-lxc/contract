@@ -151,7 +151,11 @@ function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updateSc(data.sc_id || scId.value, data)
+    const { _attachments, ...formData } = data
+    await updateSc(formData.sc_id || scId.value, formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'sc', entity_id: scId.value, file_paths: _attachments })
+    }
     ElMessage.success(t('sc.updated'))
     await fetchDetail(scId.value)
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -218,10 +222,17 @@ async function handlePoFinish(row) {
 
 async function handlePoSave(data) {
   try {
+    const { _attachments, ...formData } = data
+    let poId
     if (poDialogMode.value === 'create') {
-      await createPo({ ...data, sc_id: scId.value })
+      const created = await createPo({ ...formData, sc_id: scId.value })
+      poId = created.po_id
     } else {
-      await updatePo(data.po_id, data)
+      poId = formData.po_id
+      await updatePo(poId, formData)
+    }
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments })
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

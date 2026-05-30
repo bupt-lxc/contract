@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
@@ -449,6 +450,81 @@ class ApiBridge:
     def _attachments_dir(self) -> Path:
         from pathlib import Path
         return Path(self.config.db_path).parent / "attachments"
+
+    def pick_files(self, _payload=None) -> dict:
+        """Open native multi-file dialog, return selected file paths only (no copy, no DB)."""
+        try:
+            import tkinter.filedialog as fd
+            import tkinter as tk
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            file_paths = fd.askopenfilenames(title="Select files to attach")
+            root.destroy()
+
+            results = []
+            for p in file_paths:
+                pp = Path(p)
+                results.append({
+                    "path": str(pp),
+                    "name": pp.name,
+                    "size": pp.stat().st_size,
+                })
+            return ok(results)
+        except Exception as exc:
+            return fail(exc)
+
+    def add_attachments(self, payload) -> dict:
+        """Copy selected files into the attachments directory and create DB records."""
+        try:
+            import shutil
+            from datetime import datetime, timezone
+
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+            file_paths = _require_payload_field(payload, "file_paths")
+            current_user = self._require_current_user()
+
+            if entity_type not in ("sc", "po", "gr"):
+                return fail(ValidationError("entity_type must be 'sc', 'po', or 'gr'"))
+            if not isinstance(file_paths, list) or len(file_paths) == 0:
+                return ok([])
+
+            timestamp = datetime.now(timezone.utc).isoformat()
+            results = []
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                for fp in file_paths:
+                    src = Path(fp)
+                    if not src.exists():
+                        continue
+                    dest = self._resolve_target_path(entity_type, entity_id, src.name)
+                    shutil.copy2(src, dest)
+                    conn.execute(
+                        "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            entity_type, entity_id, dest.name,
+                            str(dest), dest.stat().st_size,
+                            current_user["user_id"], timestamp,
+                        ),
+                    )
+                    results.append({
+                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "filename": dest.name,
+                        "stored_path": str(dest),
+                        "file_size": dest.stat().st_size,
+                        "created_by": current_user["user_id"],
+                        "created_at": timestamp,
+                    })
+                conn.commit()
+            return ok(results)
+        except Exception as exc:
+            return fail(exc)
 
     def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str) -> Path:
         import os as _os

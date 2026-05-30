@@ -135,7 +135,12 @@ function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updatePo(data.po_id || poId.value, data)
+    const { _attachments, ...formData } = data
+    const targetPoId = formData.po_id || poId.value
+    await updatePo(targetPoId, formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments })
+    }
     ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -202,10 +207,17 @@ async function handleExportGrs() {
 
 async function handleGrSave(data) {
   try {
+    const { _attachments, ...formData } = data
+    let grId
     if (grDialogMode.value === 'create') {
-      await createGr({ ...data, po_id: poId.value })
+      const created = await createGr({ ...formData, po_id: poId.value })
+      grId = created.gr_id
     } else {
-      await updateGr(data.gr_id, data)
+      grId = formData.gr_id
+      await updateGr(grId, formData)
+    }
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments })
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

@@ -114,10 +114,17 @@ async function handleFinishPo(row) {
 
 async function handlePoSave(data) {
   try {
+    const { _attachments, ...formData } = data
+    let poId
     if (poDialogMode.value === 'create') {
-      await createPo(data)
+      const created = await createPo(formData)
+      poId = created.po_id
     } else {
-      await updatePo(poDialogRecord.value?.po_id, data)
+      poId = poDialogRecord.value?.po_id
+      await updatePo(poId, formData)
+    }
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments })
     }
     await searchPos()
   } catch (e) {

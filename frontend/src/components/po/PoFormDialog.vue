@@ -45,6 +45,25 @@
       <el-form-item :label="$t('po.paymentFrequency')">
         <el-input v-model="form.payment_frequency" />
       </el-form-item>
+      <el-form-item :label="$t('attachment.attachments')">
+        <div>
+          <el-button size="small" @click="handlePickFiles">
+            <el-icon><Paperclip /></el-icon> {{ $t('attachment.addAttachment') }}
+          </el-button>
+          <div v-if="pickedFiles.length" style="margin-top:8px">
+            <el-tag
+              v-for="(f, i) in pickedFiles"
+              :key="i"
+              closable
+              @close="pickedFiles.splice(i, 1)"
+              size="small"
+              style="margin-right:4px;margin-bottom:4px"
+            >
+              {{ f.name }}
+            </el-tag>
+          </div>
+        </div>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
@@ -56,6 +75,8 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Paperclip } from '@element-plus/icons-vue'
+import { callApi } from '@/api/bridge.js'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({
@@ -71,6 +92,7 @@ const { t } = useI18n()
 
 const formRef = ref()
 const submitting = ref(false)
+const pickedFiles = ref([])
 
 const emptyForm = () => ({
   po_no: '', vendor_id: '', po_amount: null,
@@ -85,20 +107,32 @@ const rules = {
 }
 
 watch(() => props.visible, (val) => {
-  if (val && props.mode === 'edit' && props.record) {
-    Object.assign(form, props.record)
-  } else if (val) {
-    Object.assign(form, emptyForm())
-    formRef.value?.resetFields()
+  if (val) {
+    pickedFiles.value = []
+    if (props.mode === 'edit' && props.record) {
+      Object.assign(form, props.record)
+    } else {
+      Object.assign(form, emptyForm())
+      formRef.value?.resetFields()
+    }
   }
 })
+
+async function handlePickFiles() {
+  try {
+    const files = await callApi('pick_files')
+    if (files?.length) pickedFiles.value.push(...files)
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
 
 async function handleSave() {
   if (!formRef.value) return
   try { await formRef.value.validate() } catch { return }
   submitting.value = true
   try {
-    emit('save', { ...form })
+    emit('save', { ...form, _attachments: pickedFiles.value.map(f => f.path) })
     emit('update:visible', false)
     ElMessage.success(t('po.saved'))
   } catch (e) {

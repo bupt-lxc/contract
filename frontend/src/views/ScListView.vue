@@ -106,7 +106,11 @@ function handleSizeChange(size) { onPageSizeChange(size); searchScs() }
 
 async function handleSaveDraft(data) {
   try {
-    await createDraft(data)
+    const { _attachments, ...formData } = data
+    const created = await createDraft(formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
+    }
     await searchScs()
   } catch (e) {
     ElMessage.error(e.message)
@@ -116,8 +120,12 @@ async function handleSaveDraft(data) {
 
 async function handleSaveSubmit(data) {
   try {
-    const created = await createDraft(data)
-    await submitSc(created.sc_id, data)
+    const { _attachments, ...formData } = data
+    const created = await createDraft(formData)
+    await submitSc(created.sc_id, formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
+    }
     await searchScs()
   } catch (e) {
     ElMessage.error(e.message)
