@@ -60,6 +60,12 @@ const breadcrumbs = computed(() => {
       { i18nKey: 'breadcrumb.scDetail', to: `/sc/${params.scId}` },
       { i18nKey: 'breadcrumb.poDetail', to: '' }
     ],
+    'gr-detail': [
+      { i18nKey: 'breadcrumb.scList', to: '/sc' },
+      { i18nKey: 'breadcrumb.scDetail', to: `/sc/${params.scId}` },
+      { i18nKey: 'breadcrumb.poDetail', to: `/sc/${params.scId}/po/${params.poId}` },
+      { i18nKey: 'breadcrumb.grDetail', to: '' }
+    ],
     'gr-list': [
       { i18nKey: 'breadcrumb.grList', to: '/gr' }
     ],

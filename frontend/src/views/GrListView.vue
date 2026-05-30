@@ -12,7 +12,7 @@
       </el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @row-click="handleRowClick">
       <el-table-column :label="$t('common.status')" width="100">
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
@@ -44,6 +44,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Download } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useGr } from '@/composables/useGr.js'
@@ -53,6 +54,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import { ElMessage } from 'element-plus'
 
+const router = useRouter()
 const { t } = useI18n()
 const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
 const { exportAll } = useExport()
@@ -80,6 +82,12 @@ function handleFilter({ text, filters }) {
 function handleReset() {
   resetFilters()
   searchGrs()
+}
+
+function handleRowClick(row) {
+  if (row.sc_id && row.po_id) {
+    router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
+  }
 }
 
 function handlePageChange(page) { onPageChange(page); searchGrs() }

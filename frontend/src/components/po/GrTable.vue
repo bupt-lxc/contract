@@ -1,5 +1,5 @@
 <template>
-  <el-table :data="rows" stripe border style="width:100%">
+  <el-table :data="rows" stripe border style="width:100%" @row-click="row => $emit('row-click', row)">
     <el-table-column :label="$t('gr.status')" width="100">
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
@@ -39,7 +39,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['edit', 'approve', 'cancel', 'attachments'])
+defineEmits(['edit', 'approve', 'cancel', 'attachments', 'row-click'])
 
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

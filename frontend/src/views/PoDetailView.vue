@@ -53,6 +53,7 @@
         </div>
         <GrTable
           :rows="grs"
+          @row-click="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @cancel="row => handleGrCancel(row)"
