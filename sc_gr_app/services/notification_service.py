@@ -220,6 +220,7 @@ def save_notification_defaults(config: AppConfig, data: dict) -> None:
 
 def list_notification_queue(
     config: AppConfig, sc_id: str | None = None, status: str | None = None,
+    entity_type: str | None = None, entity_id: str | None = None,
     limit: int = 50, offset: int = 0,
 ) -> dict:
     with connect(config) as conn:
@@ -231,6 +232,12 @@ def list_notification_queue(
         if status:
             conditions.append("status = ?")
             params.append(status)
+        if entity_type:
+            conditions.append("entity_type = ?")
+            params.append(entity_type)
+        if entity_id:
+            conditions.append("entity_id = ?")
+            params.append(entity_id)
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         count_row = conn.execute(
             f"SELECT COUNT(*) as cnt FROM notification_queue {where}", params

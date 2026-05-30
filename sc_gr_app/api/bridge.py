@@ -376,6 +376,8 @@ class ApiBridge:
                 self.config,
                 sc_id=payload.get("sc_id"),
                 status=payload.get("status"),
+                entity_type=payload.get("entity_type"),
+                entity_id=payload.get("entity_id"),
                 limit=payload.get("limit", 50),
                 offset=payload.get("offset", 0),
             ))

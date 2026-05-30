@@ -17,6 +17,7 @@
         </el-select>
         <el-input v-model="filters.entity_id" placeholder="Entity ID" clearable style="width:160px" @change="onFilterChange" />
         <el-button @click="handleRefresh" :loading="state.queueLoading">Refresh</el-button>
+        <el-button @click="handleReset">Reset</el-button>
       </div>
     </div>
 
@@ -104,9 +105,19 @@ function formatRecipients(jsonStr) {
 function loadQueue() {
   fetchQueue({
     status: filters.status || null,
+    entity_type: filters.entity_type || null,
+    entity_id: filters.entity_id || null,
     limit: pageSize,
     offset: (currentPage.value - 1) * pageSize
   })
+}
+
+function handleReset() {
+  filters.status = ''
+  filters.entity_type = ''
+  filters.entity_id = ''
+  currentPage.value = 1
+  loadQueue()
 }
 
 function onFilterChange() {
