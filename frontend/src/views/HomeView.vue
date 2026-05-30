@@ -57,7 +57,7 @@ const cards = computed(() => {
   }
   return [
     { title: 'My Pending SCs', rows: pendingScs.value.slice(0, 5), idKey: 'sc_no', idLabel: 'SC No', amountKey: 'sc_amount', amountLabel: 'Amount', link: () => router.push('/sc'), onRowClick: row => router.push(`/sc/${row.sc_id}`) },
-    { title: 'My Drafts', rows: drafts.value.slice(0, 5), idKey: 'sc_id', idLabel: 'SC ID', amountKey: 'sc_amount', amountLabel: 'Amount', link: () => router.push('/sc'), onRowClick: () => {} },
+    { title: 'My Drafts', rows: drafts.value.slice(0, 5), idKey: 'sc_id', idLabel: 'SC ID', amountKey: 'sc_amount', amountLabel: 'Amount', link: () => router.push('/sc'), onRowClick: row => router.push(`/sc/${row.sc_id}`) },
     { title: 'Denied SCs', rows: deniedScs.value.slice(0, 5), idKey: 'sc_no', idLabel: 'SC No', amountKey: 'sc_amount', amountLabel: 'Amount', link: () => router.push('/sc'), onRowClick: row => router.push(`/sc/${row.sc_id}`) },
     { title: 'Active POs', rows: pendingPos.value.slice(0, 5), idKey: 'po_no', idLabel: 'PO No', amountKey: 'po_amount', amountLabel: 'Amount', link: () => router.push('/po'), onRowClick: row => router.push(`/sc/${row.sc_id}/po/${row.po_id}`) }
   ]
