@@ -51,11 +51,11 @@ export function useNotification() {
     state.defaults = data
   }
 
-  async function fetchQueue({ scId, status, limit = 50, offset = 0 } = {}) {
+  async function fetchQueue({ scId, status, entity_type, entity_id, limit = 50, offset = 0 } = {}) {
     state.queueLoading = true
     state.queueError = null
     try {
-      const result = await callApi('list_notification_queue', { sc_id: scId, status, limit, offset })
+      const result = await callApi('list_notification_queue', { sc_id: scId, status, entity_type, entity_id, limit, offset })
       state.queue = result.items
       state.queueTotal = result.total
     } catch (e) {

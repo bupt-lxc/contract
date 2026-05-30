@@ -54,16 +54,7 @@ def _webview2_storage():
 
 def _check_update(window):
     """Async check for updates on startup. Fail silently if unreachable."""
-    # Placeholder — replace UPDATE_URL with actual update server
-    return
-    import requests
-    try:
-        resp = requests.get("UPDATE_URL/latest-version.txt", timeout=3)
-        latest = resp.text.strip()
-        if latest > __version__:
-            window.evaluate_js(f"window.__updateAvailable = {{ version: '{latest}' }}")
-    except Exception:
-        pass
+    # Placeholder — replace UPDATE_URL with actual update server when available
 
 
 def _setup_tray(window):

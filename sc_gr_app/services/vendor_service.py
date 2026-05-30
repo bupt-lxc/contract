@@ -161,15 +161,15 @@ def update_vendor(config: AppConfig, current_user: dict, vendor_id: str, data: d
                     "vendor_name", "ksrm_vendor_code", "contact_person", "phone",
                     "service_scope", "email", "description", "inquiry_history"
                 ]
+                if "service_scope" in data and data["service_scope"] not in SUPPORTED_SERVICE_SCOPES:
+                    raise ValidationError("service_scope is invalid")
+
                 for field in fields:
                     if field in data:
                         conn.execute(
                             f"update vendors set {field} = ?, updated_at = ? where vendor_id = ?",
                             (data[field], timestamp, vendor_id)
                         )
-
-                if "service_scope" in data and data["service_scope"] not in SUPPORTED_SERVICE_SCOPES:
-                    raise ValidationError("service_scope is invalid")
 
                 after = _get_vendor(conn, vendor_id)
                 write_audit_log(

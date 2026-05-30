@@ -113,10 +113,10 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
         raise ValidationError("status is invalid")
 
     sc_id = data["sc_id"]
-    po_id = _generate_po_id(config, current_user["machine_id"])
     timestamp = utc_now()
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        po_id = _generate_po_id(config, current_user["machine_id"])
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")

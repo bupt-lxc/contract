@@ -11,5 +11,3 @@ def require_requester_or_admin(user: dict) -> None:
         raise PermissionDenied("Authorized user required")
 
 
-def can_edit_sc(user: dict, requester_id: str) -> bool:
-    return user.get("role") == "admin" or user.get("user_id") == requester_id
