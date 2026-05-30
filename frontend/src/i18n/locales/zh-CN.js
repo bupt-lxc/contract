@@ -101,7 +101,13 @@ export default {
     notAuthorizedMsg: '此计算机未被授权访问系统。',
     contactAdmin: '请联系管理员。',
     unableToReach: '无法连接数据库。',
-    serverUnreachable: '服务器无法访问，请检查网络连接后重试。'
+    serverUnreachable: '服务器无法访问，请检查网络连接后重试。',
+    selectRole: '请选择进入面板',
+    adminPanel: '管理面板',
+    adminPanelDesc: '全部功能 & 系统管理',
+    requesterPanel: '申请人面板',
+    requesterPanelDesc: '申请 & 查看',
+    switchRole: '切换角色'
   },
 
   home: {

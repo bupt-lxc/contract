@@ -101,7 +101,13 @@ export default {
     notAuthorizedMsg: 'This machine is not authorized to access the system.',
     contactAdmin: 'Contact your administrator.',
     unableToReach: 'Unable to reach the database.',
-    serverUnreachable: 'Server unreachable. Please check your connection and try again.'
+    serverUnreachable: 'Server unreachable. Please check your connection and try again.',
+    selectRole: 'Select panel to enter',
+    adminPanel: 'Admin Panel',
+    adminPanelDesc: 'Full access & system management',
+    requesterPanel: 'Requester Panel',
+    requesterPanelDesc: 'Submit & review requests',
+    switchRole: 'Switch role'
   },
 
   home: {

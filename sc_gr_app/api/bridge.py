@@ -19,6 +19,31 @@ class ApiBridge:
     def __init__(self, config: AppConfig):
         self.config = config
 
+    def is_dev(self, _payload=None) -> dict:
+        return ok(os.getenv("SC_GR_DEV") == "1")
+
+    def switch_dev_role(self, payload) -> dict:
+        """Switch the dev user's role between admin and requester. Dev mode only."""
+        if os.getenv("SC_GR_DEV") != "1":
+            return fail(PermissionDenied("switch_dev_role is only available in dev mode"))
+        try:
+            payload = self._required_payload(payload)
+            role = _require_payload_field(payload, "role")
+            if role not in ("admin", "requester"):
+                return fail(ValidationError("role must be 'admin' or 'requester'"))
+            machine_id = get_7_digit_id()
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                conn.execute(
+                    "UPDATE users SET role = ? WHERE machine_id = ?",
+                    (role, machine_id),
+                )
+                conn.commit()
+            user = get_user_by_machine_id(self.config, machine_id)
+            return ok(user)
+        except Exception as exc:
+            return fail(exc)
+
     def current_user(self, payload=None) -> dict:
         try:
             machine_id = get_7_digit_id()
