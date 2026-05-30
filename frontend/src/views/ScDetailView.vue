@@ -37,6 +37,9 @@
           <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">
             <el-icon><Plus /></el-icon> Add PO
           </el-button>
+          <el-button size="small" @click="handleExportPos">
+            <el-icon><Download /></el-icon> Export
+          </el-button>
         </div>
         <PoTable
           :rows="detail.pos || []"
@@ -48,7 +51,12 @@
       </div>
 
       <div class="section-card">
-        <h3>Audit</h3>
+        <div class="section-header">
+          <h3>Audit</h3>
+          <el-button size="small" @click="handleExportAudit">
+            <el-icon><Download /></el-icon> Export
+          </el-button>
+        </div>
         <el-table :data="detail.audit_logs || []" stripe border size="small">
           <el-table-column prop="created_at" label="Created" width="160">
             <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
@@ -92,10 +100,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
+import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
@@ -111,6 +120,7 @@ const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = u
 const { createPo, updatePo, approvePo, finishPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
+const { exportRows } = useExport()
 
 const scId = computed(() => route.params.id)
 const notificationConfig = computed(() => notifState.scConfig)
@@ -204,6 +214,34 @@ async function handlePoSave(data) {
     await fetchDetail(scId.value)
     poDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+function handleExportPos() {
+  const columns = [
+    { key: 'status', label: 'Status' },
+    { key: 'po_no', label: 'PO No' },
+    { key: 'vendor_name', label: 'Vendor' },
+    { key: 'po_amount', label: 'PO Amount' },
+    { key: 'contract_from', label: 'Contract From', getValue: r => (r.contract_from || '').slice(0, 10) },
+    { key: 'contract_to', label: 'Contract To', getValue: r => (r.contract_to || '').slice(0, 10) }
+  ]
+  const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
+  exportRows(detail.value.pos || [], columns, `${scNo}_POs`)
+  ElMessage.success('Exported successfully')
+}
+
+function handleExportAudit() {
+  const columns = [
+    { key: 'created_at', label: 'Created', getValue: r => (r.created_at || '').slice(0, 19) },
+    { key: 'action_type', label: 'Action' },
+    { key: 'object_type', label: 'Object Type' },
+    { key: 'object_id', label: 'Object ID' },
+    { key: 'operator_id', label: 'Operator' },
+    { key: 'machine_id', label: 'Machine' }
+  ]
+  const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
+  exportRows(detail.value.audit_logs || [], columns, `${scNo}_Audit`)
+  ElMessage.success('Exported successfully')
 }
 
 async function handleNotificationSave(data) {

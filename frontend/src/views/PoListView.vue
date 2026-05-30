@@ -6,6 +6,12 @@
       @reset="handleReset"
     />
 
+    <div style="margin-bottom:12px">
+      <el-button @click="handleExport" :loading="exporting">
+        <el-icon><Download /></el-icon> Export
+      </el-button>
+    </div>
+
     <PoTable
       :rows="state.rows"
       :loading="state.loading"
@@ -38,8 +44,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
+import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
@@ -47,6 +55,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { state, searchPos, createPo, updatePo, approvePo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
+const { exportAll } = useExport()
+const exporting = ref(false)
 
 const vendors = computed(() => vendorState.rows)
 
@@ -114,6 +124,32 @@ async function handlePoSave(data) {
 
 function handlePageChange(page) { onPageChange(page); searchPos() }
 function handleSizeChange(size) { onPageSizeChange(size); searchPos() }
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'status', label: 'Status' },
+      { key: 'po_no', label: 'PO No' },
+      { key: 'sc_no', label: 'SC No' },
+      { key: 'vendor_name', label: 'Vendor' },
+      { key: 'po_amount', label: 'PO Amount' },
+      { key: 'open_po_amount', label: 'Open PO Amount' },
+      { key: 'contract_from', label: 'Contract From', getValue: r => (r.contract_from || '').slice(0, 10) },
+      { key: 'contract_to', label: 'Contract To', getValue: r => (r.contract_to || '').slice(0, 10) }
+    ]
+    await exportAll('search_pos', {
+      filters: state.filters,
+      sort: state.sort,
+      direction: state.direction
+    }, columns, `PO_List_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
+}
 
 onMounted(async () => {
   await Promise.all([searchPos(), searchVendors()])

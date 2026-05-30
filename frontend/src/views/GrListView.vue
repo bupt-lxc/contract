@@ -6,6 +6,12 @@
       @reset="handleReset"
     />
 
+    <div style="margin-bottom:12px">
+      <el-button @click="handleExport" :loading="exporting">
+        <el-icon><Download /></el-icon> Export
+      </el-button>
+    </div>
+
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column label="Status" width="100">
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -37,13 +43,18 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import { Download } from '@element-plus/icons-vue'
 import { useGr } from '@/composables/useGr.js'
+import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import { ElMessage } from 'element-plus'
 
 const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
+const { exportAll } = useExport()
+const exporting = ref(false)
 
 const grStatuses = [
   { label: 'Pending', value: 'pending' }, { label: 'Approved', value: 'approved' }, { label: 'Cancelled', value: 'cancelled' }
@@ -71,6 +82,31 @@ function handleReset() {
 
 function handlePageChange(page) { onPageChange(page); searchGrs() }
 function handleSizeChange(size) { onPageSizeChange(size); searchGrs() }
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'status', label: 'Status' },
+      { key: 'gr_id', label: 'GR ID' },
+      { key: 'po_no', label: 'PO No' },
+      { key: 'sc_no', label: 'SC No' },
+      { key: 'vendor_name', label: 'Vendor' },
+      { key: 'estimated_amount', label: 'Estimated' },
+      { key: 'con_value', label: 'Con Value' }
+    ]
+    await exportAll('search_grs', {
+      filters: state.filters,
+      sort: state.sort,
+      direction: state.direction
+    }, columns, `GR_List_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success('Exported successfully')
+  } catch (e) {
+    ElMessage.error(e.message || 'Export failed')
+  } finally {
+    exporting.value = false
+  }
+}
 
 onMounted(() => searchGrs())
 </script>

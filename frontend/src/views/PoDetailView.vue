@@ -37,6 +37,9 @@
           <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> Add GR
           </el-button>
+          <el-button size="small" @click="handleExportGrs">
+            <el-icon><Download /></el-icon> Export
+          </el-button>
         </div>
         <GrTable
           :rows="grs"
@@ -67,8 +70,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
+import { useExport } from '@/composables/useExport.js'
 import { usePo } from '@/composables/usePo.js'
 import { useGr } from '@/composables/useGr.js'
 import { useVendor } from '@/composables/useVendor.js'
@@ -84,6 +88,7 @@ const { state: scState, fetchDetail } = useSc()
 const { updatePo, approvePo, finishPo } = usePo()
 const { createGr, updateGr, approveGr, cancelGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
+const { exportRows } = useExport()
 
 const scId = computed(() => route.params.scId)
 const poId = computed(() => route.params.poId)
@@ -156,6 +161,20 @@ async function handleGrCancel(row) {
     ElMessage.success('GR cancelled')
     await fetchDetail(scId.value)
   } catch {}
+}
+
+function handleExportGrs() {
+  const columns = [
+    { key: 'status', label: 'Status' },
+    { key: 'gr_id', label: 'GR ID' },
+    { key: 'requester_id', label: 'Requester' },
+    { key: 'estimated_amount', label: 'Estimated' },
+    { key: 'con_value', label: 'Con Value' },
+    { key: 'remark', label: 'Remark' }
+  ]
+  const poNo = po.value?.po_no || po.value?.po_id || 'PO'
+  exportRows(grs.value, columns, `${poNo}_GRs`)
+  ElMessage.success('Exported successfully')
 }
 
 async function handleGrSave(data) {
