@@ -454,6 +454,19 @@ export default {
     saved: '已保存'
   },
 
+  attachment: {
+    attachments: '附件',
+    addAttachment: '添加附件',
+    filename: '文件名',
+    fileSize: '大小',
+    uploadedBy: '上传者',
+    uploadedAt: '上传时间',
+    noAttachments: '暂无附件',
+    deleteConfirm: '确认删除此附件？',
+    openFile: '打开附件',
+    deleteAttachment: '删除附件'
+  },
+
   exportCol: {
     status: '状态',
     scNo: '供应链编号',

@@ -33,6 +33,16 @@
 
       <div class="section-card">
         <div class="section-header">
+          <h3>{{ $t('attachment.attachments') }}</h3>
+        </div>
+        <AttachmentList
+          entity-type="sc"
+          :entity-id="detail.sc.sc_id"
+        />
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
@@ -112,6 +122,7 @@ import ScDetailCard from '@/components/sc/ScDetailCard.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
+import AttachmentList from '@/components/common/AttachmentList.vue'
 import ScNotificationCard from '@/components/notification/ScNotificationCard.vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -79,6 +79,12 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     subject = templates.build_subject(entry, entity_info)
     body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map})
 
+    # Look up attachments for this entity
+    attachment_rows = conn.execute(
+        "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
+        (entity_type, entity_id),
+    ).fetchall()
+
     pythoncom.CoInitialize()
     try:
         outlook = win32com.client.Dispatch("Outlook.Application")
@@ -88,6 +94,13 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         mail.To = "; ".join(to_addresses)
         if cc_addresses:
             mail.CC = "; ".join(cc_addresses)
+        for att in attachment_rows:
+            try:
+                mail.Attachments.Add(att["stored_path"])
+            except Exception:
+                logger.warning(
+                    "Failed to attach %s for queue entry %s", att["filename"], entry["id"]
+                )
         if _draft_mode:
             mail.Save()
             logger.info("Saved queue entry %s to Drafts: %s", entry["id"], subject)

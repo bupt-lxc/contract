@@ -454,6 +454,19 @@ export default {
     saved: 'Saved'
   },
 
+  attachment: {
+    attachments: 'Attachments',
+    addAttachment: 'Add Attachment',
+    filename: 'Filename',
+    fileSize: 'Size',
+    uploadedBy: 'Uploaded By',
+    uploadedAt: 'Uploaded At',
+    noAttachments: 'No attachments',
+    deleteConfirm: 'Delete this attachment?',
+    openFile: 'Open',
+    deleteAttachment: 'Delete'
+  },
+
   exportCol: {
     status: 'Status',
     scNo: 'SC No',

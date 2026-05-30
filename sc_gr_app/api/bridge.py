@@ -443,3 +443,158 @@ class ApiBridge:
             ))
         except Exception as exc:
             return fail(exc)
+
+    # ── Attachment APIs ──────────────────────────────────────────────
+
+    def _attachments_dir(self) -> Path:
+        from pathlib import Path
+        return Path(self.config.db_path).parent / "attachments"
+
+    def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str) -> Path:
+        import os as _os
+        target_dir = self._attachments_dir() / entity_type / entity_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / filename
+        # Handle filename conflicts with _1, _2, etc.
+        if not target.exists():
+            return target
+        stem, ext = _os.path.splitext(filename)
+        counter = 1
+        while True:
+            candidate = target_dir / f"{stem}_{counter}{ext}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
+    def select_files(self, payload) -> dict:
+        """Open native file picker, copy selected files to attachments dir."""
+        try:
+            import shutil
+            import tkinter.filedialog as fd
+            import tkinter as tk
+            from datetime import datetime, timezone
+
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+            current_user = self._require_current_user()
+
+            if entity_type not in ("sc", "po", "gr"):
+                return fail(ValidationError("entity_type must be 'sc', 'po', or 'gr'"))
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            file_paths = fd.askopenfilenames(title="Select files to attach")
+            root.destroy()
+
+            if not file_paths:
+                return ok([])
+
+            timestamp = datetime.now(timezone.utc).isoformat()
+            results = []
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                for src in file_paths:
+                    src_path = Path(src)
+                    filename = src_path.name
+                    dest = self._resolve_target_path(entity_type, entity_id, filename)
+                    shutil.copy2(src_path, dest)
+                    conn.execute(
+                        "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            entity_type, entity_id, dest.name,
+                            str(dest), dest.stat().st_size,
+                            current_user["user_id"], timestamp,
+                        ),
+                    )
+                    results.append({
+                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "filename": dest.name,
+                        "stored_path": str(dest),
+                        "file_size": dest.stat().st_size,
+                        "created_by": current_user["user_id"],
+                        "created_at": timestamp,
+                    })
+                conn.commit()
+            return ok(results)
+        except Exception as exc:
+            return fail(exc)
+
+    def list_attachments(self, payload) -> dict:
+        """List all attachments for a given entity."""
+        try:
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+            self._require_current_user()
+
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                rows = conn.execute(
+                    "SELECT id, entity_type, entity_id, filename, file_size, created_by, created_at "
+                    "FROM attachments WHERE entity_type = ? AND entity_id = ? "
+                    "ORDER BY created_at DESC",
+                    (entity_type, entity_id),
+                ).fetchall()
+            return ok([{
+                "id": r["id"],
+                "entity_type": r["entity_type"],
+                "entity_id": r["entity_id"],
+                "filename": r["filename"],
+                "file_size": r["file_size"],
+                "created_by": r["created_by"],
+                "created_at": r["created_at"],
+            } for r in rows])
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_attachment(self, payload) -> dict:
+        """Delete an attachment record and its file from disk."""
+        try:
+            payload = self._required_payload(payload)
+            attachment_id = _require_payload_field(payload, "id")
+            self._require_current_user()
+
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT id, stored_path FROM attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+                if not row:
+                    return fail(NotFound(f"Attachment {attachment_id} not found"))
+                stored_path = row["stored_path"]
+                conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+                conn.commit()
+            try:
+                Path(stored_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            return ok({"deleted": True})
+        except Exception as exc:
+            return fail(exc)
+
+    def open_attachment(self, payload) -> dict:
+        """Open an attachment file with the OS default handler."""
+        try:
+            import os as _os
+            payload = self._required_payload(payload)
+            attachment_id = _require_payload_field(payload, "id")
+            self._require_current_user()
+
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT id, stored_path FROM attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            if not row:
+                return fail(NotFound(f"Attachment {attachment_id} not found"))
+            _os.startfile(row["stored_path"])
+            return ok({"opened": True})
+        except Exception as exc:
+            return fail(exc)

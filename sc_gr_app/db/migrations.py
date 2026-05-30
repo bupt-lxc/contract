@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -378,6 +378,26 @@ def _migrate_v4(conn) -> None:
     _record(conn, 4)
 
 
+def _migrate_v5(conn) -> None:
+    # attachments table for SC/PO/GR file attachments
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            stored_path TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id)"
+    )
+    _record(conn, 5)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -409,6 +429,10 @@ def migrate(config: AppConfig) -> None:
             if 4 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v4(conn)
+                conn.commit()
+            if 5 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v5(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

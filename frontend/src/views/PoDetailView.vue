@@ -33,6 +33,16 @@
 
       <div class="section-card">
         <div class="section-header">
+          <h3>{{ $t('attachment.attachments') }}</h3>
+        </div>
+        <AttachmentList
+          entity-type="po"
+          :entity-id="po.po_id"
+        />
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
           <h3>{{ $t('gr.grRecords') }}</h3>
           <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
@@ -46,9 +56,16 @@
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @cancel="row => handleGrCancel(row)"
+          @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
       </div>
     </template>
+
+    <AttachmentDialog
+      v-model:visible="grAttachVisible"
+      entity-type="gr"
+      :entity-id="grAttachRecord?.gr_id || ''"
+    />
 
     <PoFormDialog
       v-model:visible="editDialogVisible"
@@ -81,6 +98,8 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import GrTable from '@/components/po/GrTable.vue'
+import AttachmentList from '@/components/common/AttachmentList.vue'
+import AttachmentDialog from '@/components/common/AttachmentDialog.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -109,6 +128,8 @@ const editDialogVisible = ref(false)
 const grDialogVisible = ref(false)
 const grDialogMode = ref('create')
 const grDialogRecord = ref(null)
+const grAttachVisible = ref(false)
+const grAttachRecord = ref(null)
 
 function openEditDialog() { editDialogVisible.value = true }
 

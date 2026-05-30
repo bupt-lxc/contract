@@ -15,7 +15,7 @@
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110">
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
     </el-table-column>
-    <el-table-column :label="$t('gr.actions')" width="180" fixed="right">
+    <el-table-column :label="$t('gr.actions')" width="220" fixed="right">
       <template #default="{ row }">
         <el-button type="primary" link size="small" @click="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
         <el-button v-if="row.status === 'pending'" type="success" link size="small" @click="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
@@ -24,6 +24,9 @@
             <el-button type="danger" link size="small">{{ $t('gr.cancel') }}</el-button>
           </template>
         </el-popconfirm>
+        <el-button type="info" link size="small" @click="$emit('attachments', row)">
+          <el-icon><Paperclip /></el-icon>
+        </el-button>
       </template>
     </el-table-column>
     <template #empty><el-empty :description="$t('gr.noRecordsForPo')" /></template>
@@ -31,11 +34,12 @@
 </template>
 
 <script setup>
+import { Paperclip } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['edit', 'approve', 'cancel'])
+defineEmits(['edit', 'approve', 'cancel', 'attachments'])
 
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>
