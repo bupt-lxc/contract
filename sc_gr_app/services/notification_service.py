@@ -8,7 +8,7 @@ from sc_gr_app.errors import AppError
 
 def _utc_now() -> str:
     from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).isoformat()
 
 
 class QueueWriteError(AppError):

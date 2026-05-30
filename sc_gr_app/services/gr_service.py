@@ -176,9 +176,9 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
         sc_id = lookup["sc_id"]
 
     timestamp = utc_now()
-    gr_id = _generate_gr_id(config, current_user["machine_id"])
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        gr_id = _generate_gr_id(config, current_user["machine_id"])
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -432,6 +432,8 @@ def update_gr(
                         raise ValidationError("No GR fields to update")
 
                     merged = {**before, **allowed}
+                    if merged.get("con_value") is None:
+                        raise ValidationError("con_value is required for approved GR")
                     con_value = _non_negative_number(
                         merged["con_value"],
                         "con_value",

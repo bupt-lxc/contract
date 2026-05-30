@@ -303,6 +303,7 @@ def search_vendors(
             "vendor_name": "vendor_name",
             "ksrm_vendor_code": "ksrm_vendor_code",
             "service_scope": "service_scope",
+            "status": "status",
             "created_by": "created_by",
             "contact_person": "contact_person",
             "email": "email",
@@ -323,6 +324,8 @@ def search_vendors(
         direction=direction,
         limit=limit,
         offset=offset,
+        base_clauses=["(status IS NULL OR status != 'disabled')"],
+        base_params=[],
         like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "service_scope", "contact_person", "email"},
     )
 
