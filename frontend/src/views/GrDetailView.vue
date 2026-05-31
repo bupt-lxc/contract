@@ -48,6 +48,7 @@
           :parent-sc-id="scId"
           :parent-po-id="poId"
           :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 

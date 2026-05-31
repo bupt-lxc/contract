@@ -39,6 +39,7 @@
           entity-type="sc"
           :entity-id="detail.sc.sc_id"
           :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 
