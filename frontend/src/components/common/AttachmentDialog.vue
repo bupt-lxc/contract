@@ -9,6 +9,8 @@
       v-if="visible"
       :entity-type="entityType"
       :entity-id="entityId"
+      :parent-sc-id="parentScId"
+      :parent-po-id="parentPoId"
       @changed="$emit('changed')"
     />
     <template #footer>
@@ -23,7 +25,9 @@ import AttachmentList from '@/components/common/AttachmentList.vue'
 defineProps({
   visible: { type: Boolean, default: false },
   entityType: { type: String, required: true },
-  entityId: { type: String, required: true }
+  entityId: { type: String, required: true },
+  parentScId: { type: String, default: null },
+  parentPoId: { type: String, default: null }
 })
 
 defineEmits(['update:visible', 'changed'])

@@ -38,6 +38,7 @@
         <AttachmentList
           entity-type="po"
           :entity-id="po.po_id"
+          :parent-sc-id="scId"
         />
       </div>
 
@@ -66,6 +67,8 @@
       v-model:visible="grAttachVisible"
       entity-type="gr"
       :entity-id="grAttachRecord?.gr_id || ''"
+      :parent-sc-id="scId"
+      :parent-po-id="poId"
     />
 
     <PoFormDialog
@@ -140,7 +143,7 @@ async function handleEditSave(data) {
     const targetPoId = formData.po_id || poId.value
     await updatePo(targetPoId, formData)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments, parent_sc_id: scId.value })
     }
     ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
@@ -218,7 +221,7 @@ async function handleGrSave(data) {
       await updateGr(grId, formData)
     }
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

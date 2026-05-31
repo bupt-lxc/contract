@@ -53,7 +53,9 @@ import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   entityType: { type: String, required: true },
-  entityId: { type: String, required: true }
+  entityId: { type: String, required: true },
+  parentScId: { type: String, default: null },
+  parentPoId: { type: String, default: null }
 })
 
 const emit = defineEmits(['changed'])
@@ -90,7 +92,9 @@ async function handleAddFiles() {
   try {
     const result = await callApi('select_files', {
       entity_type: props.entityType,
-      entity_id: props.entityId
+      entity_id: props.entityId,
+      parent_sc_id: props.parentScId,
+      parent_po_id: props.parentPoId,
     })
     if (result && result.length > 0) {
       ElMessage.success(t('attachment.addAttachment') + ' (' + result.length + ')')

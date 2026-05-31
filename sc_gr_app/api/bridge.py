@@ -485,6 +485,8 @@ class ApiBridge:
             entity_type = _require_payload_field(payload, "entity_type")
             entity_id = _require_payload_field(payload, "entity_id")
             file_paths = _require_payload_field(payload, "file_paths")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
             current_user = self._require_current_user()
 
             if entity_type not in ("sc", "po", "gr"):
@@ -500,7 +502,10 @@ class ApiBridge:
                     src = Path(fp)
                     if not src.exists():
                         continue
-                    dest = self._resolve_target_path(entity_type, entity_id, src.name)
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, src.name,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
                     shutil.copy2(src, dest)
                     conn.execute(
                         "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
@@ -526,9 +531,27 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str) -> Path:
+    def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str,
+                              parent_sc_id: str = None, parent_po_id: str = None) -> Path:
         import os as _os
-        target_dir = self._attachments_dir() / entity_type / entity_id
+
+        # Build hierarchical path:
+        #   attachments/sc/<sc_id>/                  for SC
+        #   attachments/sc/<sc_id>/po/<po_id>/        for PO (under its SC)
+        #   attachments/sc/<sc_id>/po/<po_id>/gr/<gr_id>/  for GR (under its PO)
+        base = self._attachments_dir()
+        if entity_type == "sc":
+            target_dir = base / "sc" / entity_id
+        elif entity_type == "po":
+            pid = parent_sc_id or "unknown-sc"
+            target_dir = base / "sc" / pid / "po" / entity_id
+        elif entity_type == "gr":
+            sid = parent_sc_id or "unknown-sc"
+            pid = parent_po_id or "unknown-po"
+            target_dir = base / "sc" / sid / "po" / pid / "gr" / entity_id
+        else:
+            target_dir = base / entity_type / entity_id
+
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / filename
         # Handle filename conflicts with _1, _2, etc.
@@ -553,6 +576,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             entity_type = _require_payload_field(payload, "entity_type")
             entity_id = _require_payload_field(payload, "entity_id")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
             current_user = self._require_current_user()
 
             if entity_type not in ("sc", "po", "gr"):
@@ -574,7 +599,10 @@ class ApiBridge:
                 for src in file_paths:
                     src_path = Path(src)
                     filename = src_path.name
-                    dest = self._resolve_target_path(entity_type, entity_id, filename)
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, filename,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
                     shutil.copy2(src_path, dest)
                     conn.execute(
                         "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "

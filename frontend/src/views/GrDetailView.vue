@@ -45,6 +45,8 @@
         <AttachmentList
           entity-type="gr"
           :entity-id="gr.gr_id"
+          :parent-sc-id="scId"
+          :parent-po-id="poId"
         />
       </div>
 

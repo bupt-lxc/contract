@@ -232,7 +232,7 @@ async function handlePoSave(data) {
       await updatePo(poId, formData)
     }
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId.value })
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
