@@ -6,6 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
+from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
 
 
@@ -14,6 +15,18 @@ def _require_payload_field(payload: dict, field: str):
     if value is None or value == "":
         raise ValidationError(f"{field} is required")
     return value
+
+
+def _attachment_sc_id(entity_type: str, entity_id: str,
+                      parent_sc_id: str = None, parent_po_id: str = None) -> str | None:
+    """Resolve the sc_id that an attachment belongs to."""
+    if entity_type == "sc":
+        return entity_id
+    if entity_type == "po":
+        return parent_sc_id or None
+    if entity_type == "gr":
+        return parent_sc_id or None
+    return None
 
 
 class ApiBridge:
@@ -496,6 +509,7 @@ class ApiBridge:
 
             timestamp = datetime.now(timezone.utc).isoformat()
             results = []
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 for fp in file_paths:
@@ -516,8 +530,9 @@ class ApiBridge:
                             current_user["user_id"], timestamp,
                         ),
                     )
-                    results.append({
-                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
                         "entity_type": entity_type,
                         "entity_id": entity_id,
                         "filename": dest.name,
@@ -525,7 +540,19 @@ class ApiBridge:
                         "file_size": dest.stat().st_size,
                         "created_by": current_user["user_id"],
                         "created_at": timestamp,
-                    })
+                    }
+                    results.append(attach_record)
+                    write_audit_log(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
                 conn.commit()
             return ok(results)
         except Exception as exc:
@@ -594,6 +621,7 @@ class ApiBridge:
 
             timestamp = datetime.now(timezone.utc).isoformat()
             results = []
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 for src in file_paths:
@@ -613,8 +641,9 @@ class ApiBridge:
                             current_user["user_id"], timestamp,
                         ),
                     )
-                    results.append({
-                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
                         "entity_type": entity_type,
                         "entity_id": entity_id,
                         "filename": dest.name,
@@ -622,7 +651,19 @@ class ApiBridge:
                         "file_size": dest.stat().st_size,
                         "created_by": current_user["user_id"],
                         "created_at": timestamp,
-                    })
+                    }
+                    results.append(attach_record)
+                    write_audit_log(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
                 conn.commit()
             return ok(results)
         except Exception as exc:
@@ -661,16 +702,59 @@ class ApiBridge:
         try:
             payload = self._required_payload(payload)
             attachment_id = _require_payload_field(payload, "id")
-            self._require_current_user()
+            current_user = self._require_current_user()
 
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 row = conn.execute(
-                    "SELECT id, stored_path FROM attachments WHERE id = ?",
+                    "SELECT id, entity_type, entity_id, filename, stored_path, file_size, created_by, created_at "
+                    "FROM attachments WHERE id = ?",
                     (attachment_id,),
                 ).fetchone()
                 if not row:
                     return fail(NotFound(f"Attachment {attachment_id} not found"))
+
+                # Resolve sc_id for audit
+                sc_id = None
+                if row["entity_type"] == "sc":
+                    sc_id = row["entity_id"]
+                elif row["entity_type"] == "po":
+                    sc_lookup = conn.execute(
+                        "SELECT sc_id FROM pos WHERE po_id = ?", (row["entity_id"],)
+                    ).fetchone()
+                    if sc_lookup:
+                        sc_id = sc_lookup["sc_id"]
+                elif row["entity_type"] == "gr":
+                    sc_lookup = conn.execute(
+                        "SELECT po.sc_id FROM gr_requests gr "
+                        "JOIN pos po ON po.po_id = gr.po_id "
+                        "WHERE gr.gr_id = ?", (row["entity_id"],)
+                    ).fetchone()
+                    if sc_lookup:
+                        sc_id = sc_lookup["sc_id"]
+
+                before = {
+                    "id": row["id"],
+                    "entity_type": row["entity_type"],
+                    "entity_id": row["entity_id"],
+                    "filename": row["filename"],
+                    "stored_path": row["stored_path"],
+                    "file_size": row["file_size"],
+                    "created_by": row["created_by"],
+                    "created_at": row["created_at"],
+                }
+                write_audit_log(
+                    conn,
+                    action_type="delete_attachment",
+                    object_type="attachment",
+                    object_id=str(attachment_id),
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+
                 stored_path = row["stored_path"]
                 conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
                 conn.commit()
