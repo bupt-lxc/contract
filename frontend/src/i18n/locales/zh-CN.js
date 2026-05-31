@@ -305,7 +305,8 @@ export default {
     machine: '机器',
     mode: '模式',
     noRecords: '暂无审计日志。',
-    noRecordsInSc: '暂无审计记录。'
+    noRecordsInSc: '暂无审计记录。',
+    changes: '变更详情'
   },
 
   email: {
