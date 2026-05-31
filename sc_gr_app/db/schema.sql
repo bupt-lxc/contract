@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   machine_id TEXT NOT NULL,
   before_json TEXT,
   after_json TEXT,
+  changes_summary TEXT,
   operation_mode TEXT NOT NULL DEFAULT 'normal',
   created_at TEXT NOT NULL
 );

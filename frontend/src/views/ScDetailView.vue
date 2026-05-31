@@ -76,7 +76,7 @@
           <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
           <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
           <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="120" />
+          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
           <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
         </el-table>
       </div>

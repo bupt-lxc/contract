@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -372,9 +372,12 @@ def _migrate_v3(conn) -> None:
 
 def _migrate_v4(conn) -> None:
     # Add status column to vendors table for enable/disable support
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
-    if "status" not in existing:
-        conn.execute("ALTER TABLE vendors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='vendors'"
+    ).fetchone():
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
+        if "status" not in existing:
+            conn.execute("ALTER TABLE vendors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
     _record(conn, 4)
 
 
@@ -396,6 +399,19 @@ def _migrate_v5(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id)"
     )
     _record(conn, 5)
+
+
+def _migrate_v6(conn) -> None:
+    # add changes_summary column to audit_logs for human-readable change details
+    if conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
+    ).fetchone():
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_logs)")}
+        if "changes_summary" not in existing:
+            conn.execute(
+                "ALTER TABLE audit_logs ADD COLUMN changes_summary TEXT"
+            )
+    _record(conn, 6)
 
 
 def migrate(config: AppConfig) -> None:
@@ -433,6 +449,10 @@ def migrate(config: AppConfig) -> None:
             if 5 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v5(conn)
+                conn.commit()
+            if 6 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v6(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

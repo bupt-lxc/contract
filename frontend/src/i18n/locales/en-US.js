@@ -305,7 +305,8 @@ export default {
     machine: 'Machine',
     mode: 'Mode',
     noRecords: 'No audit logs found.',
-    noRecordsInSc: 'No audit records.'
+    noRecordsInSc: 'No audit records.',
+    changes: 'Changes'
   },
 
   email: {
