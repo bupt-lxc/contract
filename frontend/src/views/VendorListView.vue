@@ -110,6 +110,7 @@ async function handleSave(data) {
     } else {
       await updateVendor(data.vendor_id, data)
     }
+    ElMessage.success(t('common.saved'))
     dialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }

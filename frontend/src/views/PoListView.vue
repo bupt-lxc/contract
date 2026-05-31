@@ -129,6 +129,8 @@ async function handlePoSave(data) {
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId })
     }
+    ElMessage.success(t('common.saved'))
+    poDialogVisible.value = false
     await searchPos()
   } catch (e) {
     ElMessage.error(e.message)

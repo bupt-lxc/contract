@@ -155,6 +155,7 @@ async function handleEditSave(data) {
     }
     ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
+    editDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
