@@ -16,6 +16,7 @@ Windows desktop app (Python 3.11 + pywebview + SQLite) for department-side SC bu
 - Before starting ANY code change, verify you are NOT on `main` (`git branch --show-current`)
 - If on `main` when work is requested, immediately switch to a new feature/fix branch
 - Only merge to `main` after the feature or fix is complete and verified
+- When merging to `main`, always use `git merge --no-ff <branch>` to preserve branch history
 - Do NOT push to remote or create PRs unless the user explicitly commands it
 
 ## Commands
