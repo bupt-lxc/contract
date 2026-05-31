@@ -218,7 +218,10 @@ export default {
     approve: 'Approve',
     finish: 'Finish',
     vendorRequired: 'Vendor is required',
-    poAmountRequired: 'PO Amount is required'
+    poAmountRequired: 'PO Amount is required',
+    revoke: 'Rollback',
+    confirmRevoke: 'Roll back this PO?',
+    revoked: 'Rolled back'
   },
 
   gr: {
@@ -260,7 +263,10 @@ export default {
     createdBy: 'Created By',
     invalidNumber: 'Enter a valid positive number',
     requesterRequired: 'Requester is required',
-    estimatedAmountRequired: 'Estimated Amount is required'
+    estimatedAmountRequired: 'Estimated Amount is required',
+    revoke: 'Rollback',
+    confirmRevoke: 'Roll back this GR?',
+    revoked: 'Rolled back'
   },
 
   vendor: {

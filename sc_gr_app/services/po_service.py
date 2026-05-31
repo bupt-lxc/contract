@@ -420,3 +420,52 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 raise
 
     return after
+
+
+def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Roll back PO status. po_approved→po_pending, finished→po_approved (admin only)."""
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+
+                if before["status"] == "po_approved":
+                    new_status = "po_pending"
+                elif before["status"] == "finished":
+                    new_status = "po_approved"
+                else:
+                    raise ConflictError("PO must be approved or finished to revoke")
+
+                timestamp = utc_now()
+                conn.execute(
+                    "update pos set status = ?, updated_at = ? where po_id = ?",
+                    (new_status, timestamp, po_id),
+                )
+                after = _get_po_or_raise(conn, po_id)
+                write_audit_log(
+                    conn,
+                    action_type="revoke_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "po", po_id, "revoke",
+                    {"requester_id": before.get("requester_id")}, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after

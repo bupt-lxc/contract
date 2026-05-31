@@ -218,7 +218,10 @@ export default {
     approve: '批准',
     finish: '完成',
     vendorRequired: '供应商为必填项',
-    poAmountRequired: '采购订单金额为必填项'
+    poAmountRequired: '采购订单金额为必填项',
+    revoke: '回退',
+    confirmRevoke: '确认回退此采购订单？',
+    revoked: '已回退'
   },
 
   gr: {
@@ -260,7 +263,10 @@ export default {
     createdBy: '创建者',
     invalidNumber: '请输入有效的正数',
     requesterRequired: '申请人为必填项',
-    estimatedAmountRequired: '预估金额为必填项'
+    estimatedAmountRequired: '预估金额为必填项',
+    revoke: '回退',
+    confirmRevoke: '确认回退此收货记录？',
+    revoked: '已回退'
   },
 
   vendor: {

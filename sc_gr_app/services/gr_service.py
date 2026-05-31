@@ -555,3 +555,71 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return after
+
+
+def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    """Roll back GR status. approved→pending, cancelled→pending (admin only)."""
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                _require_editable_parent_sc(conn, sc_id)
+                before = _get_gr(conn, gr_id)
+
+                if before["status"] == "approved":
+                    new_status = "pending"
+                    timestamp = utc_now()
+                    conn.execute(
+                        """update gr_requests
+                        set status = 'pending',
+                            con_value = NULL,
+                            approved_by = NULL,
+                            approved_at = NULL
+                        where gr_id = ?""",
+                        (gr_id,),
+                    )
+                elif before["status"] == "cancelled":
+                    new_status = "pending"
+                    timestamp = utc_now()
+                    conn.execute(
+                        """update gr_requests
+                        set status = 'pending',
+                            cancelled_by = NULL,
+                            cancelled_at = NULL
+                        where gr_id = ?""",
+                        (gr_id,),
+                    )
+                else:
+                    raise ConflictError("GR must be approved or cancelled to revoke")
+
+                after = _get_gr(conn, gr_id)
+                write_audit_log(
+                    conn,
+                    action_type="revoke_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (sc_id,),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "gr", gr_id, "revoke",
+                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after

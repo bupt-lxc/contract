@@ -9,6 +9,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && (gr.status === 'approved' || gr.status === 'cancelled')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
       </div>
     </div>
 
@@ -159,6 +160,15 @@ async function handleCancel() {
     await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
     await cancelGr(grId.value)
     ElMessage.success(t('gr.grCancelled'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleRevoke() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.revoked'))
     await fetchDetail(scId.value)
   } catch {}
 }

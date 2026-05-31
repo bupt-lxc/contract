@@ -9,6 +9,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
       </div>
     </div>
 
@@ -173,6 +174,15 @@ async function handleFinish() {
     await ElMessageBox.confirm(t('po.finishConfirm'), t('common.confirm'), { type: 'warning' })
     await finishPo(poId.value)
     ElMessage.success(t('po.poFinished'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleRevoke() {
+  try {
+    await ElMessageBox.confirm(t('po.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_po', { po_id: poId.value })
+    ElMessage.success(t('po.revoked'))
     await fetchDetail(scId.value)
   } catch {}
 }

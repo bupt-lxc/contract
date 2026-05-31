@@ -232,6 +232,16 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def revoke_po(self, payload) -> dict:
+        """Roll back PO status (admin only)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.revoke_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
     def create_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -267,6 +277,16 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def revoke_gr(self, payload) -> dict:
+        """Roll back GR status (admin only)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.revoke_gr(self.config, current_user, gr_id))
         except Exception as exc:
             return fail(exc)
 
