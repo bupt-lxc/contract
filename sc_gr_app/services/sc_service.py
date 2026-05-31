@@ -143,6 +143,8 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
+        "can_revoke_sc": is_owner and is_pending,
+        "can_delete_sc": is_owner and is_draft,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
     }
@@ -606,6 +608,133 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 raise
 
     return after
+
+
+def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Move a pending SC back to draft. Only the owner can revoke."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_sc(conn, sc_id)
+                if before["status"] != "pending":
+                    raise ConflictError("SC must be pending to revoke")
+                if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner can revoke")
+
+                timestamp = utc_now()
+                conn.execute(
+                    "update sc_records set status = 'draft', updated_at = ? where sc_id = ?",
+                    (timestamp, sc_id),
+                )
+                after = _get_sc(conn, sc_id)
+                write_audit_log(
+                    conn,
+                    action_type="revoke_sc",
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "revoke", before, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Delete a draft SC and its attachments. Only the draft owner can delete."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_sc(conn, sc_id)
+                if before["status"] != "draft":
+                    raise ConflictError("Only draft SC can be deleted")
+                if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the draft owner can delete")
+
+                # Collect attachment file paths before deleting DB records
+                attach_rows = conn.execute(
+                    "SELECT stored_path FROM attachments WHERE entity_type = 'sc' AND entity_id = ?",
+                    (sc_id,),
+                ).fetchall()
+                attach_paths = [row["stored_path"] for row in attach_rows]
+
+                # Also collect PO/GR attachments under this SC
+                po_ids = [row["po_id"] for row in conn.execute(
+                    "SELECT po_id FROM pos WHERE sc_id = ?", (sc_id,),
+                )]
+                for po_id in po_ids:
+                    gr_rows = conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    ).fetchall()
+                    attach_paths.extend(row["stored_path"] for row in gr_rows)
+                    po_attach = conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    ).fetchall()
+                    attach_paths.extend(row["stored_path"] for row in po_attach)
+
+                # Delete attachment DB records for this SC and its POs/GRs
+                conn.execute(
+                    "DELETE FROM attachments WHERE entity_type = 'sc' AND entity_id = ?",
+                    (sc_id,),
+                )
+                for po_id in po_ids:
+                    conn.execute(
+                        "DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    )
+                # Delete GRs → POs → SC
+                for po_id in po_ids:
+                    conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
+                    conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
+
+                write_audit_log(
+                    conn,
+                    action_type="delete_sc",
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+
+                # Delete files from disk after successful commit
+                for path in attach_paths:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            except Exception:
+                conn.rollback()
+                raise
+
+    return {"deleted": True, "sc_id": sc_id}
 
 
 def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
