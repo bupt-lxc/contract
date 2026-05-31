@@ -144,7 +144,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
-        "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and is_approved),
+        "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and (is_approved or is_closed)),
         "can_delete_sc": is_owner and is_draft,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
@@ -612,7 +612,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
 
 
 def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    """Roll back SC status. pending→draft (owner/admin), approved→pending (admin only)."""
+    """Roll back SC status. pending→draft (owner/admin), approved→pending / closed→approved (admin only)."""
     require_requester_or_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -632,8 +632,13 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     require_admin(current_user)
                     new_status = "pending"
                     action_type = "rollback_sc"
+                elif before["status"] == "closed":
+                    # closed → approved: admin only
+                    require_admin(current_user)
+                    new_status = "approved"
+                    action_type = "rollback_sc"
                 else:
-                    raise ConflictError("SC must be pending or approved to revoke")
+                    raise ConflictError("SC must be pending, approved or closed to revoke")
 
                 timestamp = utc_now()
                 if new_status == "draft":
@@ -641,9 +646,15 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                         "update sc_records set status = 'draft', updated_at = ? where sc_id = ?",
                         (timestamp, sc_id),
                     )
-                else:
+                elif new_status == "pending":
                     conn.execute(
                         "update sc_records set status = 'pending', approved_by = NULL, approved_at = NULL, updated_at = ? where sc_id = ?",
+                        (timestamp, sc_id),
+                    )
+                else:
+                    # closed → approved: clear closed_at, keep approved_by/approved_at
+                    conn.execute(
+                        "update sc_records set status = 'approved', closed_at = NULL, updated_at = ? where sc_id = ?",
                         (timestamp, sc_id),
                     )
                 after = _get_sc(conn, sc_id)
