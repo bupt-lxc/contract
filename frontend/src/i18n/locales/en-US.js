@@ -470,6 +470,7 @@ export default {
     noAttachments: 'No attachments',
     deleteConfirm: 'Delete this attachment?',
     openFile: 'Open',
+    openFolder: 'Open Folder',
     deleteAttachment: 'Delete'
   },
 

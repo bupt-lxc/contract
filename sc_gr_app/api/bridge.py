@@ -702,3 +702,26 @@ class ApiBridge:
             return ok({"opened": True})
         except Exception as exc:
             return fail(exc)
+
+    def open_attachment_dir(self, payload) -> dict:
+        """Open the attachments directory for an entity in File Explorer."""
+        try:
+            import os as _os
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
+            self._require_current_user()
+
+            # Compute the same directory path used for storing attachments
+            dummy = self._resolve_target_path(
+                entity_type, entity_id, ".dummy",
+                parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+            )
+            target_dir = dummy.parent
+            target_dir.mkdir(parents=True, exist_ok=True)
+            _os.startfile(str(target_dir))
+            return ok({"opened": True})
+        except Exception as exc:
+            return fail(exc)

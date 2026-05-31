@@ -4,6 +4,9 @@
       <el-button size="small" @click="handleAddFiles" :loading="uploading">
         <el-icon><Paperclip /></el-icon> {{ $t('attachment.addAttachment') }}
       </el-button>
+      <el-button size="small" @click="handleOpenFolder">
+        <el-icon><FolderOpened /></el-icon> {{ $t('attachment.openFolder') }}
+      </el-button>
     </div>
 
     <el-table
@@ -47,7 +50,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Paperclip } from '@element-plus/icons-vue'
+import { Paperclip, FolderOpened } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { ElMessage } from 'element-plus'
 
@@ -105,6 +108,19 @@ async function handleAddFiles() {
     ElMessage.error(e.message)
   } finally {
     uploading.value = false
+  }
+}
+
+async function handleOpenFolder() {
+  try {
+    await callApi('open_attachment_dir', {
+      entity_type: props.entityType,
+      entity_id: props.entityId,
+      parent_sc_id: props.parentScId,
+      parent_po_id: props.parentPoId,
+    })
+  } catch (e) {
+    ElMessage.error(e.message)
   }
 }
 

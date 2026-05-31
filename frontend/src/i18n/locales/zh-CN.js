@@ -470,6 +470,7 @@ export default {
     noAttachments: '暂无附件',
     deleteConfirm: '确认删除此附件？',
     openFile: '打开附件',
+    openFolder: '打开文件夹',
     deleteAttachment: '删除附件'
   },
 
