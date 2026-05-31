@@ -6,7 +6,7 @@
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
       </div>
