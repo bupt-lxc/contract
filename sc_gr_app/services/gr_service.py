@@ -3,8 +3,8 @@ from decimal import Decimal
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.errors import ConflictError, NotFound, ValidationError
-from sc_gr_app.rbac import require_admin
+from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
+from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import (
@@ -157,7 +157,7 @@ def _validate_gr_creation_context(
 
 
 def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     estimated_amount = _positive_number(
         data["estimated_amount"],
@@ -168,12 +168,16 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
 
     with connect(config) as lookup_conn:
         lookup = lookup_conn.execute(
-            "select sc_id from pos where po_id = ?",
+            "select pos.sc_id, sc.requester_id as sc_requester "
+            "from pos join sc_records sc on sc.sc_id = pos.sc_id "
+            "where pos.po_id = ?",
             (po_id,),
         ).fetchone()
         if lookup is None:
             raise NotFound(f"PO not found: {po_id}")
         sc_id = lookup["sc_id"]
+        if current_user["role"] != "admin" and lookup["sc_requester"] != current_user["user_id"]:
+            raise PermissionDenied("Only the SC owner or admin can create GRs")
 
     timestamp = utc_now()
 
@@ -338,10 +342,24 @@ def update_gr(
     gr_id: str,
     data: dict,
 ) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
-        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+        lookup = lookup_conn.execute(
+            """
+            select po.sc_id, sc.requester_id as sc_requester
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            join sc_records sc on sc.sc_id = po.sc_id
+            where gr.gr_id = ?
+            """,
+            (gr_id,),
+        ).fetchone()
+        if lookup is None:
+            raise NotFound(f"GR not found: {gr_id}")
+        sc_id = lookup["sc_id"]
+        if current_user["role"] != "admin" and lookup["sc_requester"] != current_user["user_id"]:
+            raise PermissionDenied("Only the SC owner or admin can edit GRs")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
