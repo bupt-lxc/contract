@@ -855,13 +855,13 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
     assert submitted["sc_no"] is None
 
 
-def test_owner_cannot_edit_pending_sc(app_config):
+def test_owner_can_edit_pending_sc(app_config):
     migrate(app_config)
     seed_users(app_config)
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
 
-    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1", "sc_no": "SC-001"})
     sc_id = created["sc_id"]
     submit_sc(
         app_config,
@@ -876,8 +876,9 @@ def test_owner_cannot_edit_pending_sc(app_config):
         },
     )
 
-    with pytest.raises(PermissionDenied):
-        update_sc(app_config, USER, sc_id, {"description": "late change"})
+    # Owner can now edit their own pending SC
+    result = update_sc(app_config, USER, sc_id, {"description": "late change"})
+    assert result["description"] == "late change"
 
 
 def test_admin_cannot_approve_sc_without_sc_no(app_config):

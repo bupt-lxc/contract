@@ -227,6 +227,8 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                 ).fetchone()
                 if sc["status"] == "closed":
                     raise ConflictError("Closed SC cannot be edited")
+                if before["status"] == "finished":
+                    raise ConflictError("Finished PO cannot be edited")
 
                 merged = {**before, **updates}
                 po_amount = _positive_number(merged["po_amount"], "po_amount")

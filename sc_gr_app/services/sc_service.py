@@ -119,13 +119,11 @@ def _assert_can_view_sc(user: dict, sc: dict) -> None:
 
 
 def _assert_can_edit_sc(user: dict, sc: dict) -> None:
-    if sc["status"] == "draft":
-        if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
-            return
-        raise PermissionDenied("Only the draft owner can edit this SC")
     if sc["status"] == "closed":
         raise ConflictError("Closed SC cannot be edited")
     if user.get("role") == "admin":
+        return
+    if sc["status"] in ("draft", "pending") and user.get("user_id") == sc["requester_id"]:
         return
     raise PermissionDenied("Admin permission required")
 
@@ -137,8 +135,9 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
     is_closed = sc["status"] == "closed"
+    can_edit = (is_owner and (is_draft or is_pending)) or (is_admin and not is_draft and not is_closed)
     return {
-        "can_edit_sc": (is_owner and is_draft) or (is_admin and not is_draft and not is_closed),
+        "can_edit_sc": can_edit,
         "can_submit_sc": is_owner and is_draft,
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
