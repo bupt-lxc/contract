@@ -175,6 +175,26 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def revoke_sc(self, payload) -> dict:
+        """Move a pending SC back to draft."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(sc_service.revoke_sc(self.config, current_user, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_sc(self, payload) -> dict:
+        """Delete a draft SC and its attachments."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(sc_service.delete_sc(self.config, current_user, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
     def create_po(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)

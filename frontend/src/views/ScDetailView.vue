@@ -13,6 +13,8 @@
         <el-button v-if="permissions.can_submit_sc" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
+        <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
+        <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
       </div>
     </div>
@@ -111,7 +113,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
@@ -130,6 +132,7 @@ import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
 const { createPo, updatePo, approvePo, finishPo } = usePo()
@@ -204,6 +207,24 @@ async function handleClose() {
     await closeSc(scId.value)
     ElMessage.success(t('sc.closed'))
     await fetchDetail(scId.value)
+  } catch { /* cancelled */ }
+}
+
+async function handleRevoke() {
+  try {
+    await ElMessageBox.confirm(t('sc.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.revoked'))
+    await fetchDetail(scId.value)
+  } catch { /* cancelled */ }
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('sc.confirmDelete'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.deleted'))
+    router.replace('/sc')
   } catch { /* cancelled */ }
 }
 
