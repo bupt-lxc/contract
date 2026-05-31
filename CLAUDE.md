@@ -12,6 +12,7 @@ Windows desktop app (Python 3.11 + pywebview + SQLite) for department-side SC bu
 
 - **New feature** → branch from `main` as `feat/<name>`, merge back to `main` after completion
 - **Bug fix** → branch from `main` as `fix/<name>`, merge back to `main` after completion
+- **One feature per branch** — different features go to different branches. Do NOT pile unrelated features onto the same branch.
 - Before starting ANY code change, verify you are NOT on `main` (`git branch --show-current`)
 - If on `main` when work is requested, immediately switch to a new feature/fix branch
 - Only merge to `main` after the feature or fix is complete and verified
