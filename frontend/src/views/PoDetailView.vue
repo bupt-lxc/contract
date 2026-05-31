@@ -40,6 +40,7 @@
           :entity-id="po.po_id"
           :parent-sc-id="scId"
           :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 
@@ -70,6 +71,7 @@
       :entity-id="grAttachRecord?.gr_id || ''"
       :parent-sc-id="scId"
       :parent-po-id="poId"
+      @changed="fetchDetail(scId)"
     />
 
     <PoFormDialog
