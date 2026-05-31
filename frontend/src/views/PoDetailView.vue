@@ -84,6 +84,7 @@
       v-model:visible="grDialogVisible"
       :mode="grDialogMode"
       :record="grDialogRecord"
+      :users="activeUsers"
       @save="handleGrSave"
     />
   </div>
@@ -137,6 +138,7 @@ const grDialogRecord = ref(null)
 const grAttachVisible = ref(false)
 const grAttachRecord = ref(null)
 const attachRefreshKey = ref(0)
+const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -235,6 +237,7 @@ async function handleGrSave(data) {
 }
 
 onMounted(async () => {
+  try { activeUsers.value = await callApi('list_users') } catch {}
   await Promise.all([fetchDetail(scId.value), searchVendors()])
 })
 </script>

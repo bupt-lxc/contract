@@ -73,6 +73,7 @@
       v-model:visible="editDialogVisible"
       mode="edit"
       :record="gr"
+      :users="activeUsers"
       @save="handleEditSave"
     />
   </div>
@@ -116,6 +117,7 @@ const grAuditLogs = computed(() => {
 
 const editDialogVisible = ref(false)
 const attachRefreshKey = ref(0)
+const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -161,6 +163,7 @@ async function handleCancel() {
 }
 
 onMounted(async () => {
+  try { activeUsers.value = await callApi('list_users') } catch {}
   await fetchDetail(scId.value)
 })
 </script>

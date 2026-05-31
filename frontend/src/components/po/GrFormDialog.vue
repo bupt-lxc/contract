@@ -8,8 +8,10 @@
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
-          <el-form-item :label="$t('gr.requesterId')" prop="requester_id">
-            <el-input v-model="form.requester_id" />
+          <el-form-item :label="$t('gr.requester')" prop="requester_id">
+            <el-select v-model="form.requester_id" filterable>
+              <el-option v-for="u in users" :key="u.user_id" :label="`${u.user_name} — ${u.machine_id}`" :value="u.user_id" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
@@ -67,7 +69,8 @@ const { t } = useI18n()
 const props = defineProps({
   visible: Boolean,
   mode: { type: String, default: 'create' },
-  record: Object
+  record: Object,
+  users: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:visible', 'save'])
