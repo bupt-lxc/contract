@@ -123,7 +123,7 @@ def _assert_can_edit_sc(user: dict, sc: dict) -> None:
         raise ConflictError("Closed SC cannot be edited")
     if user.get("role") == "admin":
         return
-    if sc["status"] in ("draft", "pending") and user.get("user_id") == sc["requester_id"]:
+    if sc["status"] in ("draft", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
         return
     raise PermissionDenied("Admin permission required")
 
@@ -135,11 +135,12 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
     is_closed = sc["status"] == "closed"
-    can_edit = (is_owner and (is_draft or is_pending)) or (is_admin and not is_draft and not is_closed)
+    is_denied = sc["status"] == "denied"
+    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_closed)
     can_manage = (is_admin or is_owner) and is_approved
     return {
         "can_edit_sc": can_edit,
-        "can_submit_sc": is_owner and is_draft,
+        "can_submit_sc": is_owner and (is_draft or is_denied),
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
@@ -378,8 +379,8 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
-                if before["status"] != "draft":
-                    raise ConflictError("SC must be draft")
+                if before["status"] not in ("draft", "denied"):
+                    raise ConflictError("SC must be draft or denied")
                 # Admin can submit any draft; requester can only submit their own
                 if (
                     current_user["role"] != "admin"
