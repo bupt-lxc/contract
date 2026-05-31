@@ -140,7 +140,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     can_manage = (is_admin or is_owner) and is_approved
     return {
         "can_edit_sc": can_edit,
-        "can_submit_sc": is_owner and (is_draft or is_denied),
+        "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
