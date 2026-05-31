@@ -3,8 +3,8 @@ from decimal import Decimal
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.errors import ConflictError, NotFound, ValidationError
-from sc_gr_app.rbac import require_admin
+from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
+from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import compute_sc_budget_decimal
@@ -105,7 +105,7 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
 
 
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     po_amount = _positive_number(data["po_amount"], "po_amount")
     status = data.get("status", "po_pending")
@@ -128,6 +128,8 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     raise NotFound(f"SC not found: {sc_id}")
                 if sc["status"] != "approved":
                     raise ConflictError("SC must be approved")
+                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner or admin can create POs")
 
                 vendor = conn.execute(
                     "select vendor_id from vendors where vendor_id = ?",
@@ -199,7 +201,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
 
 
 def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
     allowed_fields = {
         "vendor_id",
         "po_no",
@@ -229,6 +231,8 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     raise ConflictError("Closed SC cannot be edited")
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
+                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner or admin can edit POs")
 
                 merged = {**before, **updates}
                 po_amount = _positive_number(merged["po_amount"], "po_amount")

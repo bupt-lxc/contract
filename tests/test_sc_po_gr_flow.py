@@ -992,8 +992,8 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_manage_po": True,
         "can_manage_gr": True,
     }
-    assert requester_detail["permissions"]["can_manage_po"] is False
-    assert requester_detail["permissions"]["can_manage_gr"] is False
+    assert requester_detail["permissions"]["can_manage_po"] is True
+    assert requester_detail["permissions"]["can_manage_gr"] is True
 
 
 def test_get_sc_detail_includes_po_budget_data(app_config):
@@ -1152,25 +1152,35 @@ def test_update_sc_rejects_clearing_required_fields_on_non_draft(
         update_sc(app_config, ADMIN, sc_id, {field: empty_value})
 
 
-def test_po_writes_require_admin(app_config):
+def test_po_write_permissions(app_config):
+    """Requester owner can create/update POs, but approve/finish require admin."""
     migrate(app_config)
     seed_users(app_config)
+    seed_other_user(app_config)
     sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
-    from sc_gr_app.services.po_service import approve_po, finish_po, update_po
+    from sc_gr_app.services.po_service import approve_po, create_po, finish_po, update_po
 
+    OTHER = {"user_id": "U2", "role": "requester", "machine_id": "M2", "user_name": "Other"}
+
+    # Owner (U1) can create and update their own PO
+    # (no exception expected)
+    create_po(
+        app_config, USER,
+        {"sc_id": sc_id, "vendor_id": "V1", "po_amount": 50},
+    )
+    update_po(app_config, USER, po_id, {"po_no": "PO-NEW"})
+
+    # Non-owner requester cannot create or update
     with pytest.raises(PermissionDenied):
         create_po(
-            app_config,
-            USER,
-            {
-                "sc_id": sc_id,
-                "vendor_id": "V1",
-                "po_amount": 100,
-            },
+            app_config, OTHER,
+            {"sc_id": sc_id, "vendor_id": "V1", "po_amount": 50},
         )
     with pytest.raises(PermissionDenied):
-        update_po(app_config, USER, po_id, {"po_no": "PO002"})
+        update_po(app_config, OTHER, po_id, {"po_no": "PO-OTHER"})
+
+    # Approve and finish remain admin-only (even owner cannot do them)
     with pytest.raises(PermissionDenied):
         approve_po(app_config, USER, po_id)
     with pytest.raises(PermissionDenied):
@@ -1331,29 +1341,35 @@ def test_po_update_approve_finish_are_audited(app_config):
     assert actions[-3:] == ["update_po", "approve_po", "finish_po"]
 
 
-def test_gr_writes_require_admin(app_config):
+def test_gr_write_permissions(app_config):
+    """Requester owner can create/update GRs, but approve/cancel require admin."""
     migrate(app_config)
     seed_users(app_config)
+    seed_other_user(app_config)
     sc_id, po_id = seed_approved_sc_vendor_po(app_config)
 
-    from sc_gr_app.services.gr_service import cancel_gr, update_gr
+    from sc_gr_app.services.gr_service import cancel_gr, create_gr, update_gr
 
-    with pytest.raises(PermissionDenied):
-        create_gr(
-            app_config,
-            USER,
-            {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
-        )
+    OTHER = {"user_id": "U2", "role": "requester", "machine_id": "M2", "user_name": "Other"}
 
+    # Owner (U1) can create and update their own GR
     created_gr = create_gr(
-        app_config,
-        ADMIN,
+        app_config, USER,
         {"po_id": po_id, "requester_id": "U1", "estimated_amount": 100},
     )
     gr_id = created_gr["gr_id"]
+    update_gr(app_config, USER, gr_id, {"remark": "owner changed"})
 
+    # Non-owner requester cannot create or update
     with pytest.raises(PermissionDenied):
-        update_gr(app_config, USER, gr_id, {"remark": "changed"})
+        create_gr(
+            app_config, OTHER,
+            {"po_id": po_id, "requester_id": "U2", "estimated_amount": 100},
+        )
+    with pytest.raises(PermissionDenied):
+        update_gr(app_config, OTHER, gr_id, {"remark": "other changed"})
+
+    # Cancel remains admin-only (even owner cannot cancel)
     with pytest.raises(PermissionDenied):
         cancel_gr(app_config, USER, gr_id)
 
