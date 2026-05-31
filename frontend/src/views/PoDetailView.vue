@@ -9,7 +9,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
       </div>
     </div>
 
