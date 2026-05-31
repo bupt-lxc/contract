@@ -48,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip, FolderOpened } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -58,7 +58,8 @@ const props = defineProps({
   entityType: { type: String, required: true },
   entityId: { type: String, required: true },
   parentScId: { type: String, default: null },
-  parentPoId: { type: String, default: null }
+  parentPoId: { type: String, default: null },
+  refreshKey: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['changed'])
@@ -144,4 +145,13 @@ async function handleDelete(row) {
 }
 
 onMounted(fetchAttachments)
+
+// Re-fetch when switching entities or when parent triggers a refresh
+watch([
+  () => props.entityType,
+  () => props.entityId,
+  () => props.refreshKey,
+], () => {
+  fetchAttachments()
+})
 </script>

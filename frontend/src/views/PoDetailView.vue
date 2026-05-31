@@ -39,6 +39,7 @@
           entity-type="po"
           :entity-id="po.po_id"
           :parent-sc-id="scId"
+          :refresh-key="attachRefreshKey"
         />
       </div>
 
@@ -93,6 +94,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
+import { callApi } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
 import { usePo } from '@/composables/usePo.js'
@@ -134,6 +136,7 @@ const grDialogMode = ref('create')
 const grDialogRecord = ref(null)
 const grAttachVisible = ref(false)
 const grAttachRecord = ref(null)
+const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -144,6 +147,7 @@ async function handleEditSave(data) {
     await updatePo(targetPoId, formData)
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
@@ -222,6 +226,7 @@ async function handleGrSave(data) {
     }
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

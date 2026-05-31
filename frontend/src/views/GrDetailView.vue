@@ -47,6 +47,7 @@
           :entity-id="gr.gr_id"
           :parent-sc-id="scId"
           :parent-po-id="poId"
+          :refresh-key="attachRefreshKey"
         />
       </div>
 
@@ -114,12 +115,18 @@ const grAuditLogs = computed(() => {
 })
 
 const editDialogVisible = ref(false)
+const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updateGr(data.gr_id || grId.value, data)
+    const { _attachments, ...formData } = data
+    await updateGr(formData.gr_id || grId.value, formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId.value, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
+    }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
     editDialogVisible.value = false

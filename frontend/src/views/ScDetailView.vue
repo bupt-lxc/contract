@@ -38,6 +38,7 @@
         <AttachmentList
           entity-type="sc"
           :entity-id="detail.sc.sc_id"
+          :refresh-key="attachRefreshKey"
         />
       </div>
 
@@ -146,6 +147,7 @@ const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
 const poDialogMode = ref('create')
 const poDialogRecord = ref(null)
+const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -155,6 +157,7 @@ async function handleEditSave(data) {
     await updateSc(formData.sc_id || scId.value, formData)
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: scId.value, file_paths: _attachments })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('sc.updated'))
     await fetchDetail(scId.value)
@@ -233,6 +236,7 @@ async function handlePoSave(data) {
     }
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
