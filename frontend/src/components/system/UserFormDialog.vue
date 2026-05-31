@@ -74,8 +74,6 @@ async function handleSave() {
   submitting.value = true
   try {
     emit('save', { ...form })
-    emit('update:visible', false)
-    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
