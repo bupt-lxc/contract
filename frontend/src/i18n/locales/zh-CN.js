@@ -161,7 +161,7 @@ export default {
     denyConfirm: '确认拒绝此供应链？',
     closePrompt: '请输入 "I CONFIRM CLOSE THIS SC" 以继续。',
     closeTitle: '关闭供应链',
-    closeInputError: '请输入正确的确认文本。',
+    closeInputError: '请输入 "I CONFIRM CLOSE THIS SC"（注意大写和空格）。',
     scUpdated: '供应链已更新',
     scSubmitted: '供应链已提交',
     scApproved: '供应链已批准',

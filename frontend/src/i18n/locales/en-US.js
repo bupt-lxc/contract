@@ -161,7 +161,7 @@ export default {
     denyConfirm: 'Deny this SC?',
     closePrompt: 'Type "I CONFIRM CLOSE THIS SC" to proceed.',
     closeTitle: 'Close SC',
-    closeInputError: 'Type the confirmation text exactly.',
+    closeInputError: 'Type exactly "I CONFIRM CLOSE THIS SC" (uppercase, spaces).',
     scUpdated: 'SC updated',
     scSubmitted: 'SC submitted',
     scApproved: 'SC approved',

@@ -202,7 +202,8 @@ async function handleClose() {
       confirmButtonText: t('common.close'),
       type: 'warning',
       inputPattern: /^I CONFIRM CLOSE THIS SC$/,
-      inputErrorMessage: t('sc.closeInputError')
+      inputErrorMessage: t('sc.closeInputError'),
+      inputPlaceholder: 'I CONFIRM CLOSE THIS SC'
     })
     await closeSc(scId.value)
     ElMessage.success(t('sc.closed'))
