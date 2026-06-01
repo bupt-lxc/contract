@@ -10,6 +10,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && (gr.status === 'approved' || gr.status === 'cancelled')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -86,7 +87,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSc } from '@/composables/useSc.js'
 import { useGr } from '@/composables/useGr.js'
 import { callApi } from '@/api/bridge.js'
@@ -97,6 +98,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updateGr, approveGr, cancelGr } = useGr()
@@ -172,6 +174,15 @@ async function handleRevoke() {
     await callApi('revoke_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.revoked'))
     await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmDeleteGr'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.grDeleted'))
+    router.replace(`/sc/${scId.value}/po/${poId.value}`)
   } catch {}
 }
 

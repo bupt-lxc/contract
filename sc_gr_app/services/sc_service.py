@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import isfinite
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -149,7 +150,9 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
         "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and (is_approved or is_closed)),
-        "can_delete_sc": (is_admin or is_owner) and is_draft,
+        "can_delete_sc": (is_admin or is_owner) and (is_draft or is_closed),
+        "can_delete_po": is_admin or is_owner,
+        "can_delete_gr": is_admin or is_owner,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
     }
@@ -715,7 +718,7 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
 
 
 def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    """Delete a draft SC and its attachments. Only the draft owner can delete."""
+    """Delete a draft or closed SC and its attachments. Admin or SC owner."""
     require_requester_or_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -723,10 +726,10 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
-                if before["status"] != "draft":
-                    raise ConflictError("Only draft SC can be deleted")
+                if before["status"] not in {"draft", "closed"}:
+                    raise ConflictError("Only draft or closed SC can be deleted")
                 if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
-                    raise PermissionDenied("Only the draft owner can delete")
+                    raise PermissionDenied("Only the SC owner or admin can delete")
 
                 # Collect attachment file paths before deleting DB records
                 attach_rows = conn.execute(

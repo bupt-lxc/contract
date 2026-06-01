@@ -966,6 +966,8 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_close_sc": True,
         "can_revoke_sc": True,
         "can_delete_sc": False,
+        "can_delete_po": True,
+        "can_delete_gr": True,
         "can_manage_po": True,
         "can_manage_gr": True,
     }

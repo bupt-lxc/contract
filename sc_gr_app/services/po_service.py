@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -510,3 +511,75 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 raise
 
     return after
+
+
+def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Delete a po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                if before["status"] not in {"po_pending", "finished"}:
+                    raise ConflictError("Only pending or finished PO can be deleted")
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if current_user["role"] != "admin" and (
+                    sc is None or sc["requester_id"] != current_user["user_id"]
+                ):
+                    raise PermissionDenied("Only the SC owner or admin can delete")
+
+                # Collect attachment paths
+                attach_paths = [
+                    row["stored_path"] for row in conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    ).fetchall()
+                ]
+                attach_paths.extend(
+                    row["stored_path"] for row in conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    ).fetchall()
+                )
+
+                # Delete GRs → PO → attachments
+                conn.execute("DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                             "SELECT gr_id FROM gr_requests WHERE po_id = ?)", (po_id,))
+                conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?", (po_id,))
+                conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+
+                write_audit_log(
+                    conn,
+                    action_type="delete_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=before["sc_id"],
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+
+                # Delete files from disk
+                for path in attach_paths:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            except Exception:
+                conn.rollback()
+                raise
+
+    return before

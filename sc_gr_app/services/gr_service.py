@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -622,3 +623,57 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return after
+
+
+def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    """Delete a pending or cancelled GR and its attachments. Admin or GR owner."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_gr(conn, gr_id)
+                if before["status"] not in {"pending", "cancelled"}:
+                    raise ConflictError("Only pending or cancelled GR can be deleted")
+                if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the GR owner or admin can delete")
+
+                # Collect attachment paths
+                attach_rows = conn.execute(
+                    "SELECT stored_path FROM attachments WHERE entity_type = 'gr' AND entity_id = ?",
+                    (gr_id,),
+                ).fetchall()
+                attach_paths = [row["stored_path"] for row in attach_rows]
+
+                # Delete attachments → GR
+                conn.execute("DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id = ?", (gr_id,))
+                conn.execute("DELETE FROM gr_requests WHERE gr_id = ?", (gr_id,))
+
+                write_audit_log(
+                    conn,
+                    action_type="delete_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+
+                # Delete files from disk
+                for path in attach_paths:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            except Exception:
+                conn.rollback()
+                raise
+
+    return before

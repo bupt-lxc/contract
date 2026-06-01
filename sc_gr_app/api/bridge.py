@@ -242,6 +242,16 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def delete_po(self, payload) -> dict:
+        """Delete a po_pending or finished PO (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.delete_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
     def create_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -287,6 +297,16 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.revoke_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_gr(self, payload) -> dict:
+        """Delete a pending or cancelled GR (admin or GR owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.delete_gr(self.config, current_user, gr_id))
         except Exception as exc:
             return fail(exc)
 

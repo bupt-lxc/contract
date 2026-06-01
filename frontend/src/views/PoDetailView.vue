@@ -10,6 +10,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'po_pending' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -102,7 +103,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
@@ -120,6 +121,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updatePo, approvePo, finishPo } = usePo()
@@ -190,6 +192,15 @@ async function handleRevoke() {
     await callApi('revoke_po', { po_id: poId.value })
     ElMessage.success(t('po.revoked'))
     await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('po.confirmDeletePo'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_po', { po_id: poId.value })
+    ElMessage.success(t('po.poDeleted'))
+    router.replace(`/sc/${scId.value}`)
   } catch {}
 }
 
