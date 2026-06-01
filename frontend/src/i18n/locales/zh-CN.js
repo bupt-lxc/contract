@@ -174,7 +174,11 @@ export default {
     costCenterRequired: '成本中心为必填项',
     scAmountRequired: '供应链金额为必填项',
     servicePeriodStartRequired: '服务开始日期为必填项',
-    servicePeriodEndRequired: '服务结束日期为必填项'
+    servicePeriodEndRequired: '服务结束日期为必填项',
+    asset: '资产',
+    assetNums: '资产编号',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期'
   },
 
   po: {
@@ -209,7 +213,13 @@ export default {
     approve: '批准',
     finish: '完成',
     vendorRequired: '供应商为必填项',
-    poAmountRequired: '采购订单金额为必填项'
+    poAmountRequired: '采购订单金额为必填项',
+    contractPos: '合同项',
+    contractType: '合同类型',
+    costCenter: '成本中心',
+    purchaser: '采购员',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期'
   },
 
   gr: {
@@ -251,7 +261,9 @@ export default {
     createdBy: '创建者',
     invalidNumber: '请输入有效的正数',
     requesterRequired: '申请人为必填项',
-    estimatedAmountRequired: '预估金额为必填项'
+    estimatedAmountRequired: '预估金额为必填项',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期'
   },
 
   vendor: {
@@ -436,7 +448,23 @@ export default {
     objectId: '对象ID',
     operator: '操作者',
     machine: '机器',
-    mode: '模式'
+    mode: '模式',
+    asset: '资产',
+    contractType: '合同类型',
+    purchaser: '采购员',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
+    deadline: '截止日期',
+    unlimited: '不限',
+    within3Years: '三年内',
+    within2Years: '两年内',
+    within1Year: '一年内',
+    within6Months: '半年内',
+    within5Months: '五个月内',
+    within4Months: '四个月内',
+    within3Months: '三个月内',
+    within2Months: '两个月内',
+    within1Month: '一个月内'
   },
 
   confirm: {
@@ -496,6 +524,14 @@ export default {
     objectType: '对象类型',
     objectId: '对象ID',
     operator: '操作者',
-    machine: '机器'
+    machine: '机器',
+    asset: '资产',
+    assetNums: '资产编号',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
+    contractPos: '合同项',
+    contractType: '合同类型',
+    costCenter: '成本中心',
+    purchaser: '采购员'
   }
 }

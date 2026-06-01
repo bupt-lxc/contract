@@ -69,6 +69,30 @@ const poStatuses = [
   { label: t('status.finished'), value: 'finished' }
 ]
 
+const deadlineOptions = [
+  { label: t('filter.unlimited'), value: '' },
+  { label: t('filter.within3Years'), value: '3y' },
+  { label: t('filter.within2Years'), value: '2y' },
+  { label: t('filter.within1Year'), value: '1y' },
+  { label: t('filter.within6Months'), value: '6m' },
+  { label: t('filter.within5Months'), value: '5m' },
+  { label: t('filter.within4Months'), value: '4m' },
+  { label: t('filter.within3Months'), value: '3m' },
+  { label: t('filter.within2Months'), value: '2m' },
+  { label: t('filter.within1Month'), value: '1m' },
+]
+
+function computeDeadlineEnd(value) {
+  const today = new Date()
+  const match = value.match(/^(\d+)([ym])$/)
+  if (!match) return null
+  const num = parseInt(match[1])
+  const unit = match[2]
+  if (unit === 'y') today.setFullYear(today.getFullYear() + num)
+  else today.setMonth(today.getMonth() + num)
+  return today.toISOString().slice(0, 10)
+}
+
 const poFilterConfig = [
   { name: 'status', label: t('filter.status'), type: 'select', options: poStatuses },
   { name: 'po_id', label: t('filter.poId'), type: 'input' },
@@ -76,9 +100,15 @@ const poFilterConfig = [
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
   { name: 'vendor_id', label: t('filter.vendorId'), type: 'input' },
   { name: 'vendor_name', label: t('filter.vendorName'), type: 'input' },
+  { name: 'contract_type', label: t('filter.contractType'), type: 'select', options: [{label:'PO',value:'PO'},{label:'Contract',value:'Contract'}] },
+  { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
+  { name: 'purchaser', label: t('filter.purchaser'), type: 'input' },
   { name: 'po_amount', label: t('filter.poAmount'), type: 'amount-range' },
   { name: 'contract_from', label: t('filter.contractFrom'), type: 'date-range' },
   { name: 'contract_to', label: t('filter.contractTo'), type: 'date-range' },
+  { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
+  { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
 const poDialogVisible = ref(false)
@@ -86,7 +116,16 @@ const poDialogMode = ref('create')
 const poDialogRecord = ref(null)
 
 function handleFilter({ text, filters }) {
-  searchPos(text, filters)
+  const transformed = { ...filters }
+  if (transformed.deadline) {
+    const endDate = computeDeadlineEnd(transformed.deadline)
+    if (endDate) {
+      transformed.deadline_from = new Date().toISOString().slice(0, 10)
+      transformed.deadline_to = endDate
+    }
+  }
+  delete transformed.deadline
+  searchPos(text, transformed)
 }
 
 function handleReset() {
@@ -144,10 +183,14 @@ async function handleExport() {
       { key: 'po_no', label: t('export.poNo') },
       { key: 'sc_no', label: t('export.scNo') },
       { key: 'vendor_name', label: t('export.vendor') },
+      { key: 'contract_type', label: t('exportCol.contractType') },
+      { key: 'cost_center', label: t('exportCol.costCenter') },
       { key: 'po_amount', label: t('export.poAmount') },
       { key: 'open_po_amount', label: t('export.openPoAmount') },
       { key: 'contract_from', label: t('export.contractFrom'), getValue: r => (r.contract_from || '').slice(0, 10) },
-      { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) }
+      { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) },
+      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
+      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
     ]
     await exportAll('search_pos', {
       filters: state.filters,

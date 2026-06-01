@@ -33,9 +33,12 @@ OPTIONAL_UPDATE_FIELDS = (
     "service_period_start",
     "service_period_end",
     "description",
+    "asset",
+    "asset_nums",
+    "pending_date",
+    "approved_date",
 )
 REQUIRED_BUSINESS_FIELDS = (
-    "sc_no",
     "request_type",
     "cost_center",
     "sc_amount",
@@ -140,7 +143,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     return {
         "can_edit_sc": (is_owner and is_draft) or (is_admin and not is_draft and not is_closed),
         "can_submit_sc": is_owner and is_draft,
-        "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
+        "can_approve_sc": is_admin and is_pending,
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
         "can_manage_po": is_admin and is_approved,
@@ -245,8 +248,12 @@ def create_sc(
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      closed_at,
+                      asset,
+                      asset_nums,
+                      pending_date,
+                      approved_date
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -265,6 +272,10 @@ def create_sc(
                         current_user["user_id"] if status == "approved" else None,
                         timestamp if status == "approved" else None,
                         timestamp if status == "closed" else None,
+                        data.get("asset", "N"),
+                        data.get("asset_nums"),
+                        timestamp,
+                        timestamp if status == "approved" else None,
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -290,7 +301,7 @@ def create_sc(
 
 def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
-    _require_fields(data, ("requester_id", "sc_no"))
+    _require_fields(data, ("requester_id",))
     if (
         current_user["role"] == "requester"
         and data["requester_id"] != current_user["user_id"]
@@ -322,8 +333,12 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      closed_at,
+                      asset,
+                      asset_nums,
+                      pending_date,
+                      approved_date
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -344,6 +359,10 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         timestamp,
                         timestamp,
                         None,
+                        None,
+                        None,
+                        data.get("asset", "N"),
+                        data.get("asset_nums"),
                         None,
                         None,
                     ),
@@ -401,7 +420,10 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         service_period_start = ?,
                         service_period_end = ?,
                         description = ?,
+                        asset = ?,
+                        asset_nums = ?,
                         status = 'pending',
+                        pending_date = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -413,6 +435,9 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged["service_period_start"],
                         merged["service_period_end"],
                         merged.get("description"),
+                        merged.get("asset", "N"),
+                        merged.get("asset_nums"),
+                        timestamp,
                         timestamp,
                         sc_id,
                     ),
@@ -480,6 +505,10 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         service_period_start = ?,
                         service_period_end = ?,
                         description = ?,
+                        asset = ?,
+                        asset_nums = ?,
+                        pending_date = ?,
+                        approved_date = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -495,6 +524,10 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("service_period_start"),
                         merged.get("service_period_end"),
                         merged.get("description"),
+                        merged.get("asset"),
+                        merged.get("asset_nums"),
+                        merged.get("pending_date"),
+                        merged.get("approved_date"),
                         timestamp,
                         sc_id,
                     ),
@@ -669,8 +702,6 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 before = _get_sc(conn, sc_id)
                 if before["status"] != "pending":
                     raise ConflictError("SC must be pending")
-                if not before["sc_no"]:
-                    raise ConflictError("SC No is required")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -679,10 +710,11 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     set status = 'approved',
                         approved_by = ?,
                         approved_at = ?,
+                        approved_date = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
-                    (current_user["user_id"], timestamp, timestamp, sc_id),
+                    (current_user["user_id"], timestamp, timestamp, timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
                 write_audit_log(

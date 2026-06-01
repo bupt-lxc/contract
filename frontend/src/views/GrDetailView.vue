@@ -33,6 +33,8 @@
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.conValue')"><AmountDisplay :value="gr.con_value" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.created')">{{ gr.created_at?.slice(0, 19) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>

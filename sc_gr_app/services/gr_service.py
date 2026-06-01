@@ -200,8 +200,10 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       approved_by,
                       approved_at,
                       cancelled_by,
-                      cancelled_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      cancelled_at,
+                      pending_date,
+                      approved_date
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
@@ -216,6 +218,8 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         None,
                         None,
+                        None,
+                        timestamp,
                         None,
                     ),
                 )
@@ -299,10 +303,11 @@ def approve_gr(
                     set status = 'approved',
                         con_value = ?,
                         approved_by = ?,
-                        approved_at = ?
+                        approved_at = ?,
+                        approved_date = ?
                     where gr_id = ?
                     """,
-                    (float(con_value_amount), current_user["user_id"], timestamp, gr_id),
+                    (float(con_value_amount), current_user["user_id"], timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_audit_log(
@@ -361,6 +366,8 @@ def update_gr(
                             "requester_id",
                             "estimated_amount",
                             "remark",
+                            "pending_date",
+                            "approved_date",
                         )
                         if key in updates
                     }
@@ -411,7 +418,9 @@ def update_gr(
                         set po_id = ?,
                             requester_id = ?,
                             estimated_amount = ?,
-                            remark = ?
+                            remark = ?,
+                            pending_date = ?,
+                            approved_date = ?
                         where gr_id = ?
                         """,
                         (
@@ -419,6 +428,8 @@ def update_gr(
                             merged["requester_id"],
                             float(amount),
                             merged.get("remark"),
+                            merged.get("pending_date"),
+                            merged.get("approved_date"),
                             gr_id,
                         ),
                     )
