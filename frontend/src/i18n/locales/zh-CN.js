@@ -126,7 +126,15 @@ export default {
     scId: '供应链ID',
     amount: '金额',
     estimated: '预估金额',
-    noCards: '暂无{title}'
+    noCards: '暂无{title}',
+    loadError: '加载失败',
+    colScNo: 'SC编号',
+    colRequester: '申请人',
+    colAmount: '金额',
+    colPoNo: 'PO编号',
+    colVendor: '供应商',
+    colGrId: 'GR ID',
+    colEstAmount: '预估金额'
   },
 
   sc: {

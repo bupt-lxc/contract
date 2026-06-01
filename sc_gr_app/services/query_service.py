@@ -554,6 +554,83 @@ def search_grs(
     )
 
 
+def workbench_data(
+    config: AppConfig,
+    current_user: dict | None = None,
+) -> dict:
+    """Return per-status counts and top rows for the workbench grid."""
+    clauses, params = _sc_visibility_clauses(
+        current_user,
+        include_own_drafts=True,
+    )
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+    sc_statuses = ["draft", "pending", "approved"]
+    po_statuses = ["po_pending", "po_approved", "finished"]
+    gr_statuses = ["pending", "approved", "cancelled"]
+
+    with connect(config) as conn:
+        sc_data = {}
+        for st in sc_statuses:
+            st_clause = f"{where} AND sc.status = ?" if where else "WHERE sc.status = ?"
+            st_params = params + [st]
+            cnt = conn.execute(
+                f"SELECT COUNT(*) FROM sc_records sc {st_clause}", st_params
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT sc.sc_id, sc.sc_no, sc.sc_amount, sc.requester_id, "
+                f"u.user_name AS requester_name "
+                f"FROM sc_records sc "
+                f"JOIN users u ON u.user_id = sc.requester_id "
+                f"{st_clause} ORDER BY sc.updated_at DESC LIMIT 6",
+                st_params,
+            ).fetchall()
+            sc_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
+
+        po_data = {}
+        for st in po_statuses:
+            st_clause = f"{where} AND po.status = ?" if where else "WHERE po.status = ?"
+            st_params = params + [st]
+            cnt = conn.execute(
+                f"SELECT COUNT(*) FROM pos po "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id {st_clause}",
+                st_params,
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT po.po_id, po.po_no, po.po_amount, po.sc_id, "
+                f"v.vendor_name "
+                f"FROM pos po "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"JOIN vendors v ON v.vendor_id = po.vendor_id "
+                f"{st_clause} ORDER BY po.updated_at DESC LIMIT 6",
+                st_params,
+            ).fetchall()
+            po_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
+
+        gr_data = {}
+        for st in gr_statuses:
+            st_clause = f"{where} AND gr.status = ?" if where else "WHERE gr.status = ?"
+            st_params = params + [st]
+            cnt = conn.execute(
+                f"SELECT COUNT(*) FROM gr_requests gr "
+                f"JOIN pos po ON po.po_id = gr.po_id "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id {st_clause}",
+                st_params,
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT gr.gr_id, gr.estimated_amount, gr.con_value, gr.po_id, "
+                f"po.sc_id, po.po_no "
+                f"FROM gr_requests gr "
+                f"JOIN pos po ON po.po_id = gr.po_id "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"{st_clause} ORDER BY gr.created_at DESC LIMIT 6",
+                st_params,
+            ).fetchall()
+            gr_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
+
+    return {"sc": sc_data, "po": po_data, "gr": gr_data}
+
+
 def search_audit_logs(
     config: AppConfig,
     text: str | None = None,

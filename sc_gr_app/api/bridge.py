@@ -310,6 +310,14 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def workbench_data(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            return ok(query_service.workbench_data(self.config, current_user))
+        except Exception as exc:
+            return fail(exc)
+
     def search_scs(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)

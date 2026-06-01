@@ -126,7 +126,15 @@ export default {
     scId: 'SC ID',
     amount: 'Amount',
     estimated: 'Estimated',
-    noCards: 'No {title}'
+    noCards: 'No {title}',
+    loadError: 'Load failed',
+    colScNo: 'SC No',
+    colRequester: 'Requester',
+    colAmount: 'Amount',
+    colPoNo: 'PO No',
+    colVendor: 'Vendor',
+    colGrId: 'GR ID',
+    colEstAmount: 'Est. Amount'
   },
 
   sc: {
