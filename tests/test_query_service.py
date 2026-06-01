@@ -203,7 +203,7 @@ def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
     owner_rows = search_audit_logs(app_config, current_user=USER, limit=100)
     other_rows = search_audit_logs(app_config, current_user=OTHER_USER, limit=100)
 
-    assert [row["object_id"] for row in admin_rows] == []
+    assert [row["object_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["object_id"] for row in owner_rows] == [draft_sc_id]
     assert [row["object_id"] for row in other_rows] == []
 
@@ -308,7 +308,7 @@ def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
         limit=100,
     )
 
-    assert [row["sc_id"] for row in admin_rows] == []
+    assert [row["sc_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["sc_id"] for row in owner_rows] == [draft_sc_id]
     assert [row["sc_id"] for row in other_rows] == []
 

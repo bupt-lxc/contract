@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -408,7 +408,7 @@ def _table_exists(conn, table_name: str) -> bool:
     ).fetchone() is not None
 
 
-def _migrate_v6(conn) -> None:
+def _migrate_v8(conn) -> None:
     # add changes_summary column to audit_logs for human-readable change details
     if _table_exists(conn, "audit_logs"):
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_logs)")}
@@ -416,7 +416,7 @@ def _migrate_v6(conn) -> None:
             conn.execute(
                 "ALTER TABLE audit_logs ADD COLUMN changes_summary TEXT"
             )
-    _record(conn, 6)
+    _record(conn, 8)
 
 
 def _migrate_v7(conn) -> None:
@@ -493,13 +493,13 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v5(conn)
                 conn.commit()
-            if 6 not in _applied_versions(conn):
-                conn.execute("BEGIN")
-                _migrate_v6(conn)
-                conn.commit()
             if 7 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v7(conn)
+                conn.commit()
+            if 8 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v8(conn)
                 conn.commit()
         except Exception:
             conn.rollback()
