@@ -50,7 +50,7 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div class="wb-grid wb-grid--4">
+      <div class="wb-grid">
         <div v-for="cell in poCells" :key="cell.status" class="wb-cell">
           <div class="wb-cell__head">
             <span class="wb-cell__status">{{ cell.label }}</span>
@@ -86,7 +86,7 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div class="wb-grid wb-grid--4">
+      <div class="wb-grid">
         <div v-for="cell in grCells" :key="cell.status" class="wb-cell">
           <div class="wb-cell__head">
             <span class="wb-cell__status">{{ cell.label }}</span>
@@ -138,14 +138,12 @@ const poCells = [
   { status: 'draft',        label: t('status.draft') },
   { status: 'po_pending',   label: t('status.pending') },
   { status: 'po_approved',  label: t('status.approved') },
-  { status: 'finished',     label: t('status.finished') },
 ]
 
 const grCells = [
   { status: 'draft',      label: t('status.draft') },
   { status: 'pending',    label: t('status.pending') },
   { status: 'approved',   label: t('status.approved') },
-  { status: 'cancelled',  label: t('status.cancelled') },
 ]
 
 onMounted(async () => {
