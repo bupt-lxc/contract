@@ -15,7 +15,7 @@
         </el-button>
       </div>
       <div class="wb-grid">
-        <div v-for="cell in scCells" :key="cell.status" class="wb-cell">
+        <div v-for="cell in scCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.sc?.[cell.status]?.count ?? 0 }}</span>
@@ -51,7 +51,7 @@
         </el-button>
       </div>
       <div class="wb-grid">
-        <div v-for="cell in poCells" :key="cell.status" class="wb-cell">
+        <div v-for="cell in poCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.po?.[cell.status]?.count ?? 0 }}</span>
@@ -87,7 +87,7 @@
         </el-button>
       </div>
       <div class="wb-grid">
-        <div v-for="cell in grCells" :key="cell.status" class="wb-cell">
+        <div v-for="cell in grCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.gr?.[cell.status]?.count ?? 0 }}</span>
@@ -258,6 +258,26 @@ onMounted(async () => {
   background: #f0fdf4;
 }
 
+.wb-cell--draft .wb-cell__tr {
+  background: #fafbfc;
+}
+.wb-cell--pending .wb-cell__tr {
+  background: #fffaf5;
+}
+.wb-cell--approved .wb-cell__tr {
+  background: #f7fdf8;
+}
+
+.wb-cell--draft .wb-cell__empty {
+  background: #fafbfc;
+}
+.wb-cell--pending .wb-cell__empty {
+  background: #fffaf5;
+}
+.wb-cell--approved .wb-cell__empty {
+  background: #f7fdf8;
+}
+
 /* Table */
 .wb-cell__table {
   padding: 0;
@@ -311,7 +331,7 @@ onMounted(async () => {
   padding: 0.45em 0.7em;
   gap: 0.4em;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, filter 0.12s;
   border-bottom: 1px solid #f8fafc;
   line-height: 1.3;
 }
@@ -321,7 +341,7 @@ onMounted(async () => {
 }
 
 .wb-cell__tr:hover {
-  background: #f8fafc;
+  filter: brightness(0.97);
 }
 
 .wb-cell__td-id {
