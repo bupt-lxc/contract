@@ -15,6 +15,8 @@
       <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
     </el-table-column>
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip />
+    <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" />
+    <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" />
     <el-table-column prop="po_amount" :label="$t('po.poAmount')" width="120">
       <template #default="{ row }"><AmountDisplay :value="row.po_amount" /></template>
     </el-table-column>
@@ -26,6 +28,12 @@
     </el-table-column>
     <el-table-column prop="contract_to" :label="$t('po.contractTo')" width="120">
       <template #default="{ row }">{{ formatDate(row.contract_to) }}</template>
+    </el-table-column>
+    <el-table-column prop="pending_date" :label="$t('po.pendingDate')" width="120">
+      <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="approved_date" :label="$t('po.approvedDate')" width="120">
+      <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
     </el-table-column>
     <el-table-column :label="$t('po.actions')" width="140" fixed="right">
       <template #default="{ row }">

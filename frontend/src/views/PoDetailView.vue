@@ -29,6 +29,12 @@
           <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.paymentFreq')">{{ po.payment_frequency || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.contractPos')">{{ po.contract_pos || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.contractType')">{{ po.contract_type || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.costCenter')">{{ po.cost_center || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.purchaser')">{{ po.purchaser || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.pendingDate')">{{ (po.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.approvedDate')">{{ (po.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
 

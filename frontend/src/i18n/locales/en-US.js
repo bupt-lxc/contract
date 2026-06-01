@@ -183,7 +183,11 @@ export default {
     costCenterRequired: 'Cost Center is required',
     scAmountRequired: 'SC Amount is required',
     servicePeriodStartRequired: 'Service Period Start is required',
-    servicePeriodEndRequired: 'Service Period End is required'
+    servicePeriodEndRequired: 'Service Period End is required',
+    asset: 'Asset',
+    assetNums: 'Asset Numbers',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date'
   },
 
   po: {
@@ -221,7 +225,13 @@ export default {
     poAmountRequired: 'PO Amount is required',
     revoke: 'Rollback',
     confirmRevoke: 'Roll back this PO?',
-    revoked: 'Rolled back'
+    revoked: 'Rolled back',
+    contractPos: 'Contract Pos.',
+    contractType: 'Contract Type',
+    costCenter: 'Cost Center',
+    purchaser: 'Purchaser',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date'
   },
 
   gr: {
@@ -266,7 +276,9 @@ export default {
     estimatedAmountRequired: 'Estimated Amount is required',
     revoke: 'Rollback',
     confirmRevoke: 'Roll back this GR?',
-    revoked: 'Rolled back'
+    revoked: 'Rolled back',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date'
   },
 
   vendor: {
@@ -452,7 +464,23 @@ export default {
     objectId: 'Object ID',
     operator: 'Operator',
     machine: 'Machine',
-    mode: 'Mode'
+    mode: 'Mode',
+    asset: 'Asset',
+    contractType: 'Contract Type',
+    purchaser: 'Purchaser',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
+    deadline: 'Deadline',
+    unlimited: 'Unlimited',
+    within3Years: 'Within 3 Years',
+    within2Years: 'Within 2 Years',
+    within1Year: 'Within 1 Year',
+    within6Months: 'Within 6 Months',
+    within5Months: 'Within 5 Months',
+    within4Months: 'Within 4 Months',
+    within3Months: 'Within 3 Months',
+    within2Months: 'Within 2 Months',
+    within1Month: 'Within 1 Month'
   },
 
   confirm: {
@@ -513,6 +541,14 @@ export default {
     objectType: 'Object Type',
     objectId: 'Object ID',
     operator: 'Operator',
-    machine: 'Machine'
+    machine: 'Machine',
+    asset: 'Asset',
+    assetNums: 'Asset Numbers',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
+    contractPos: 'Contract Pos.',
+    contractType: 'Contract Type',
+    costCenter: 'Cost Center',
+    purchaser: 'Purchaser'
   }
 }

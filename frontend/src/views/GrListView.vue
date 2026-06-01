@@ -26,6 +26,12 @@
       <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
       </el-table-column>
+      <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110">
+        <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
+        <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
       <template #empty><el-empty :description="$t('gr.noRecords')" /></template>
     </el-table>
 
@@ -64,6 +70,30 @@ const grStatuses = [
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' }, { label: t('status.cancelled'), value: 'cancelled' }
 ]
 
+const deadlineOptions = [
+  { label: t('filter.unlimited'), value: '' },
+  { label: t('filter.within3Years'), value: '3y' },
+  { label: t('filter.within2Years'), value: '2y' },
+  { label: t('filter.within1Year'), value: '1y' },
+  { label: t('filter.within6Months'), value: '6m' },
+  { label: t('filter.within5Months'), value: '5m' },
+  { label: t('filter.within4Months'), value: '4m' },
+  { label: t('filter.within3Months'), value: '3m' },
+  { label: t('filter.within2Months'), value: '2m' },
+  { label: t('filter.within1Month'), value: '1m' },
+]
+
+function computeDeadlineEnd(value) {
+  const today = new Date()
+  const match = value.match(/^(\d+)([ym])$/)
+  if (!match) return null
+  const num = parseInt(match[1])
+  const unit = match[2]
+  if (unit === 'y') today.setFullYear(today.getFullYear() + num)
+  else today.setMonth(today.getMonth() + num)
+  return today.toISOString().slice(0, 10)
+}
+
 const grFilterConfig = [
   { name: 'status', label: t('common.status'), type: 'select', options: grStatuses },
   { name: 'gr_id', label: t('gr.grId'), type: 'input' },
@@ -73,10 +103,22 @@ const grFilterConfig = [
   { name: 'vendor_id', label: t('gr.vendorId'), type: 'input' },
   { name: 'estimated_amount', label: t('gr.estAmount'), type: 'amount-range' },
   { name: 'con_value', label: t('gr.conValue'), type: 'amount-range' },
+  { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
+  { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
 function handleFilter({ text, filters }) {
-  searchGrs(text, filters)
+  const transformed = { ...filters }
+  if (transformed.deadline) {
+    const endDate = computeDeadlineEnd(transformed.deadline)
+    if (endDate) {
+      transformed.deadline_from = new Date().toISOString().slice(0, 10)
+      transformed.deadline_to = endDate
+    }
+  }
+  delete transformed.deadline
+  searchGrs(text, transformed)
 }
 
 function handleReset() {
@@ -103,7 +145,9 @@ async function handleExport() {
       { key: 'sc_no', label: t('gr.scNo') },
       { key: 'vendor_name', label: t('gr.vendor') },
       { key: 'estimated_amount', label: t('gr.estimated') },
-      { key: 'con_value', label: t('gr.conValue') }
+      { key: 'con_value', label: t('gr.conValue') },
+      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
+      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
     ]
     await exportAll('search_grs', {
       filters: state.filters,

@@ -372,12 +372,12 @@ def _migrate_v3(conn) -> None:
 
 def _migrate_v4(conn) -> None:
     # Add status column to vendors table for enable/disable support
-    if conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='vendors'"
-    ).fetchone():
-        existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
-        if "status" not in existing:
-            conn.execute("ALTER TABLE vendors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if not _table_exists(conn, "vendors"):
+        _record(conn, 4)
+        return
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
+    if "status" not in existing:
+        conn.execute("ALTER TABLE vendors ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
     _record(conn, 4)
 
 
@@ -401,17 +401,60 @@ def _migrate_v5(conn) -> None:
     _record(conn, 5)
 
 
+def _table_exists(conn, table_name: str) -> bool:
+    return conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,),
+    ).fetchone() is not None
+
+
 def _migrate_v6(conn) -> None:
     # add changes_summary column to audit_logs for human-readable change details
-    if conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
-    ).fetchone():
+    if _table_exists(conn, "audit_logs"):
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_logs)")}
         if "changes_summary" not in existing:
             conn.execute(
                 "ALTER TABLE audit_logs ADD COLUMN changes_summary TEXT"
             )
     _record(conn, 6)
+
+
+def _migrate_v7(conn) -> None:
+    # Add new fields to sc_records, pos, gr_requests
+    if _table_exists(conn, "sc_records"):
+        sc_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "asset" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN asset TEXT NOT NULL DEFAULT 'N'")
+        if "asset_nums" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN asset_nums TEXT")
+        if "pending_date" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN pending_date TEXT")
+        if "approved_date" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN approved_date TEXT")
+
+    if _table_exists(conn, "pos"):
+        po_cols = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
+        if "contract_pos" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN contract_pos TEXT")
+        if "contract_type" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN contract_type TEXT")
+        if "cost_center" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN cost_center TEXT")
+        if "purchaser" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN purchaser TEXT")
+        if "pending_date" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN pending_date TEXT")
+        if "approved_date" not in po_cols:
+            conn.execute("ALTER TABLE pos ADD COLUMN approved_date TEXT")
+
+    if _table_exists(conn, "gr_requests"):
+        gr_cols = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "pending_date" not in gr_cols:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN pending_date TEXT")
+        if "approved_date" not in gr_cols:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN approved_date TEXT")
+
+    _record(conn, 7)
 
 
 def migrate(config: AppConfig) -> None:
@@ -453,6 +496,10 @@ def migrate(config: AppConfig) -> None:
             if 6 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v6(conn)
+                conn.commit()
+            if 7 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v7(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

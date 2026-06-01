@@ -8,7 +8,11 @@
     <el-descriptions-item :label="$t('sc.scAmount')"><AmountDisplay :value="sc.sc_amount" /></el-descriptions-item>
     <el-descriptions-item :label="$t('sc.servicePeriodStart')">{{ formatDate(sc.service_period_start) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.servicePeriodEnd')">{{ formatDate(sc.service_period_end) }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.asset')">{{ sc.asset || '-' }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.assetNums')">{{ sc.asset_nums || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.description')" :span="2">{{ sc.description || '-' }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.pendingDate')">{{ formatDate(sc.pending_date) }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.approvedDate')">{{ formatDate(sc.approved_date) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.createdAt')">{{ formatDate(sc.created_at) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.updatedAt')">{{ formatDate(sc.updated_at) }}</el-descriptions-item>
   </el-descriptions>

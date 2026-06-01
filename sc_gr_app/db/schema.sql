@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS sc_records (
   approved_by TEXT REFERENCES users(user_id),
   approved_at TEXT,
   closed_at TEXT,
+  asset TEXT NOT NULL DEFAULT 'N',
+  asset_nums TEXT,
+  pending_date TEXT,
+  approved_date TEXT,
   CHECK (
     status = 'draft'
     OR (
@@ -87,6 +91,12 @@ CREATE TABLE IF NOT EXISTS pos (
   contract_to TEXT,
   contract_no TEXT,
   payment_frequency TEXT,
+  contract_pos TEXT,
+  contract_type TEXT,
+  cost_center TEXT,
+  purchaser TEXT,
+  pending_date TEXT,
+  approved_date TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -104,7 +114,9 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   approved_by TEXT REFERENCES users(user_id),
   approved_at TEXT,
   cancelled_by TEXT REFERENCES users(user_id),
-  cancelled_at TEXT
+  cancelled_at TEXT,
+  pending_date TEXT,
+  approved_date TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (

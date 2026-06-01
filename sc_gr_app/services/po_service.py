@@ -157,9 +157,15 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                       contract_to,
                       contract_no,
                       payment_frequency,
+                      contract_pos,
+                      contract_type,
+                      cost_center,
+                      purchaser,
+                      pending_date,
+                      approved_date,
                       created_at,
                       updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         po_id,
@@ -172,6 +178,12 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("contract_to"),
                         data.get("contract_no"),
                         data.get("payment_frequency"),
+                        data.get("contract_pos"),
+                        data.get("contract_type"),
+                        data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
+                        data.get("purchaser"),
+                        timestamp,
+                        timestamp if status == "po_approved" else None,
                         timestamp,
                         timestamp,
                     ),
@@ -210,6 +222,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
         "contract_to",
         "contract_no",
         "payment_frequency",
+        "contract_pos",
+        "contract_type",
+        "cost_center",
+        "purchaser",
+        "pending_date",
+        "approved_date",
     }
     updates = {key: value for key, value in data.items() if key in allowed_fields}
     if not updates:
@@ -271,6 +289,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                         contract_to = ?,
                         contract_no = ?,
                         payment_frequency = ?,
+                        contract_pos = ?,
+                        contract_type = ?,
+                        cost_center = ?,
+                        purchaser = ?,
+                        pending_date = ?,
+                        approved_date = ?,
                         updated_at = ?
                     where po_id = ?
                     """,
@@ -282,6 +306,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                         merged.get("contract_to"),
                         merged.get("contract_no"),
                         merged.get("payment_frequency"),
+                        merged.get("contract_pos"),
+                        merged.get("contract_type"),
+                        merged.get("cost_center"),
+                        merged.get("purchaser"),
+                        merged.get("pending_date"),
+                        merged.get("approved_date"),
                         timestamp,
                         po_id,
                     ),
@@ -331,10 +361,11 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     """
                     update pos
                     set status = 'po_approved',
+                        approved_date = ?,
                         updated_at = ?
                     where po_id = ?
                     """,
-                    (timestamp, po_id),
+                    (timestamp, timestamp, po_id),
                 )
                 after = _get_po_or_raise(conn, po_id)
                 write_audit_log(

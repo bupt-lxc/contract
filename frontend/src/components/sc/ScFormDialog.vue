@@ -56,6 +56,33 @@
       <el-form-item :label="$t('sc.description')">
         <el-input v-model="form.description" type="textarea" :rows="3" />
       </el-form-item>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('sc.asset')">
+            <el-select v-model="form.asset">
+              <el-option label="Y" value="Y" />
+              <el-option label="N" value="N" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('sc.assetNums')">
+            <el-input v-model="form.asset_nums" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row v-if="mode === 'edit'" :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('sc.pendingDate')">
+            <el-date-picker v-model="form.pending_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('sc.approvedDate')">
+            <el-date-picker v-model="form.approved_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+      </el-row>
       <el-form-item :label="$t('attachment.attachments')">
         <div>
           <el-button size="small" @click="handlePickFiles">
@@ -113,22 +140,24 @@ const emptyForm = () => ({
   sc_no: '',
   requester_id: '',
   request_type: '',
-  cost_center: '',
+  cost_center: '60473000',
   sc_amount: null,
   service_period_start: null,
   service_period_end: null,
-  description: ''
+  description: '',
+  asset: 'N',
+  asset_nums: '',
+  pending_date: null,
+  approved_date: null
 })
 
 const form = reactive(emptyForm())
 
 const draftRules = {
-  requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }],
-  sc_no: [{ required: true, message: t('sc.scNoRequired'), trigger: 'change' }]
+  requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }]
 }
 const submitRules = {
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }],
-  sc_no: [{ required: true, message: t('sc.scNoRequired'), trigger: 'change' }],
   request_type: [{ required: true, message: t('sc.requestTypeRequired'), trigger: 'change' }],
   cost_center: [{ required: true, message: t('sc.costCenterRequired'), trigger: 'change' }],
   sc_amount: [{ required: true, message: t('sc.scAmountRequired'), trigger: 'change' }],

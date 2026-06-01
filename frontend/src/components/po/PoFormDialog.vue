@@ -7,9 +7,29 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
-        <el-col :span="24">
+        <el-col :span="12">
           <el-form-item :label="$t('po.poNo')">
             <el-input v-model="form.po_no" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('po.contractPos')">
+            <el-input v-model="form.contract_pos" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('po.contractType')">
+            <el-select v-model="form.contract_type" clearable>
+              <el-option label="PO" value="PO" />
+              <el-option label="Contract" value="Contract" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('po.purchaser')">
+            <el-input v-model="form.purchaser" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -42,9 +62,30 @@
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item :label="$t('po.paymentFrequency')">
-        <el-input v-model="form.payment_frequency" />
-      </el-form-item>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('po.costCenter')">
+            <el-input v-model="form.cost_center" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('po.paymentFrequency')">
+            <el-input v-model="form.payment_frequency" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row v-if="mode === 'edit'" :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('po.pendingDate')">
+            <el-date-picker v-model="form.pending_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('po.approvedDate')">
+            <el-date-picker v-model="form.approved_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+      </el-row>
       <el-form-item :label="$t('attachment.attachments')">
         <div>
           <el-button size="small" @click="handlePickFiles">
@@ -83,7 +124,8 @@ const props = defineProps({
   visible: Boolean,
   mode: { type: String, default: 'create' },
   record: Object,
-  vendors: { type: Array, default: () => [] }
+  vendors: { type: Array, default: () => [] },
+  scRecord: { type: Object, default: null }
 })
 
 const emit = defineEmits(['update:visible', 'save'])
@@ -96,7 +138,9 @@ const pickedFiles = ref([])
 
 const emptyForm = () => ({
   po_no: '', vendor_id: '', po_amount: null,
-  contract_from: null, contract_to: null, contract_no: '', payment_frequency: ''
+  contract_from: null, contract_to: null, contract_no: '', payment_frequency: '',
+  contract_pos: '', contract_type: '', cost_center: '', purchaser: '',
+  pending_date: null, approved_date: null
 })
 
 const form = reactive(emptyForm())
@@ -113,6 +157,9 @@ watch(() => props.visible, (val) => {
       Object.assign(form, props.record)
     } else {
       Object.assign(form, emptyForm())
+      if (props.scRecord?.cost_center) {
+        form.cost_center = String(props.scRecord.cost_center)
+      }
       formRef.value?.resetFields()
     }
   }
