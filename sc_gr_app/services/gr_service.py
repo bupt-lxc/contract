@@ -350,6 +350,15 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 if before["status"] != "draft":
                     raise ConflictError("GR must be draft to submit")
 
+                # Parent PO must not be draft for manual submission
+                po = conn.execute(
+                    "SELECT status FROM pos WHERE po_id = ?", (before["po_id"],)
+                ).fetchone()
+                if po is None:
+                    raise ConflictError("PO not found")
+                if po["status"] == "draft":
+                    raise ConflictError("Cannot submit GR while PO is still draft. Submit the PO first.")
+
                 # Budget check at submission time
                 estimated_amount = Decimal(str(before["estimated_amount"]))
                 sc_budget = compute_sc_budget_decimal(config, sc_id)

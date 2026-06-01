@@ -261,7 +261,7 @@ async function handlePoSubmit(row) {
     await submitPo(row.po_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handlePoSave(data) {

@@ -212,7 +212,7 @@ async function handleSubmit() {
     await submitPo(poId.value)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleGrApprove(row) {
@@ -248,7 +248,7 @@ async function handleGrSubmit(row) {
     await submitGr(row.gr_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleExportGrs() {

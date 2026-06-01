@@ -292,6 +292,15 @@ def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "draft":
                     raise ConflictError("PO must be draft to submit")
 
+                # Parent SC must not be draft for manual submission
+                sc = conn.execute(
+                    "SELECT status FROM sc_records WHERE sc_id = ?", (sc_id,)
+                ).fetchone()
+                if sc is None:
+                    raise ConflictError("SC not found")
+                if sc["status"] == "draft":
+                    raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
+
                 # Budget check at submission time
                 po_amount = Decimal(str(before["po_amount"]))
                 budget = compute_sc_budget_decimal(config, sc_id)
