@@ -142,10 +142,6 @@ def _validate_gr_creation_context(
 ) -> None:
     if po_sc["sc_status"] != "approved":
         raise ConflictError("SC must be approved")
-    if not po_sc["sc_no"]:
-        raise ConflictError("SC No is required")
-    if not po_sc["po_no"]:
-        raise ConflictError("PO No is required")
     if po_sc["status"] != "po_approved":
         raise ConflictError("PO must be approved")
     sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
@@ -384,10 +380,6 @@ def update_gr(
                     po_sc = _get_po_sc(conn, merged["po_id"])
                     if po_sc["sc_status"] != "approved":
                         raise ConflictError("SC must be approved")
-                    if not po_sc["sc_no"]:
-                        raise ConflictError("SC No is required")
-                    if not po_sc["po_no"]:
-                        raise ConflictError("PO No is required")
                     if po_sc["status"] != "po_approved":
                         raise ConflictError("PO must be approved")
 

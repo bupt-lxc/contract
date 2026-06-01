@@ -419,8 +419,6 @@ def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
 @pytest.mark.parametrize(
     ("sc_no", "po_no", "po_status", "amount", "message"),
     [
-        ("", "PO001", "po_approved", 100, "SC No is required"),
-        ("SC001", "", "po_approved", 100, "PO No is required"),
         ("SC001", "PO001", "po_pending", 100, "PO must be approved"),
         ("SC001", "PO001", "po_approved", 900, "PO open amount is insufficient"),
     ],
