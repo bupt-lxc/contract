@@ -958,11 +958,14 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     assert [gr["gr_id"] for gr in detail["grs"]] == [gr_id]
     assert "create_sc" in [log["action_type"] for log in detail["audit_logs"]]
     assert detail["permissions"] == {
+        "is_admin": True,
         "can_edit_sc": True,
         "can_submit_sc": False,
         "can_approve_sc": False,
         "can_deny_sc": False,
         "can_close_sc": True,
+        "can_revoke_sc": True,
+        "can_delete_sc": False,
         "can_manage_po": True,
         "can_manage_gr": True,
     }

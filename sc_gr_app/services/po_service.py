@@ -465,6 +465,12 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
+                sc = conn.execute(
+                    "select status from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if sc["status"] == "closed":
+                    raise ConflictError("Closed SC cannot be edited")
 
                 if before["status"] == "po_approved":
                     new_status = "po_pending"
@@ -490,9 +496,13 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     before=before,
                     after=after,
                 )
+                sc_requester = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
                 notification_service.queue_status_change(
                     conn, "po", po_id, "revoke",
-                    {"requester_id": before.get("requester_id")}, current_user
+                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
                 )
                 conn.commit()
             except Exception:

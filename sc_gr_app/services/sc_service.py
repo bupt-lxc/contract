@@ -149,7 +149,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
         "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and (is_approved or is_closed)),
-        "can_delete_sc": is_owner and is_draft,
+        "can_delete_sc": (is_admin or is_owner) and is_draft,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
     }

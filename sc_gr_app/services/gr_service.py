@@ -575,8 +575,6 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 before = _get_gr(conn, gr_id)
 
                 if before["status"] == "approved":
-                    new_status = "pending"
-                    timestamp = utc_now()
                     conn.execute(
                         """update gr_requests
                         set status = 'pending',
@@ -587,8 +585,6 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                         (gr_id,),
                     )
                 elif before["status"] == "cancelled":
-                    new_status = "pending"
-                    timestamp = utc_now()
                     conn.execute(
                         """update gr_requests
                         set status = 'pending',
