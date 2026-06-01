@@ -15,6 +15,12 @@
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110">
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
     </el-table-column>
+    <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110">
+      <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
+      <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
+    </el-table-column>
     <el-table-column :label="$t('gr.actions')" width="220" fixed="right">
       <template #default="{ row }">
         <el-button type="primary" link size="small" @click="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>

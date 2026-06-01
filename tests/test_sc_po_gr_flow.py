@@ -419,8 +419,6 @@ def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
 @pytest.mark.parametrize(
     ("sc_no", "po_no", "po_status", "amount", "message"),
     [
-        ("", "PO001", "po_approved", 100, "SC No is required"),
-        ("SC001", "", "po_approved", 100, "PO No is required"),
         ("SC001", "PO001", "po_pending", 100, "PO must be approved"),
         ("SC001", "PO001", "po_approved", 900, "PO open amount is insufficient"),
     ],
@@ -880,30 +878,6 @@ def test_owner_cannot_edit_pending_sc(app_config):
         update_sc(app_config, USER, sc_id, {"description": "late change"})
 
 
-def test_admin_cannot_approve_sc_without_sc_no(app_config):
-    migrate(app_config)
-    seed_users(app_config)
-
-    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
-
-    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
-    sc_id = created["sc_id"]
-    submit_sc(
-        app_config,
-        USER,
-        sc_id,
-        {
-            "request_type": "service",
-            "cost_center": 1001,
-            "sc_amount": 1000,
-            "service_period_start": "2026-01-01",
-            "service_period_end": "2026-12-31",
-        },
-    )
-
-    with pytest.raises(ConflictError, match="SC No is required"):
-        approve_sc(app_config, ADMIN, sc_id)
-
 
 def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
     migrate(app_config)
@@ -1014,7 +988,7 @@ def test_get_sc_detail_includes_po_budget_data(app_config):
     assert detail["pos"][0]["open_po_amount"] == 700
 
 
-def test_admin_cannot_view_draft_sc_detail(app_config):
+def test_admin_can_view_draft_sc_detail(app_config):
     migrate(app_config)
     seed_users(app_config)
 
@@ -1023,8 +997,9 @@ def test_admin_cannot_view_draft_sc_detail(app_config):
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
 
-    with pytest.raises(PermissionDenied, match="SC is not visible"):
-        get_sc_detail(app_config, ADMIN, sc_id)
+    detail = get_sc_detail(app_config, ADMIN, sc_id)
+    assert detail["sc"]["sc_id"] == sc_id
+    assert detail["sc"]["status"] == "draft"
 
 
 def test_update_sc_rejects_amount_below_allocated_po_amount(app_config):

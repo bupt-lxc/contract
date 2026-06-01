@@ -28,6 +28,18 @@
       <el-form-item :label="$t('gr.remark')">
         <el-input v-model="form.remark" type="textarea" :rows="3" />
       </el-form-item>
+      <el-row v-if="mode === 'edit'" :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.pendingDate')">
+            <el-date-picker v-model="form.pending_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.approvedDate')">
+            <el-date-picker v-model="form.approved_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+      </el-row>
       <el-form-item :label="$t('attachment.attachments')">
         <div>
           <el-button size="small" @click="handlePickFiles">
@@ -77,7 +89,8 @@ const submitting = ref(false)
 const pickedFiles = ref([])
 
 const emptyForm = () => ({
-  requester_id: '', estimated_amount: null, con_value: null, remark: ''
+  requester_id: '', estimated_amount: null, con_value: null, remark: '',
+  pending_date: null, approved_date: null
 })
 
 const form = reactive(emptyForm())

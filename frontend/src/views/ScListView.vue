@@ -69,9 +69,34 @@ const scStatuses = [
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
 
+const deadlineOptions = [
+  { label: t('filter.unlimited'), value: '' },
+  { label: t('filter.within3Years'), value: '3y' },
+  { label: t('filter.within2Years'), value: '2y' },
+  { label: t('filter.within1Year'), value: '1y' },
+  { label: t('filter.within6Months'), value: '6m' },
+  { label: t('filter.within5Months'), value: '5m' },
+  { label: t('filter.within4Months'), value: '4m' },
+  { label: t('filter.within3Months'), value: '3m' },
+  { label: t('filter.within2Months'), value: '2m' },
+  { label: t('filter.within1Month'), value: '1m' },
+]
+
+function computeDeadlineEnd(value) {
+  const today = new Date()
+  const match = value.match(/^(\d+)([ym])$/)
+  if (!match) return null
+  const num = parseInt(match[1])
+  const unit = match[2]
+  if (unit === 'y') today.setFullYear(today.getFullYear() + num)
+  else today.setMonth(today.getMonth() + num)
+  return today.toISOString().slice(0, 10)
+}
+
 const scFilterConfig = [
   { name: 'status', label: t('filter.status'), type: 'select', options: scStatuses },
   { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'asset', label: t('filter.asset'), type: 'select', options: [{label:'Y',value:'Y'},{label:'N',value:'N'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
   { name: 'sc_no', label: t('filter.scNo'), type: 'input' },
@@ -81,6 +106,9 @@ const scFilterConfig = [
   { name: 'created_by_name', label: t('filter.createdByName'), type: 'input' },
   { name: 'service_period_start', label: t('filter.serviceStart'), type: 'date-range' },
   { name: 'sc_amount', label: t('filter.scAmount'), type: 'amount-range' },
+  { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
+  { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
 const scDialogVisible = ref(false)
@@ -88,7 +116,16 @@ const scDialogMode = ref('create')
 const scDialogRecord = ref(null)
 
 function handleFilter({ text, filters }) {
-  searchScs(text, filters)
+  const transformed = { ...filters }
+  if (transformed.deadline) {
+    const endDate = computeDeadlineEnd(transformed.deadline)
+    if (endDate) {
+      transformed.deadline_from = new Date().toISOString().slice(0, 10)
+      transformed.deadline_to = endDate
+    }
+  }
+  delete transformed.deadline
+  searchScs(text, transformed)
 }
 
 function handleReset() {
@@ -141,8 +178,11 @@ async function handleExport() {
       { key: 'sc_no', label: t('exportCol.scNo') },
       { key: 'requester_name', label: t('exportCol.requester') },
       { key: 'request_type', label: t('exportCol.type') },
+      { key: 'asset', label: t('exportCol.asset') },
       { key: 'cost_center', label: t('exportCol.costCenter') },
       { key: 'sc_amount', label: t('exportCol.scAmount') },
+      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
+      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) },
       { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').slice(0, 19) },
       { key: 'description', label: t('exportCol.description') }
     ]
