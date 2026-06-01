@@ -258,24 +258,35 @@ onMounted(async () => {
   background: #f0fdf4;
 }
 
+/* Table area — uniform background per status */
+.wb-cell--draft .wb-cell__table {
+  background: #fafbfc;
+}
+.wb-cell--pending .wb-cell__table {
+  background: #fefaf5;
+}
+.wb-cell--approved .wb-cell__table {
+  background: #f6fcf7;
+}
+
 .wb-cell--draft .wb-cell__tr {
   background: #fafbfc;
 }
 .wb-cell--pending .wb-cell__tr {
-  background: #fffaf5;
+  background: #fefaf5;
 }
 .wb-cell--approved .wb-cell__tr {
-  background: #f7fdf8;
+  background: #f6fcf7;
 }
 
 .wb-cell--draft .wb-cell__empty {
   background: #fafbfc;
 }
 .wb-cell--pending .wb-cell__empty {
-  background: #fffaf5;
+  background: #fefaf5;
 }
 .wb-cell--approved .wb-cell__empty {
-  background: #f7fdf8;
+  background: #f6fcf7;
 }
 
 /* Table */
@@ -288,8 +299,7 @@ onMounted(async () => {
   align-items: center;
   padding: 0.35em 0.7em;
   gap: 0.4em;
-  background: #fafbfc;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #e8ecf0;
   font-size: 0.68rem;
   font-weight: 600;
   color: #94a3b8;
