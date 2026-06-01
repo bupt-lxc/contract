@@ -292,16 +292,21 @@ def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "draft":
                     raise ConflictError("PO must be draft to submit")
 
-                # Budget check at submission time (skip if SC is draft with no amount)
-                sc_amount_row = conn.execute(
-                    "SELECT sc_amount FROM sc_records WHERE sc_id = ?",
-                    (sc_id,),
+                # SC must not be draft for PO submission
+                sc = conn.execute(
+                    "SELECT status, sc_amount FROM sc_records WHERE sc_id = ?", (sc_id,)
                 ).fetchone()
-                if sc_amount_row["sc_amount"] is not None:
+                if sc is None:
+                    raise ConflictError("SC not found")
+                if sc["status"] == "draft":
+                    raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
+
+                # Budget check at submission time (skip if SC has no amount set)
+                if sc["sc_amount"] is not None:
                     po_amount = Decimal(str(before["po_amount"]))
                     budget = compute_sc_budget_decimal(config, sc_id)
                     if budget["allocated_po_amount"] + po_amount > Decimal(
-                        str(sc_amount_row["sc_amount"])
+                        str(sc["sc_amount"])
                     ):
                         raise ConflictError("PO total would exceed SC amount")
 
@@ -494,15 +499,19 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
 
-                # Block if draft GRs exist
-                draft_grs = conn.execute(
-                    "SELECT gr_id FROM gr_requests WHERE po_id = ? AND status = 'draft'",
+                # Block if unprocessed (draft or pending) GRs exist
+                unprocessed = conn.execute(
+                    "SELECT gr_id, status FROM gr_requests WHERE po_id = ? AND status IN ('draft', 'pending')",
                     (po_id,),
                 ).fetchall()
-                if draft_grs:
+                if unprocessed:
+                    statuses = {r["status"] for r in unprocessed}
+                    desc = "unsubmitted draft" if statuses == {"draft"} else \
+                           "pending" if statuses == {"pending"} else \
+                           "unprocessed (draft/pending)"
                     raise ConflictError(
-                        f"Cannot approve PO with {len(draft_grs)} unsubmitted draft GR(s). "
-                        "Submit or delete them first."
+                        f"Cannot approve PO with {len(unprocessed)} {desc} GR(s). "
+                        "Approve all GRs first."
                     )
 
                 conn.commit()

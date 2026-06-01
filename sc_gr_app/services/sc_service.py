@@ -405,17 +405,6 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 if before["status"] not in ("draft", "denied"):
                     raise ConflictError("SC must be draft or denied")
 
-                # Block if draft POs exist
-                draft_pos = conn.execute(
-                    "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
-                    (sc_id,),
-                ).fetchall()
-                if draft_pos:
-                    raise ConflictError(
-                        f"Cannot submit SC with {len(draft_pos)} unsubmitted draft PO(s). "
-                        "Submit or delete them first."
-                    )
-
                 # Admin can submit any draft; requester can only submit their own
                 if (
                     current_user["role"] != "admin"
@@ -625,6 +614,33 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 before = _get_sc(conn, sc_id)
                 if before["status"] != "approved":
                     raise ConflictError("SC must be approved")
+
+                # Block if any PO is not finished
+                unfinished_pos = conn.execute(
+                    "SELECT po_id, status FROM pos WHERE sc_id = ? AND status != 'finished'",
+                    (sc_id,),
+                ).fetchall()
+                if unfinished_pos:
+                    raise ConflictError(
+                        f"Cannot close SC: {len(unfinished_pos)} PO(s) not finished. "
+                        "Finish all POs first."
+                    )
+
+                # Block if any GR is not in a final state
+                non_final_grs = conn.execute(
+                    """
+                    SELECT gr.gr_id, gr.status
+                    FROM gr_requests gr
+                    JOIN pos po ON po.po_id = gr.po_id
+                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'cancelled')
+                    """,
+                    (sc_id,),
+                ).fetchall()
+                if non_final_grs:
+                    raise ConflictError(
+                        f"Cannot close SC: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve or cancel all GRs first."
+                    )
 
                 timestamp = utc_now()
                 conn.execute(
@@ -906,17 +922,6 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 notification_service.queue_status_change(
                     conn, "sc", sc_id, "approve", before, current_user
                 )
-
-                # Block if draft POs exist
-                draft_pos = conn.execute(
-                    "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
-                    (sc_id,),
-                ).fetchall()
-                if draft_pos:
-                    raise ConflictError(
-                        f"Cannot approve SC with {len(draft_pos)} unsubmitted draft PO(s). "
-                        "Submit or delete them first."
-                    )
 
                 conn.commit()
             except Exception:
