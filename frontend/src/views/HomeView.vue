@@ -16,7 +16,7 @@
       </div>
       <div class="wb-grid">
         <div v-for="cell in scCells" :key="cell.status" class="wb-cell">
-          <div class="wb-cell__head">
+          <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.sc?.[cell.status]?.count ?? 0 }}</span>
           </div>
@@ -52,7 +52,7 @@
       </div>
       <div class="wb-grid">
         <div v-for="cell in poCells" :key="cell.status" class="wb-cell">
-          <div class="wb-cell__head">
+          <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.po?.[cell.status]?.count ?? 0 }}</span>
           </div>
@@ -88,7 +88,7 @@
       </div>
       <div class="wb-grid">
         <div v-for="cell in grCells" :key="cell.status" class="wb-cell">
-          <div class="wb-cell__head">
+          <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.gr?.[cell.status]?.count ?? 0 }}</span>
           </div>
@@ -145,6 +145,13 @@ const grCells = computed(() => [
   { status: 'pending',    label: t('status.pending') },
   { status: 'approved',   label: t('status.approved') },
 ])
+
+function headStatus(status) {
+  if (status.includes('draft')) return 'draft'
+  if (status.includes('pending')) return 'pending'
+  if (status.includes('approved')) return 'approved'
+  return 'draft'
+}
 
 onMounted(async () => {
   try {
@@ -238,6 +245,17 @@ onMounted(async () => {
   font-size: 1.2rem;
   font-weight: 700;
   color: #1e293b;
+}
+
+/* Status colors */
+.wb-cell__head--draft {
+  background: #f8fafc;
+}
+.wb-cell__head--pending {
+  background: #fff7ed;
+}
+.wb-cell__head--approved {
+  background: #f0fdf4;
 }
 
 /* Table */
