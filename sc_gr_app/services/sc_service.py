@@ -134,7 +134,7 @@ def _assert_can_edit_sc(user: dict, sc: dict) -> None:
 
 def _sc_permissions(user: dict, sc: dict) -> dict:
     is_admin = user.get("role") == "admin"
-    is_owner = user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]
+    is_owner = user.get("user_id") == sc["requester_id"]
     is_draft = sc["status"] == "draft"
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
@@ -863,6 +863,8 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 before = _get_sc(conn, sc_id)
                 if before["status"] != "pending":
                     raise ConflictError("SC must be pending")
+                if not before.get("sc_no"):
+                    raise ConflictError("Cannot approve SC without SC No")
 
                 timestamp = utc_now()
                 conn.execute(

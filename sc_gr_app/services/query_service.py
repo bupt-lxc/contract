@@ -127,7 +127,7 @@ def _sc_visibility_clauses(
 
     role = current_user.get("role")
     if role == "admin":
-        return [f"{sc_alias}.status != 'draft'"], []
+        return [], []
     if role == "requester":
         if include_own_drafts:
             return [f"{sc_alias}.requester_id = ?"], [current_user["user_id"]]
@@ -582,19 +582,7 @@ def search_audit_logs(
         ]
         base_params = []
     elif current_user.get("role") == "admin":
-        base_clauses = [
-            """
-            (
-              audit_logs.sc_id is null
-              or exists (
-                select 1
-                from sc_records sc
-                where sc.sc_id = audit_logs.sc_id
-                  and sc.status != 'draft'
-              )
-            )
-            """
-        ]
+        base_clauses = []
         base_params = []
     elif current_user.get("role") == "requester":
         base_clauses = [
