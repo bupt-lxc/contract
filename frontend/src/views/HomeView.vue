@@ -117,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -128,23 +128,23 @@ const { t } = useI18n()
 const data = ref({ sc: {}, po: {}, gr: {} })
 const error = ref(null)
 
-const scCells = [
+const scCells = computed(() => [
   { status: 'draft',     label: t('status.draft') },
   { status: 'pending',   label: t('status.pending') },
   { status: 'approved',  label: t('status.approved') },
-]
+])
 
-const poCells = [
+const poCells = computed(() => [
   { status: 'draft',        label: t('status.draft') },
   { status: 'po_pending',   label: t('status.pending') },
   { status: 'po_approved',  label: t('status.approved') },
-]
+])
 
-const grCells = [
+const grCells = computed(() => [
   { status: 'draft',      label: t('status.draft') },
   { status: 'pending',    label: t('status.pending') },
   { status: 'approved',   label: t('status.approved') },
-]
+])
 
 onMounted(async () => {
   try {
@@ -223,19 +223,19 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.4em 0.6em;
+  padding: 0.5em 0.7em;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
 
 .wb-cell__status {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #475569;
 }
 
 .wb-cell__count {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #1e293b;
 }
@@ -248,15 +248,15 @@ onMounted(async () => {
 .wb-cell__th {
   display: flex;
   align-items: center;
-  padding: 0.25em 0.6em;
-  gap: 0.35em;
+  padding: 0.35em 0.7em;
+  gap: 0.4em;
   background: #fafbfc;
   border-bottom: 1px solid #f1f5f9;
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #94a3b8;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
+  line-height: 1.3;
 }
 
 .wb-cell__th-id,
@@ -290,11 +290,12 @@ onMounted(async () => {
 .wb-cell__tr {
   display: flex;
   align-items: center;
-  padding: 0.3em 0.6em;
-  gap: 0.35em;
+  padding: 0.45em 0.7em;
+  gap: 0.4em;
   cursor: pointer;
   transition: background 0.12s;
   border-bottom: 1px solid #f8fafc;
+  line-height: 1.3;
 }
 
 .wb-cell__tr:last-child {
@@ -306,26 +307,26 @@ onMounted(async () => {
 }
 
 .wb-cell__td-id {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: #1e293b;
 }
 
 .wb-cell__td-sub {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   color: #94a3b8;
 }
 
 .wb-cell__td-amt {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: #334155;
 }
 
 .wb-cell__empty {
-  padding: 0.9em 0.6em;
+  padding: 1em 0.7em;
   text-align: center;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: #cbd5e1;
 }
 </style>
