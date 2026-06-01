@@ -7,10 +7,11 @@
       </div>
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'po_pending' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'po_pending' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -68,6 +69,7 @@
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @cancel="row => handleGrCancel(row)"
+          @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
       </div>
@@ -124,8 +126,8 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updatePo, approvePo, finishPo } = usePo()
-const { createGr, updateGr, approveGr, cancelGr } = useGr()
+const { updatePo, approvePo, finishPo, submitPo } = usePo()
+const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
 
@@ -204,6 +206,15 @@ async function handleDelete() {
   } catch {}
 }
 
+async function handleSubmit() {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
+    await submitPo(poId.value)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
 async function handleGrApprove(row) {
   try {
     const { value } = await ElMessageBox.prompt(
@@ -227,6 +238,15 @@ async function handleGrCancel(row) {
     await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
     await cancelGr(row.gr_id)
     ElMessage.success(t('gr.grCancelled'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleGrSubmit(row) {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this GR?', t('common.confirm'), { type: 'warning' })
+    await submitGr(row.gr_id)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
   } catch {}
 }

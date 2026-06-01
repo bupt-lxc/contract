@@ -13,7 +13,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("sc_id", "vendor_id", "po_amount")
-SUPPORTED_STATUSES = {"po_pending", "po_approved", "finished"}
+SUPPORTED_STATUSES = {"draft", "po_pending", "po_approved", "finished"}
 
 
 def utc_now() -> str:
@@ -109,9 +109,6 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     po_amount = _positive_number(data["po_amount"], "po_amount")
-    status = data.get("status", "po_pending")
-    if status not in SUPPORTED_STATUSES:
-        raise ValidationError("status is invalid")
 
     sc_id = data["sc_id"]
     timestamp = utc_now()
@@ -127,8 +124,23 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 ).fetchone()
                 if sc is None:
                     raise NotFound(f"SC not found: {sc_id}")
-                if sc["status"] != "approved":
-                    raise ConflictError("SC must be approved")
+
+                sc_status = sc["status"]
+                if sc_status not in ("draft", "approved"):
+                    raise ConflictError("SC must be draft or approved")
+
+                # Derive PO status from SC context
+                status = data.get("status")
+                if status is None:
+                    status = "draft" if sc_status == "draft" else "po_pending"
+                elif status not in SUPPORTED_STATUSES:
+                    raise ValidationError("status is invalid")
+                # Enforce: draft SC → draft PO only
+                if sc_status == "draft" and status != "draft":
+                    raise ConflictError("Draft SC only allows draft PO")
+                if sc_status == "approved" and status == "draft":
+                    raise ConflictError("Approved SC does not allow draft PO")
+
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can create POs")
 
@@ -139,11 +151,16 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 if vendor is None:
                     raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
-                budget = compute_sc_budget_decimal(config, sc_id)
-                if budget["allocated_po_amount"] + po_amount > Decimal(
-                    str(sc["sc_amount"])
-                ):
-                    raise ConflictError("PO total would exceed SC amount")
+                is_draft = status == "draft"
+                if not is_draft:
+                    budget = compute_sc_budget_decimal(config, sc_id)
+                    if budget["allocated_po_amount"] + po_amount > Decimal(
+                        str(sc["sc_amount"])
+                    ):
+                        raise ConflictError("PO total would exceed SC amount")
+
+                pending_date_value = None if is_draft else timestamp
+                approved_date_value = timestamp if status == "po_approved" else None
 
                 conn.execute(
                     """
@@ -183,8 +200,8 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("contract_type"),
                         data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
                         data.get("purchaser"),
-                        timestamp,
-                        timestamp if status == "po_approved" else None,
+                        pending_date_value,
+                        approved_date_value,
                         timestamp,
                         timestamp,
                     ),
@@ -211,6 +228,92 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 raise
 
     return created
+
+
+def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
+    """Submit draft POs in-place on an existing connection (no lock acquisition).
+
+    Used internally by approve_sc for cascade submission.
+    Returns list of submitted PO dicts.
+    """
+    submitted = []
+    for po_id in po_ids:
+        before = _get_po_or_raise(conn, po_id)
+        if before["status"] != "draft":
+            raise ConflictError(f"PO must be draft to submit: {po_id}")
+
+        conn.execute(
+            """
+            update pos
+            set status = 'po_pending',
+                pending_date = ?,
+                updated_at = ?
+            where po_id = ?
+            """,
+            (timestamp, timestamp, po_id),
+        )
+        after = _get_po_or_raise(conn, po_id)
+        write_audit_log(
+            conn,
+            action_type="submit_po",
+            object_type="po",
+            object_id=po_id,
+            sc_id=after["sc_id"],
+            operator_id=after.get("created_by", "SYSTEM"),
+            machine_id="SYSTEM_CASCADE",
+            before=before,
+            after=after,
+        )
+        sc = conn.execute(
+            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+            (after["sc_id"],),
+        ).fetchone()
+        notification_service.queue_status_change(
+            conn, "po", po_id, "submit",
+            {"requester_id": sc["requester_id"]} if sc else {},
+            {"user_id": after.get("created_by", "SYSTEM"), "machine_id": "SYSTEM_CASCADE"}
+        )
+        submitted.append(after)
+    return submitted
+
+
+def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Manually submit a draft PO to po_pending status (with budget check)."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                if before["status"] != "draft":
+                    raise ConflictError("PO must be draft to submit")
+
+                # Budget check at submission time
+                po_amount = Decimal(str(before["po_amount"]))
+                budget = compute_sc_budget_decimal(config, sc_id)
+                if budget["allocated_po_amount"] + po_amount > Decimal(
+                    str(
+                        conn.execute(
+                            "SELECT sc_amount FROM sc_records WHERE sc_id = ?",
+                            (sc_id,),
+                        ).fetchone()["sc_amount"]
+                    )
+                ):
+                    raise ConflictError("PO total would exceed SC amount")
+
+                timestamp = utc_now()
+                _submit_po_drafts(conn, [po_id], timestamp)
+                after = _get_po_or_raise(conn, po_id)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
 
 
 def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> dict:
@@ -250,6 +353,8 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     raise ConflictError("Closed SC cannot be edited")
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
+                if before["status"] == "draft" and sc["status"] != "draft":
+                    raise ConflictError("Draft PO can only be edited under draft SC")
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can edit POs")
 
@@ -388,6 +493,16 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     conn, "po", po_id, "approve",
                     {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
+
+                # Cascade: submit all draft GRs under this PO
+                from sc_gr_app.services.gr_service import _submit_gr_drafts
+                draft_grs = conn.execute(
+                    "SELECT gr_id FROM gr_requests WHERE po_id = ? AND status = 'draft'",
+                    (po_id,),
+                ).fetchall()
+                if draft_grs:
+                    _submit_gr_drafts(conn, [r["gr_id"] for r in draft_grs], timestamp)
+
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -514,7 +629,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Delete a po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
+    """Delete a draft, po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -526,8 +641,8 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                if before["status"] not in {"po_pending", "finished"}:
-                    raise ConflictError("Only pending or finished PO can be deleted")
+                if before["status"] not in {"draft", "po_pending", "finished"}:
+                    raise ConflictError("Only draft, pending or finished PO can be deleted")
                 sc = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),

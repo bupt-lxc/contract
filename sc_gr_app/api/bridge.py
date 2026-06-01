@@ -232,6 +232,16 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def submit_po(self, payload) -> dict:
+        """Submit a draft PO to po_pending (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.submit_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
     def revoke_po(self, payload) -> dict:
         """Roll back PO status (admin only)."""
         try:
@@ -287,6 +297,16 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def submit_gr(self, payload) -> dict:
+        """Submit a draft GR to pending (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.submit_gr(self.config, current_user, gr_id))
         except Exception as exc:
             return fail(exc)
 

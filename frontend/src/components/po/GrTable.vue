@@ -24,6 +24,7 @@
     <el-table-column :label="$t('gr.actions')" width="220" fixed="right">
       <template #default="{ row }">
         <el-button type="primary" link size="small" @click="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
+        <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
         <el-button v-if="row.status === 'pending'" type="success" link size="small" @click="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
         <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.cancelConfirm')" @confirm="$emit('cancel', row)">
           <template #reference>
@@ -45,7 +46,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['edit', 'approve', 'cancel', 'attachments', 'row-click'])
+defineEmits(['edit', 'approve', 'cancel', 'attachments', 'row-click', 'submit'])
 
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

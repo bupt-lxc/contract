@@ -141,7 +141,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_closed = sc["status"] == "closed"
     is_denied = sc["status"] == "denied"
     can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_closed)
-    can_manage = (is_admin or is_owner) and is_approved
+    can_manage = (is_admin or is_owner) and (is_draft or is_approved)
     return {
         "is_admin": is_admin,
         "can_edit_sc": can_edit,
@@ -894,6 +894,16 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 notification_service.queue_status_change(
                     conn, "sc", sc_id, "approve", before, current_user
                 )
+
+                # Cascade: submit all draft POs under this SC
+                from sc_gr_app.services.po_service import _submit_po_drafts
+                draft_pos = conn.execute(
+                    "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
+                    (sc_id,),
+                ).fetchall()
+                if draft_pos:
+                    _submit_po_drafts(conn, [r["po_id"] for r in draft_pos], timestamp)
+
                 conn.commit()
             except Exception:
                 conn.rollback()

@@ -5,9 +5,9 @@ import pytest
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
-from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr
-from sc_gr_app.services.po_service import create_po
-from sc_gr_app.services.sc_service import approve_sc, close_sc, create_sc
+from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr, submit_gr, delete_gr
+from sc_gr_app.services.po_service import create_po, submit_po, delete_po
+from sc_gr_app.services.sc_service import approve_sc, close_sc, create_sc, create_sc_draft, submit_sc
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -477,7 +477,7 @@ def test_create_po_requires_approved_sc(app_config):
         },
     )
 
-    with pytest.raises(ConflictError, match="SC must be approved"):
+    with pytest.raises(ConflictError, match="SC must be draft or approved"):
         create_po(
             app_config,
             ADMIN,
@@ -552,7 +552,7 @@ def test_create_gr_requires_approved_sc(app_config):
         )
         conn.commit()
 
-    with pytest.raises(ConflictError, match="SC must be approved"):
+    with pytest.raises(ConflictError, match="SC must be draft or approved to add GR"):
         create_gr(
             app_config,
             ADMIN,
@@ -1590,3 +1590,321 @@ def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     assert updated["con_value"] == 95
     assert updated["remark"] == "invoice adjusted"
     assert cancelled["status"] == "cancelled"
+
+
+# ── Draft PO/GR + cascade submission ──
+
+
+def test_create_draft_po_under_draft_sc(app_config):
+    """PO created under a draft SC must also be draft."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    assert sc["status"] == "draft"
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+    assert po["pending_date"] is None
+
+
+def test_reject_non_draft_po_under_draft_sc(app_config):
+    """Cannot create a non-draft PO under a draft SC."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    with pytest.raises(ConflictError, match="Draft SC only allows draft PO"):
+        create_po(
+            app_config, USER,
+            {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "po_pending"},
+        )
+
+
+def test_create_draft_gr_under_draft_po(app_config):
+    """GR created under a draft PO must also be draft."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    gr = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 200},
+    )
+    assert gr["status"] == "draft"
+    assert gr["pending_date"] is None
+
+
+def test_approve_sc_cascades_draft_po_submission(app_config):
+    """When SC is approved, draft POs are auto-submitted to po_pending."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-CAS1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    # SC is created as pending (has business fields) → submit it first
+    # Actually we need draft SC. Let's create a draft first, then use submit_sc.
+    # create_sc with full fields creates as pending. We need a draft.
+
+    # Create a draft SC, then add business fields and submit, then approve.
+    sc_draft = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    assert sc_draft["status"] == "draft"
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    # Create draft PO
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    # Submit SC (draft → pending). Must fill business fields first.
+    updated = submit_sc(
+        app_config, USER, sc_draft["sc_id"],
+        {"sc_no": "SC-CAS1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    assert updated["status"] == "pending"
+
+    # PO should still be draft (only approved SC triggers cascade)
+    with connect(app_config) as conn:
+        po_check = conn.execute("SELECT status FROM pos WHERE po_id = ?", (po["po_id"],)).fetchone()
+        assert po_check["status"] == "draft"
+
+    # Approve SC → cascade submits draft PO
+    approve_sc(app_config, ADMIN, sc_draft["sc_id"])
+    with connect(app_config) as conn:
+        po_after = conn.execute("SELECT * FROM pos WHERE po_id = ?", (po["po_id"],)).fetchone()
+        assert po_after["status"] == "po_pending"
+        assert po_after["pending_date"] is not None
+
+
+def test_approve_po_cascades_draft_gr_submission(app_config):
+    """When PO is approved, draft GRs are auto-submitted to pending."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 1000},
+    )
+    assert po["status"] == "draft"
+
+    gr = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 300},
+    )
+    assert gr["status"] == "draft"
+
+    # Submit and approve SC → draft PO becomes po_pending
+    submit_sc(
+        app_config, USER, sc["sc_id"],
+        {"sc_no": "SC-CAS2", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
+
+    # PO is now po_pending (cascaded from SC approve)
+    with connect(app_config) as conn:
+        po_check = conn.execute("SELECT status FROM pos WHERE po_id = ?", (po["po_id"],)).fetchone()
+        assert po_check["status"] == "po_pending"
+
+    # GR should still be draft
+    with connect(app_config) as conn:
+        gr_check = conn.execute("SELECT status FROM gr_requests WHERE gr_id = ?", (gr["gr_id"],)).fetchone()
+        assert gr_check["status"] == "draft"
+
+    # Approve PO → cascade submits draft GR
+    from sc_gr_app.services.po_service import approve_po
+    approve_po(app_config, ADMIN, po["po_id"])
+    with connect(app_config) as conn:
+        gr_after = conn.execute("SELECT * FROM gr_requests WHERE gr_id = ?", (gr["gr_id"],)).fetchone()
+        assert gr_after["status"] == "pending"
+        assert gr_after["pending_date"] is not None
+
+
+def test_manual_submit_po_with_budget_check(app_config):
+    """Manual submit_po performs budget check when SC amount insufficient."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    # Submit SC (draft→pending, no cascade) but set sc_amount lower than po_amount
+    submit_sc(
+        app_config, USER, sc["sc_id"],
+        {"sc_no": "SC-CAS3", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 400,  # SC amount < PO amount!
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    # SC is pending, PO is still draft. Manual submit should fail budget check.
+    with pytest.raises(ConflictError, match="PO total would exceed SC amount"):
+        submit_po(app_config, USER, po["po_id"])
+
+
+def test_manual_submit_gr_with_budget_check(app_config):
+    """Manual submit_gr performs budget check when PO amount insufficient."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    gr = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 600},  # > PO amount
+    )
+    assert gr["status"] == "draft"
+
+    # Submit and approve SC (cascade PO to po_pending). Don't approve PO.
+    submit_sc(
+        app_config, USER, sc["sc_id"],
+        {"sc_no": "SC-CAS4", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
+
+    # PO is po_pending, GR is draft. Manual submit should fail budget check
+    # because estimated_amount 600 > PO open amount (500 - 0 = 500)
+    with pytest.raises(ConflictError, match="PO open amount is insufficient"):
+        submit_gr(app_config, USER, gr["gr_id"])
+
+
+def test_delete_draft_po(app_config):
+    """Draft PO can be deleted."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    deleted = delete_po(app_config, USER, po["po_id"])
+    assert deleted["status"] == "draft"
+
+    with connect(app_config) as conn:
+        assert conn.execute("SELECT 1 FROM pos WHERE po_id = ?", (po["po_id"],)).fetchone() is None
+
+
+def test_delete_draft_gr(app_config):
+    """Draft GR can be deleted."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    gr = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 100},
+    )
+    assert gr["status"] == "draft"
+
+    deleted = delete_gr(app_config, USER, gr["gr_id"])
+    assert deleted["status"] == "draft"
+
+    with connect(app_config) as conn:
+        assert conn.execute("SELECT 1 FROM gr_requests WHERE gr_id = ?", (gr["gr_id"],)).fetchone() is None
+
+
+def test_reject_draft_po_on_approved_sc(app_config):
+    """Approved SC rejects draft PO."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc_id, _ = seed_approved_sc_vendor_po(app_config)
+
+    create_vendor(
+        app_config, ADMIN,
+        {"vendor_id": "V2", "vendor_name": "Vendor2", "service_scope": "General Service"},
+    )
+    with pytest.raises(ConflictError, match="Approved SC does not allow draft PO"):
+        create_po(
+            app_config, ADMIN,
+            {"sc_id": sc_id, "vendor_id": "V2", "po_amount": 300, "status": "draft"},
+        )
+
+
+def test_reject_non_pending_gr_on_draft_po(app_config):
+    """Draft PO only allows draft GR."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    with pytest.raises(ConflictError, match="Draft PO only allows draft GR"):
+        create_gr(
+            app_config, USER,
+            {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 100,
+             "status": "pending"},
+        )

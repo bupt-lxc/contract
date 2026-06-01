@@ -566,8 +566,8 @@ def workbench_data(
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
     sc_statuses = ["draft", "pending", "approved"]
-    po_statuses = ["po_pending", "po_approved", "finished"]
-    gr_statuses = ["pending", "approved", "cancelled"]
+    po_statuses = ["draft", "po_pending", "po_approved", "finished"]
+    gr_statuses = ["draft", "pending", "approved", "cancelled"]
 
     with connect(config) as conn:
         sc_data = {}

@@ -61,6 +61,7 @@
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @approve="row => handlePoApprove(row)"
           @finish="row => handlePoFinish(row)"
+          @submit="row => handlePoSubmit(row)"
         />
       </div>
 
@@ -135,7 +136,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
-const { createPo, updatePo, approvePo, finishPo } = usePo()
+const { createPo, updatePo, approvePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
 const { exportRows } = useExport()
@@ -250,6 +251,15 @@ async function handlePoFinish(row) {
     await ElMessageBox.confirm(t('po.confirmFinish'), t('common.confirm'), { type: 'warning' })
     await finishPo(row.po_id)
     ElMessage.success(t('po.finished'))
+    await fetchDetail(scId.value)
+  } catch { /* cancelled */ }
+}
+
+async function handlePoSubmit(row) {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
+    await submitPo(row.po_id)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
   } catch { /* cancelled */ }
 }

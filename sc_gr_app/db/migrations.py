@@ -408,6 +408,94 @@ def _table_exists(conn, table_name: str) -> bool:
     ).fetchone() is not None
 
 
+def _migrate_v9(conn) -> None:
+    """Add 'draft' status to pos and gr_requests CHECK constraints."""
+
+    # Rebuild pos table with updated CHECK constraint (if it exists)
+    if _table_exists(conn, "pos"):
+        conn.execute("ALTER TABLE pos RENAME TO pos_old")
+        conn.execute("""
+            CREATE TABLE pos (
+              po_id TEXT PRIMARY KEY,
+              sc_id TEXT NOT NULL REFERENCES sc_records(sc_id),
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+              po_no TEXT,
+              po_amount REAL NOT NULL CHECK (po_amount > 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','po_pending','po_approved','finished')),
+              contract_from TEXT,
+              contract_to TEXT,
+              contract_no TEXT,
+              payment_frequency TEXT,
+              contract_pos TEXT,
+              contract_type TEXT,
+              cost_center TEXT,
+              purchaser TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO pos (
+              po_id, sc_id, vendor_id, po_no, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              pending_date, approved_date, created_at, updated_at
+            )
+            SELECT
+              po_id, sc_id, vendor_id, po_no, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              pending_date, approved_date, created_at, updated_at
+            FROM pos_old
+        """)
+        conn.execute("DROP TABLE pos_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+
+    # Rebuild gr_requests table with updated CHECK constraint (if it exists)
+    if _table_exists(conn, "gr_requests"):
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','pending','approved','cancelled')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              cancelled_by TEXT REFERENCES users(user_id),
+              cancelled_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT
+            )
+        """)
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, po_id, requester_id, estimated_amount, con_value, status, remark,
+              created_by, created_at, approved_by, approved_at,
+              cancelled_by, cancelled_at, pending_date, approved_date
+            )
+            SELECT
+              gr_id, po_id, requester_id, estimated_amount, con_value, status, remark,
+              created_by, created_at, approved_by, approved_at,
+              cancelled_by, cancelled_at, pending_date, approved_date
+            FROM gr_requests_old
+        """)
+        conn.execute("DROP TABLE gr_requests_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+
+    _record(conn, 9)
+
+
 def _migrate_v8(conn) -> None:
     # add changes_summary column to audit_logs for human-readable change details
     if _table_exists(conn, "audit_logs"):
@@ -501,6 +589,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v8(conn)
                 conn.commit()
+            if 9 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v9(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

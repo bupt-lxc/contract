@@ -38,6 +38,7 @@
     <el-table-column :label="$t('po.actions')" width="140" fixed="right">
       <template #default="{ row }">
         <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
+        <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
         <el-button v-if="row.status === 'po_pending'" type="success" link size="small" @click.stop="$emit('approve', row)">{{ $t('po.approve') }}</el-button>
         <el-button v-if="row.status === 'po_approved'" type="info" link size="small" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
       </template>
@@ -55,7 +56,7 @@ defineProps({
   loading: { type: Boolean, default: false }
 })
 
-defineEmits(['row-click', 'edit', 'approve', 'finish'])
+defineEmits(['row-click', 'edit', 'approve', 'finish', 'submit'])
 
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
