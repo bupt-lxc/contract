@@ -39,7 +39,7 @@ export function usePo(pageSize = 20) {
 
   async function createPo(data) { return await callApi('create_po', { data }) }
   async function updatePo(poId, data) { return await callApi('update_po', { po_id: poId, data }) }
-  async function approvePo(poId) { await callApi('approve_po', { po_id: poId }) }
+  async function approvePo(poId, cascadeGrs = false) { await callApi('approve_po', { po_id: poId, cascade_grs: cascadeGrs }) }
   async function submitPo(poId) { await callApi('submit_po', { po_id: poId }) }
   async function finishPo(poId) { await callApi('finish_po', { po_id: poId }) }
 

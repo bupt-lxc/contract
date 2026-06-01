@@ -447,7 +447,14 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
     return after
 
 
-def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+def approve_po(config: AppConfig, current_user: dict, po_id: str,
+               cascade_grs: bool = False) -> dict:
+    """Approve a PO (po_pending → po_approved). Admin only.
+
+    If cascade_grs=True, draft GRs are submitted (draft→pending) and
+    pending GRs are approved (pending→approved, con_value=estimated_amount).
+    If cascade_grs=False (default), blocks if unprocessed GRs exist.
+    """
     require_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -462,10 +469,30 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     "select status from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
+                if sc is None:
+                    raise ConflictError("SC not found")
                 if sc["status"] == "closed":
                     raise ConflictError("Closed SC cannot be edited")
+                if sc["status"] != "approved":
+                    raise ConflictError("SC must be approved before approving PO")
                 if before["status"] != "po_pending":
                     raise ConflictError("PO must be pending")
+
+                unprocessed = conn.execute(
+                    "SELECT gr_id, status FROM gr_requests WHERE po_id = ? AND status IN ('draft', 'pending')",
+                    (po_id,),
+                ).fetchall()
+
+                if unprocessed:
+                    if not cascade_grs:
+                        statuses = {r["status"] for r in unprocessed}
+                        desc = "unsubmitted draft" if statuses == {"draft"} else \
+                               "pending" if statuses == {"pending"} else \
+                               "unprocessed (draft/pending)"
+                        raise ConflictError(
+                            f"Cannot approve PO with {len(unprocessed)} {desc} GR(s). "
+                            "Approve all GRs first, or set cascade_grs=True."
+                        )
 
                 timestamp = utc_now()
                 conn.execute(
@@ -490,29 +517,26 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     before=before,
                     after=after,
                 )
-                sc = conn.execute(
+                sc_requester = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
                 notification_service.queue_status_change(
                     conn, "po", po_id, "approve",
-                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
                 )
 
-                # Block if unprocessed (draft or pending) GRs exist
-                unprocessed = conn.execute(
-                    "SELECT gr_id, status FROM gr_requests WHERE po_id = ? AND status IN ('draft', 'pending')",
-                    (po_id,),
-                ).fetchall()
-                if unprocessed:
-                    statuses = {r["status"] for r in unprocessed}
-                    desc = "unsubmitted draft" if statuses == {"draft"} else \
-                           "pending" if statuses == {"pending"} else \
-                           "unprocessed (draft/pending)"
-                    raise ConflictError(
-                        f"Cannot approve PO with {len(unprocessed)} {desc} GR(s). "
-                        "Approve all GRs first."
-                    )
+                # Cascade: submit draft GRs + approve pending GRs
+                if cascade_grs and unprocessed:
+                    from sc_gr_app.services.gr_service import _submit_gr_drafts, _cascade_approve_grs
+
+                    draft_gr_ids = [r["gr_id"] for r in unprocessed if r["status"] == "draft"]
+                    pending_gr_ids = [r["gr_id"] for r in unprocessed if r["status"] == "pending"]
+
+                    if draft_gr_ids:
+                        _submit_gr_drafts(conn, draft_gr_ids, timestamp)
+                    if pending_gr_ids:
+                        _cascade_approve_grs(conn, pending_gr_ids, current_user["user_id"], timestamp)
 
                 conn.commit()
             except Exception:

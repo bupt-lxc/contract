@@ -173,10 +173,32 @@ async function handleEditSave(data) {
 async function handleApprove() {
   try {
     await ElMessageBox.confirm(t('po.approveConfirm'), t('common.confirm'), { type: 'warning' })
-    await approvePo(poId.value)
+
+    // Check for unprocessed GRs — offer cascade
+    const unprocessedGrs = grs.value.filter(
+      g => g.status === 'draft' || g.status === 'pending'
+    )
+    let cascadeGrs = false
+    if (unprocessedGrs.length > 0) {
+      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
+      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
+      const parts = []
+      if (draftCount) parts.push(`${draftCount} draft`)
+      if (pendingCount) parts.push(`${pendingCount} pending`)
+      try {
+        await ElMessageBox.confirm(
+          `${parts.join(' and ')} GR(s) exist. Also process them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
+        )
+        cascadeGrs = true
+      } catch { /* user chose No */ }
+    }
+
+    await approvePo(poId.value, cascadeGrs)
     ElMessage.success(t('po.poApproved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleFinish() {

@@ -153,7 +153,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.approve_sc(self.config, current_user, sc_id))
+            cascade_pos = payload.get("cascade_pos", False)
+            return ok(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos))
         except Exception as exc:
             return fail(exc)
 
@@ -219,7 +220,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.approve_po(self.config, current_user, po_id))
+            cascade_grs = payload.get("cascade_grs", False)
+            return ok(po_service.approve_po(self.config, current_user, po_id, cascade_grs=cascade_grs))
         except Exception as exc:
             return fail(exc)
 

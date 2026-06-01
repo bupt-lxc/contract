@@ -182,7 +182,22 @@ async function handleSubmit() {
 async function handleApprove() {
   try {
     await ElMessageBox.confirm(t('sc.confirmApprove'), t('common.confirm'), { type: 'warning' })
-    await approveSc(scId.value)
+
+    // Check for draft POs — offer cascade
+    const draftPos = (detail.value.pos || []).filter(p => p.status === 'draft')
+    let cascadePos = false
+    if (draftPos.length > 0) {
+      try {
+        await ElMessageBox.confirm(
+          `${draftPos.length} draft PO(s) exist. Also submit them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade submit', cancelButtonText: 'No, leave as draft', type: 'warning' }
+        )
+        cascadePos = true
+      } catch { /* user chose No */ }
+    }
+
+    await approveSc(scId.value, cascadePos)
     ElMessage.success(t('sc.approved'))
     await fetchDetail(scId.value)
   } catch { /* cancelled */ }
@@ -240,10 +255,32 @@ async function handleDelete() {
 async function handlePoApprove(row) {
   try {
     await ElMessageBox.confirm(t('po.confirmApprove'), t('common.confirm'), { type: 'warning' })
-    await approvePo(row.po_id)
+
+    // Check for unprocessed GRs — offer cascade
+    const unprocessedGrs = (detail.value.grs || []).filter(
+      g => String(g.po_id) === String(row.po_id) && (g.status === 'draft' || g.status === 'pending')
+    )
+    let cascadeGrs = false
+    if (unprocessedGrs.length > 0) {
+      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
+      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
+      const parts = []
+      if (draftCount) parts.push(`${draftCount} draft`)
+      if (pendingCount) parts.push(`${pendingCount} pending`)
+      try {
+        await ElMessageBox.confirm(
+          `${parts.join(' and ')} GR(s) exist. Also process them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
+        )
+        cascadeGrs = true
+      } catch { /* user chose No */ }
+    }
+
+    await approvePo(row.po_id, cascadeGrs)
     ElMessage.success(t('po.approved'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handlePoFinish(row) {

@@ -335,6 +335,64 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
     return submitted
 
 
+def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestamp: str) -> list[dict]:
+    """Approve pending GRs in-place on an existing connection (no lock acquisition).
+
+    Used internally by approve_po for cascade approval.
+    Uses estimated_amount as con_value.
+    Returns list of approved GR dicts.
+    """
+    approved = []
+    for gr_id in gr_ids:
+        before = _get_gr(conn, gr_id)
+        if before["status"] != "pending":
+            raise ConflictError(f"GR must be pending to approve: {gr_id}")
+
+        con_value = before["estimated_amount"]
+        conn.execute(
+            """
+            update gr_requests
+            set status = 'approved',
+                con_value = ?,
+                approved_by = ?,
+                approved_at = ?,
+                approved_date = ?
+            where gr_id = ?
+            """,
+            (con_value, current_user_id, timestamp, timestamp, gr_id),
+        )
+        after = _get_gr(conn, gr_id)
+
+        po_sc = conn.execute(
+            "select sc_id from pos where po_id = ?",
+            (after["po_id"],),
+        ).fetchone()
+        sc_id = po_sc["sc_id"] if po_sc else None
+
+        write_audit_log(
+            conn,
+            action_type="approve_gr",
+            object_type="gr",
+            object_id=gr_id,
+            sc_id=sc_id,
+            operator_id=current_user_id,
+            machine_id="SYSTEM_CASCADE",
+            before=before,
+            after=after,
+        )
+        sc = conn.execute(
+            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+            (sc_id,),
+        ).fetchone()
+        notification_service.queue_status_change(
+            conn, "gr", gr_id, "approve",
+            {"requester_id": sc["requester_id"]} if sc else {},
+            {"user_id": current_user_id, "machine_id": "SYSTEM_CASCADE"}
+        )
+        approved.append(after)
+    return approved
+
+
 def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     """Manually submit a draft GR to pending status (with budget check)."""
     require_requester_or_admin(current_user)
@@ -349,6 +407,16 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 before = _get_gr(conn, gr_id)
                 if before["status"] != "draft":
                     raise ConflictError("GR must be draft to submit")
+
+                # PO must be approved before submitting GR
+                po = conn.execute(
+                    "SELECT status FROM pos WHERE po_id = ?",
+                    (before["po_id"],),
+                ).fetchone()
+                if po is None:
+                    raise ConflictError("PO not found")
+                if po["status"] != "po_approved":
+                    raise ConflictError("PO must be approved before submitting GR")
 
                 # Budget check at submission time
                 estimated_amount = Decimal(str(before["estimated_amount"]))
