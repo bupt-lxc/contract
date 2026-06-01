@@ -247,46 +247,20 @@ onMounted(async () => {
   color: #1e293b;
 }
 
-/* Status colors */
-.wb-cell__head--draft {
-  background: #f8fafc;
-}
-.wb-cell__head--pending {
-  background: #fff7ed;
-}
-.wb-cell__head--approved {
-  background: #f0fdf4;
-}
+/* Status colors — head */
+.wb-cell__head--draft    { background: #f8fafc; }
+.wb-cell__head--pending  { background: #fff7ed; }
+.wb-cell__head--approved { background: #f0fdf4; }
 
-/* Table area — uniform background per status */
-.wb-cell--draft .wb-cell__table {
-  background: #fafbfc;
-}
-.wb-cell--pending .wb-cell__table {
-  background: #fefaf5;
-}
-.wb-cell--approved .wb-cell__table {
-  background: #f6fcf7;
-}
+/* Table area — single background, children transparent */
+.wb-cell--draft .wb-cell__table    { background: #fafbfc; }
+.wb-cell--pending .wb-cell__table  { background: #fefaf5; }
+.wb-cell--approved .wb-cell__table { background: #f6fcf7; }
 
-.wb-cell--draft .wb-cell__tr {
-  background: #fafbfc;
-}
-.wb-cell--pending .wb-cell__tr {
-  background: #fefaf5;
-}
-.wb-cell--approved .wb-cell__tr {
-  background: #f6fcf7;
-}
-
-.wb-cell--draft .wb-cell__empty {
-  background: #fafbfc;
-}
-.wb-cell--pending .wb-cell__empty {
-  background: #fefaf5;
-}
-.wb-cell--approved .wb-cell__empty {
-  background: #f6fcf7;
+.wb-cell__th,
+.wb-cell__tr,
+.wb-cell__empty {
+  background: transparent;
 }
 
 /* Table */
@@ -342,7 +316,7 @@ onMounted(async () => {
   gap: 0.4em;
   cursor: pointer;
   transition: background 0.12s, filter 0.12s;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
   line-height: 1.3;
 }
 
