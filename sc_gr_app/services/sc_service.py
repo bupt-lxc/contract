@@ -404,6 +404,18 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 before = _get_sc(conn, sc_id)
                 if before["status"] not in ("draft", "denied"):
                     raise ConflictError("SC must be draft or denied")
+
+                # Block if draft POs exist
+                draft_pos = conn.execute(
+                    "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
+                    (sc_id,),
+                ).fetchall()
+                if draft_pos:
+                    raise ConflictError(
+                        f"Cannot submit SC with {len(draft_pos)} unsubmitted draft PO(s). "
+                        "Submit or delete them first."
+                    )
+
                 # Admin can submit any draft; requester can only submit their own
                 if (
                     current_user["role"] != "admin"
@@ -895,14 +907,16 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     conn, "sc", sc_id, "approve", before, current_user
                 )
 
-                # Cascade: submit all draft POs under this SC
-                from sc_gr_app.services.po_service import _submit_po_drafts
+                # Block if draft POs exist
                 draft_pos = conn.execute(
                     "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
                     (sc_id,),
                 ).fetchall()
                 if draft_pos:
-                    _submit_po_drafts(conn, [r["po_id"] for r in draft_pos], timestamp)
+                    raise ConflictError(
+                        f"Cannot approve SC with {len(draft_pos)} unsubmitted draft PO(s). "
+                        "Submit or delete them first."
+                    )
 
                 conn.commit()
             except Exception:

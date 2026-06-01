@@ -292,27 +292,18 @@ def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "draft":
                     raise ConflictError("PO must be draft to submit")
 
-                # Parent SC must not be draft for manual submission
-                sc = conn.execute(
-                    "SELECT status FROM sc_records WHERE sc_id = ?", (sc_id,)
+                # Budget check at submission time (skip if SC is draft with no amount)
+                sc_amount_row = conn.execute(
+                    "SELECT sc_amount FROM sc_records WHERE sc_id = ?",
+                    (sc_id,),
                 ).fetchone()
-                if sc is None:
-                    raise ConflictError("SC not found")
-                if sc["status"] == "draft":
-                    raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
-
-                # Budget check at submission time
-                po_amount = Decimal(str(before["po_amount"]))
-                budget = compute_sc_budget_decimal(config, sc_id)
-                if budget["allocated_po_amount"] + po_amount > Decimal(
-                    str(
-                        conn.execute(
-                            "SELECT sc_amount FROM sc_records WHERE sc_id = ?",
-                            (sc_id,),
-                        ).fetchone()["sc_amount"]
-                    )
-                ):
-                    raise ConflictError("PO total would exceed SC amount")
+                if sc_amount_row["sc_amount"] is not None:
+                    po_amount = Decimal(str(before["po_amount"]))
+                    budget = compute_sc_budget_decimal(config, sc_id)
+                    if budget["allocated_po_amount"] + po_amount > Decimal(
+                        str(sc_amount_row["sc_amount"])
+                    ):
+                        raise ConflictError("PO total would exceed SC amount")
 
                 timestamp = utc_now()
                 _submit_po_drafts(conn, [po_id], timestamp)
@@ -503,14 +494,16 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
 
-                # Cascade: submit all draft GRs under this PO
-                from sc_gr_app.services.gr_service import _submit_gr_drafts
+                # Block if draft GRs exist
                 draft_grs = conn.execute(
                     "SELECT gr_id FROM gr_requests WHERE po_id = ? AND status = 'draft'",
                     (po_id,),
                 ).fetchall()
                 if draft_grs:
-                    _submit_gr_drafts(conn, [r["gr_id"] for r in draft_grs], timestamp)
+                    raise ConflictError(
+                        f"Cannot approve PO with {len(draft_grs)} unsubmitted draft GR(s). "
+                        "Submit or delete them first."
+                    )
 
                 conn.commit()
             except Exception:
