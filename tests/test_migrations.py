@@ -36,7 +36,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
     assert rows[0][1]
     assert rows[1][1]
 
@@ -52,7 +52,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
 
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
@@ -275,7 +275,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
 
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
@@ -443,7 +443,7 @@ def test_migration_v2_preserves_dependent_foreign_keys_and_indexes(app_config):
               vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
               po_no TEXT,
               po_amount REAL NOT NULL CHECK (po_amount > 0),
-              status TEXT NOT NULL CHECK (status IN ('po_pending', 'po_approved', 'finished')),
+              status TEXT NOT NULL CHECK (status IN ('po_pending', 'po_pending', 'finished')),
               contract_from TEXT,
               contract_to TEXT,
               contract_no TEXT,
@@ -597,7 +597,7 @@ def test_migration_v2_preserves_dependent_foreign_keys_and_indexes(app_config):
                 "V1",
                 "PO-002",
                 250,
-                "po_pending",
+                "activing",
                 None,
                 None,
                 None,

@@ -77,6 +77,7 @@ export default {
     pending: '待处理',
     approved: '已批准',
     denied: '已拒绝',
+    activing: '进行中',
     closed: '已关闭',
     finished: '已完成',
     cancelled: '已取消',
@@ -183,8 +184,7 @@ home: {
     asset: '资产',
     assetNums: '资产编号',
     internalSystemNumber: '内部系统编号',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    activingDate: '生效日期'
   },
 
   po: {
@@ -211,7 +211,6 @@ home: {
     noRecords: '暂无采购订单记录。',
     approveConfirm: '确认批准此采购订单？',
     finishConfirm: '确认完成此采购订单？',
-    poApproved: '采购订单已批准',
     poFinished: '采购订单已完成',
     saved: '已保存',
     actions: '操作',
@@ -233,8 +232,7 @@ home: {
     contractType: '合同类型',
     costCenter: '成本中心',
     purchaser: '采购员',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    activingDate: '生效日期'
   },
 
   gr: {
@@ -283,8 +281,7 @@ home: {
     deleteGr: '删除收货记录',
     confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
     grDeleted: '收货记录已删除',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    activingDate: '生效日期'
   },
 
   vendor: {
@@ -474,8 +471,7 @@ home: {
     asset: '资产',
     contractType: '合同类型',
     purchaser: '采购员',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期',
+    activingDate: '生效日期',
     deadline: '截止日期',
     unlimited: '不限',
     within3Years: '三年内',
@@ -493,7 +489,6 @@ home: {
     approveSc: '确认批准此供应链？',
     denySc: '确认拒绝此供应链？',
     submitSc: '确认提交此供应链？',
-    approvePo: '确认批准此采购订单？',
     finishPo: '确认完成此采购订单？',
     cancelGr: '确认取消此收货记录？'
   },
@@ -501,7 +496,6 @@ home: {
   msg: {
     exportedSuccessfully: '导出成功',
     exportFailed: '导出失败',
-    poApproved: '采购订单已批准',
     poFinished: '采购订单已完成',
     scUpdated: '供应链已更新',
     scSubmitted: '供应链已提交',
@@ -551,8 +545,7 @@ home: {
     asset: '资产',
     assetNums: '资产编号',
     internalSystemNumber: '内部系统编号',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期',
+    activingDate: '生效日期',
     contractPos: '合同项',
     contractType: '合同类型',
     costCenter: '成本中心',

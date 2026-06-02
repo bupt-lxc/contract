@@ -20,8 +20,7 @@ const STATUS_LABELS = {
   approved: 'Approved',
   denied: 'Denied',
   closed: 'Closed',
-  po_pending: 'Pending',
-  po_approved: 'Approved',
+  activing: 'Activing',
   finished: 'Finished',
   cancelled: 'Cancelled'
 }
@@ -32,8 +31,7 @@ const STATUS_TYPES = {
   approved: 'success',
   denied: 'danger',
   closed: 'info',
-  po_pending: 'warning',
-  po_approved: 'success',
+  activing: 'warning',
   finished: 'info',
   cancelled: 'danger'
 }

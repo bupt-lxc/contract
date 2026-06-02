@@ -62,7 +62,7 @@ def test_generate_po_id_creates_sequential_ids(app_config):
     with connect(app_config) as conn:
         conn.execute(
             "INSERT INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at) "
-            "VALUES (?, 'SC-001', 'V-001', 100, 'po_pending', ?, ?)",
+            "VALUES (?, 'SC-001', 'V-001', 100, 'activing', ?, ?)",
             (id1, timestamp, timestamp),
         )
         conn.commit()
@@ -93,7 +93,7 @@ def test_generate_gr_id_creates_sequential_ids(app_config):
         )
         conn.execute(
             "INSERT INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at) "
-            "VALUES ('PO-GR', 'SC-GR', 'V-001', 100, 'po_approved', ?, ?)",
+            "VALUES ('PO-GR', 'SC-GR', 'V-001', 100, 'activing', ?, ?)",
             (timestamp, timestamp),
         )
         conn.commit()

@@ -215,16 +215,6 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def approve_po(self, payload) -> dict:
-        try:
-            payload = self._required_payload(payload)
-            current_user = self._require_current_user()
-            po_id = _require_payload_field(payload, "po_id")
-            cascade_grs = payload.get("cascade_grs", False)
-            return ok(po_service.approve_po(self.config, current_user, po_id, cascade_grs=cascade_grs))
-        except Exception as exc:
-            return fail(exc)
-
     def finish_po(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -235,7 +225,7 @@ class ApiBridge:
             return fail(exc)
 
     def submit_po(self, payload) -> dict:
-        """Submit a draft PO to po_pending (admin or SC owner)."""
+        """Submit a draft PO to activing (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()

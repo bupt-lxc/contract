@@ -77,6 +77,7 @@ export default {
     pending: 'Pending',
     approved: 'Approved',
     denied: 'Denied',
+    activing: 'Activing',
     closed: 'Closed',
     finished: 'Finished',
     cancelled: 'Cancelled',
@@ -183,8 +184,7 @@ home: {
     asset: 'Asset',
     assetNums: 'Asset Numbers',
     internalSystemNumber: 'Internal System Number',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    activingDate: 'Activing Date'
   },
 
   po: {
@@ -211,7 +211,6 @@ home: {
     noRecords: 'No PO records.',
     approveConfirm: 'Approve this PO?',
     finishConfirm: 'Finish this PO?',
-    poApproved: 'PO approved',
     poFinished: 'PO finished',
     saved: 'Saved',
     actions: 'Actions',
@@ -233,8 +232,7 @@ home: {
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
     purchaser: 'Purchaser',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    activingDate: 'Activing Date'
   },
 
   gr: {
@@ -283,8 +281,7 @@ home: {
     deleteGr: 'Delete GR',
     confirmDeleteGr: 'Delete this GR? This cannot be undone.',
     grDeleted: 'GR deleted',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    activingDate: 'Activing Date'
   },
 
   vendor: {
@@ -474,8 +471,7 @@ home: {
     asset: 'Asset',
     contractType: 'Contract Type',
     purchaser: 'Purchaser',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date',
+    activingDate: 'Activing Date',
     deadline: 'Deadline',
     unlimited: 'Unlimited',
     within3Years: 'Within 3 Years',
@@ -493,7 +489,6 @@ home: {
     approveSc: 'Approve this SC?',
     denySc: 'Deny this SC?',
     submitSc: 'Submit this SC?',
-    approvePo: 'Approve this PO?',
     finishPo: 'Finish this PO?',
     cancelGr: 'Cancel this GR?'
   },
@@ -501,7 +496,6 @@ home: {
   msg: {
     exportedSuccessfully: 'Exported successfully',
     exportFailed: 'Export failed',
-    poApproved: 'PO approved',
     poFinished: 'PO finished',
     scUpdated: 'SC updated',
     scSubmitted: 'SC submitted',
@@ -551,8 +545,7 @@ home: {
     asset: 'Asset',
     assetNums: 'Asset Numbers',
     internalSystemNumber: 'Internal System Number',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date',
+    activingDate: 'Activing Date',
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',
     costCenter: 'Cost Center',

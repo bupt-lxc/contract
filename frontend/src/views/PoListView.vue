@@ -17,7 +17,7 @@
       :loading="state.loading"
       @row-click="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
-      @approve="row => handleApprovePo(row)"
+      @submit="row => handleSubmitPo(row)"
       @finish="row => handleFinishPo(row)"
     />
 
@@ -57,7 +57,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
 
-const { state, searchPos, createPo, updatePo, approvePo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
+const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const exporting = ref(false)
@@ -65,8 +65,8 @@ const exporting = ref(false)
 const vendors = computed(() => vendorState.rows)
 
 const poStatuses = [
-  { label: t('status.pending'), value: 'po_pending' },
-  { label: t('status.approved'), value: 'po_approved' },
+  { label: t('status.draft'), value: 'draft' },
+  { label: t('status.activing'), value: 'activing' },
   { label: t('status.finished'), value: 'finished' }
 ]
 
@@ -107,8 +107,7 @@ const poFilterConfig = [
   { name: 'po_amount', label: t('filter.poAmount'), type: 'amount-range' },
   { name: 'contract_from', label: t('filter.contractFrom'), type: 'date-range' },
   { name: 'contract_to', label: t('filter.contractTo'), type: 'date-range' },
-  { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
-  { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'activing_date', label: t('filter.activingDate'), type: 'date-range' },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
@@ -134,11 +133,11 @@ function handleReset() {
   searchPos()
 }
 
-async function handleApprovePo(row) {
+async function handleSubmitPo(row) {
   try {
-    await ElMessageBox.confirm(t('confirm.approvePo'), t('common.confirm'), { type: 'warning' })
-    await approvePo(row.po_id)
-    ElMessage.success(t('msg.poApproved'))
+    await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
+    await submitPo(row.po_id)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await searchPos()
   } catch { /* cancelled */ }
 }
@@ -194,8 +193,7 @@ async function handleExport() {
       { key: 'open_po_amount', label: t('export.openPoAmount') },
       { key: 'contract_from', label: t('export.contractFrom'), getValue: r => (r.contract_from || '').slice(0, 10) },
       { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) },
-      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
-      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
+      { key: 'activing_date', label: t('exportCol.activingDate'), getValue: r => (r.activing_date || '').slice(0, 10) }
     ]
     await exportAll('search_pos', {
       filters: state.filters,

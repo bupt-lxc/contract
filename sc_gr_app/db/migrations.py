@@ -349,7 +349,7 @@ def _migrate_v3(conn) -> None:
             (
                 "notify.transitions.po",
                 '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
-                '"approve":{"to":["requester"],"cc":["actor"]},'
+                '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
                 '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
             ),
             (
@@ -502,6 +502,101 @@ def _migrate_v9(conn) -> None:
     _record(conn, 9)
 
 
+def _migrate_v12(conn) -> None:
+    """Simplify PO workflow: replace po_pending/po_approved with activing."""
+    if not _table_exists(conn, "pos"):
+        _record(conn, 12)
+        return
+
+    conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    conn.execute("""
+        CREATE TABLE pos (
+          po_id TEXT PRIMARY KEY,
+          sc_id TEXT NOT NULL REFERENCES sc_records(sc_id),
+          vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+          po_no TEXT,
+          requester_id TEXT,
+          po_amount REAL NOT NULL CHECK (po_amount > 0),
+          status TEXT NOT NULL CHECK (status IN ('draft','activing','finished')),
+          contract_from TEXT,
+          contract_to TEXT,
+          contract_no TEXT,
+          payment_frequency TEXT,
+          contract_pos TEXT,
+          contract_type TEXT,
+          cost_center TEXT,
+          purchaser TEXT,
+          activing_date TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO pos (
+          po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+          contract_from, contract_to, contract_no, payment_frequency,
+          contract_pos, contract_type, cost_center, purchaser,
+          activing_date, created_at, updated_at
+        )
+        SELECT
+          po_id, sc_id, vendor_id, po_no, requester_id, po_amount,
+          CASE
+            WHEN status IN ('po_pending', 'po_approved') THEN 'activing'
+            ELSE status
+          END AS status,
+          contract_from, contract_to, contract_no, payment_frequency,
+          contract_pos, contract_type, cost_center, purchaser,
+          COALESCE(approved_date, pending_date, updated_at) AS activing_date,
+          created_at, updated_at
+        FROM pos_old
+    """)
+    conn.execute("DROP TABLE pos_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+
+    # Rebuild gr_requests to fix FK references to the new pos table
+    if _table_exists(conn, "gr_requests"):
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','pending','approved','cancelled')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              cancelled_by TEXT REFERENCES users(user_id),
+              cancelled_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT
+            )
+        """)
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, po_id, requester_id, estimated_amount, con_value, status, remark,
+              created_by, created_at, approved_by, approved_at,
+              cancelled_by, cancelled_at, pending_date, approved_date
+            )
+            SELECT
+              gr_id, po_id, requester_id, estimated_amount, con_value, status, remark,
+              created_by, created_at, approved_by, approved_at,
+              cancelled_by, cancelled_at, pending_date, approved_date
+            FROM gr_requests_old
+        """)
+        conn.execute("DROP TABLE gr_requests_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+
+    _record(conn, 12)
+
+
 def _migrate_v11(conn) -> None:
     """Add internal_system_number column to sc_records (FC request type)."""
     if _table_exists(conn, "sc_records"):
@@ -643,6 +738,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v11(conn)
                 conn.commit()
+            if 12 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v12(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
