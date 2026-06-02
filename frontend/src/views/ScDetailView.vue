@@ -33,7 +33,7 @@
         <ScDetailCard :sc="detail.sc" />
       </div>
 
-      <div class="section-card">
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">

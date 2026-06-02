@@ -40,24 +40,24 @@
       </el-form-item>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item :label="$t('po.poAmount')">
+          <el-form-item :label="$t('po.poAmount')" prop="po_amount">
             <el-input-number v-model="form.po_amount" :precision="2" :min="0" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item :label="$t('po.contractNo')">
+          <el-form-item :label="$t('po.contractNo')" prop="contract_no">
             <el-input v-model="form.contract_no" />
           </el-form-item>
         </el-col>
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item :label="$t('po.contractFrom')">
+          <el-form-item :label="$t('po.contractFrom')" prop="contract_from">
             <el-date-picker v-model="form.contract_from" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item :label="$t('po.contractTo')">
+          <el-form-item :label="$t('po.contractTo')" prop="contract_to">
             <el-date-picker v-model="form.contract_to" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
@@ -147,7 +147,10 @@ const form = reactive(emptyForm())
 
 const rules = {
   vendor_id: [{ required: true, message: t('po.vendorRequired'), trigger: 'change' }],
-  po_amount: [{ required: true, message: t('po.poAmountRequired'), trigger: 'blur' }]
+  po_amount: [{ required: true, message: t('po.poAmountRequired'), trigger: 'blur' }],
+  contract_from: [{ required: true, message: t('po.contractFromRequired'), trigger: 'change' }],
+  contract_to: [{ required: true, message: t('po.contractToRequired'), trigger: 'change' }],
+  contract_no: [{ required: true, message: t('po.contractNoRequired'), trigger: 'blur' }]
 }
 
 watch(() => props.visible, (val) => {
