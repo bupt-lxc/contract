@@ -126,18 +126,18 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     raise NotFound(f"SC not found: {sc_id}")
 
                 sc_status = sc["status"]
-                if sc_status not in ("draft", "approved"):
-                    raise ConflictError("SC must be draft or approved")
+                if sc_status not in ("draft", "pending", "approved"):
+                    raise ConflictError("SC must be draft, pending or approved")
 
                 # Derive PO status from SC context
                 status = data.get("status")
                 if status is None:
-                    status = "draft" if sc_status == "draft" else "po_pending"
+                    status = "draft" if sc_status in ("draft", "pending") else "po_pending"
                 elif status not in SUPPORTED_STATUSES:
                     raise ValidationError("status is invalid")
-                # Enforce: draft SC → draft PO only
-                if sc_status == "draft" and status != "draft":
-                    raise ConflictError("Draft SC only allows draft PO")
+                # Enforce: draft/pending SC → draft PO only
+                if sc_status in ("draft", "pending") and status != "draft":
+                    raise ConflictError("Draft or pending SC only allows draft PO")
                 if sc_status == "approved" and status == "draft":
                     raise ConflictError("Approved SC does not allow draft PO")
 
@@ -358,8 +358,8 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     raise ConflictError("Closed SC cannot be edited")
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
-                if before["status"] == "draft" and sc["status"] != "draft":
-                    raise ConflictError("Draft PO can only be edited under draft SC")
+                if before["status"] == "draft" and sc["status"] not in ("draft", "pending"):
+                    raise ConflictError("Draft PO can only be edited under draft or pending SC")
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can edit POs")
 

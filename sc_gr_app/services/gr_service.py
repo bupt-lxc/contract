@@ -145,14 +145,14 @@ def _validate_gr_creation_context(
 ) -> None:
     """Validate that a GR can be created in the given PO/SC context.
 
-    - draft PO under draft SC → only draft GR allowed, no budget check
+    - draft PO under draft/pending SC → only draft GR allowed, no budget check
     - po_approved PO under approved SC → only pending GR allowed, full budget check
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
     po_status = po_sc["status"]
 
-    if po_status == "draft" and sc_status == "draft":
+    if po_status == "draft" and sc_status in ("draft", "pending"):
         if gr_status != "draft":
             raise ConflictError("Draft PO only allows draft GR")
         return  # no budget check for draft
@@ -170,7 +170,7 @@ def _validate_gr_creation_context(
 
     if po_status == "po_pending":
         raise ConflictError("PO must be approved before adding GR")
-    raise ConflictError("SC must be draft or approved to add GR")
+    raise ConflictError("SC must be draft, pending or approved to add GR")
 
 
 def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:

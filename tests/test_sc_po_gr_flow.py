@@ -459,10 +459,12 @@ def test_create_gr_requires_complete_approved_sc_and_po(
         )
 
 
-def test_create_po_requires_approved_sc(app_config):
+def test_create_po_rejects_denied_closed_sc(app_config):
+    """PO creation is rejected for denied or closed SC."""
     migrate(app_config)
     seed_users(app_config)
 
+    # Denied SC → reject PO
     created = create_sc(
         app_config,
         USER,
@@ -480,22 +482,16 @@ def test_create_po_requires_approved_sc(app_config):
     create_vendor(
         app_config,
         USER,
-        {
-            "vendor_id": "V1",
-            "vendor_name": "Vendor",
-            "service_scope": "General Service",
-        },
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    from sc_gr_app.services.sc_service import deny_sc
+    deny_sc(app_config, ADMIN, sc_id)
 
-    with pytest.raises(ConflictError, match="SC must be draft or approved"):
+    with pytest.raises(ConflictError, match="SC must be draft, pending or approved"):
         create_po(
             app_config,
             ADMIN,
-            {
-                "sc_id": sc_id,
-                "vendor_id": "V1",
-                "po_amount": 800,
-            },
+            {"sc_id": sc_id, "vendor_id": "V1", "po_amount": 800},
         )
 
 
@@ -562,7 +558,7 @@ def test_create_gr_requires_approved_sc(app_config):
         )
         conn.commit()
 
-    with pytest.raises(ConflictError, match="SC must be draft or approved to add GR"):
+    with pytest.raises(ConflictError, match="SC must be draft, pending or approved to add GR"):
         create_gr(
             app_config,
             ADMIN,
@@ -1634,7 +1630,7 @@ def test_reject_non_draft_po_under_draft_sc(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
-    with pytest.raises(ConflictError, match="Draft SC only allows draft PO"):
+    with pytest.raises(ConflictError, match="Draft or pending SC only allows draft PO"):
         create_po(
             app_config, USER,
             {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "po_pending"},
@@ -2086,6 +2082,64 @@ def test_reject_draft_po_on_approved_sc(app_config):
             app_config, ADMIN,
             {"sc_id": sc_id, "vendor_id": "V2", "po_amount": 300, "status": "draft"},
         )
+
+
+def test_create_draft_po_under_pending_sc(app_config):
+    """PO created under a pending SC must also be draft."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    submit_sc(
+        app_config, USER, sc["sc_id"],
+        {"sc_no": "SC-PEND1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    assert sc["status"] == "draft"  # sc was draft before submit
+    with connect(app_config) as conn:
+        sc_check = conn.execute("SELECT status FROM sc_records WHERE sc_id = ?", (sc["sc_id"],)).fetchone()
+        assert sc_check["status"] == "pending"
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+    assert po["pending_date"] is None
+
+
+def test_create_draft_gr_under_draft_po_pending_sc(app_config):
+    """GR created under draft PO + pending SC must be draft."""
+    migrate(app_config)
+    seed_users(app_config)
+    sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    submit_sc(
+        app_config, USER, sc["sc_id"],
+        {"sc_no": "SC-PEND2", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 2000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    po = create_po(
+        app_config, USER,
+        {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
+    )
+    assert po["status"] == "draft"
+
+    gr = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 200},
+    )
+    assert gr["status"] == "draft"
+    assert gr["pending_date"] is None
 
 
 def test_reject_non_pending_gr_on_draft_po(app_config):
