@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS pos (
   sc_id TEXT NOT NULL REFERENCES sc_records(sc_id),
   vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
   po_no TEXT,
-  requester_id TEXT NOT NULL,
+  requester_id TEXT,
   po_amount REAL NOT NULL CHECK (po_amount > 0),
   status TEXT NOT NULL CHECK (status IN ('po_pending', 'po_approved', 'finished')),
   contract_from TEXT,
@@ -132,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_vendors_name ON vendors(vendor_name);
 CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id);
 CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status);
+CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id);
 CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id);
 CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status);
 CREATE INDEX IF NOT EXISTS idx_audit_sc ON audit_logs(sc_id);
@@ -458,6 +459,7 @@ def _migrate_v9(conn) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
 
     # Rebuild gr_requests table with updated CHECK constraint (if it exists)
     if _table_exists(conn, "gr_requests"):
@@ -509,15 +511,18 @@ def _migrate_v10(conn) -> None:
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
     if "requester_id" not in existing:
         conn.execute("ALTER TABLE pos ADD COLUMN requester_id TEXT")
-        conn.execute(
-            """
-            UPDATE pos SET requester_id = (
-                SELECT sc.requester_id
-                FROM sc_records sc
-                WHERE sc.sc_id = pos.sc_id
-            )
-            """
+
+    # Backfill unconditionally — v9 may have created the column with NULLs
+    conn.execute(
+        """
+        UPDATE pos SET requester_id = (
+            SELECT sc.requester_id
+            FROM sc_records sc
+            WHERE sc.sc_id = pos.sc_id
         )
+        WHERE pos.requester_id IS NULL
+        """
+    )
 
     _record(conn, 10)
 
