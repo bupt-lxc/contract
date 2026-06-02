@@ -184,7 +184,8 @@ home: {
     asset: '资产',
     assetNums: '资产编号',
     internalSystemNumber: '内部系统编号',
-    activingDate: '生效日期'
+    activingDate: '生效日期',
+    vendors: '供应商'
   },
 
   po: {
@@ -194,6 +195,7 @@ home: {
     poInformation: '采购订单信息',
     poRecords: '采购订单记录',
     addPo: '添加采购订单',
+    selectSc: '选择所属供应链',
     editPo: '编辑采购订单',
     poId: '采购订单ID',
     poNo: '采购订单编号',
@@ -242,6 +244,8 @@ home: {
     grRecords: '收货记录',
     grInformation: '收货记录信息',
     addGr: '添加收货记录',
+    selectSc: '选择所属供应链',
+    selectPo: '选择所属采购订单',
     editGr: '编辑收货记录',
     grId: '收货记录ID',
     id: '收货记录ID',

@@ -184,7 +184,8 @@ home: {
     asset: 'Asset',
     assetNums: 'Asset Numbers',
     internalSystemNumber: 'Internal System Number',
-    activingDate: 'Activing Date'
+    activingDate: 'Activing Date',
+    vendors: 'Vendors'
   },
 
   po: {
@@ -194,6 +195,7 @@ home: {
     poInformation: 'PO Information',
     poRecords: 'PO Records',
     addPo: 'Add PO',
+    selectSc: 'Select SC',
     editPo: 'Edit PO',
     poId: 'PO ID',
     poNo: 'PO No',
@@ -242,6 +244,8 @@ home: {
     grRecords: 'GR Records',
     grInformation: 'GR Information',
     addGr: 'Add GR',
+    selectSc: 'Select SC',
+    selectPo: 'Select PO',
     editGr: 'Edit GR',
     grId: 'GR ID',
     id: 'GR ID',

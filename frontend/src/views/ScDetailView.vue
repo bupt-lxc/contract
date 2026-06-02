@@ -29,16 +29,20 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('sc.scInformation') }}</h3>
+          <el-button
+            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'closed')"
+            type="primary" size="small"
+            @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
+          >
+            <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
+          </el-button>
         </div>
-        <ScDetailCard :sc="detail.sc" />
+        <ScDetailCard :sc="detail.sc" :vendors="detail.vendors || []" />
       </div>
 
       <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
-          <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">
-            <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
-          </el-button>
           <el-button size="small" @click="handleExportPos">
             <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
@@ -96,8 +100,9 @@
     <ScFormDialog
       v-model:visible="editDialogVisible"
       mode="edit"
-      :record="detail.sc"
+      :record="{ ...detail.sc, vendors: detail.vendors }"
       :users="activeUsers"
+      :vendors="vendors"
       @save-submit="handleEditSave"
     />
 

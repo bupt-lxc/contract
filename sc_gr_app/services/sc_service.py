@@ -39,8 +39,10 @@ OPTIONAL_UPDATE_FIELDS = (
     "pending_date",
     "approved_date",
     "internal_system_number",
+    "vendor_ids",
 )
 REQUIRED_BUSINESS_FIELDS = (
+    "sc_no",
     "request_type",
     "cost_center",
     "sc_amount",
@@ -164,6 +166,32 @@ def _validate_service_period(data: dict) -> None:
     end = data.get("service_period_end")
     if start not in (None, "") and end not in (None, "") and start > end:
         raise ValidationError("service period is invalid")
+
+
+def _sync_sc_vendors(conn, sc_id: str, vendor_ids: list[str] | None) -> None:
+    """Replace the vendor associations for an SC with the given list."""
+    if vendor_ids is None:
+        return
+    conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
+    for vid in vendor_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO sc_vendors (sc_id, vendor_id) VALUES (?, ?)",
+            (sc_id, vid),
+        )
+
+
+def _fetch_sc_vendors(conn, sc_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT v.*
+        FROM vendors v
+        JOIN sc_vendors sv ON sv.vendor_id = v.vendor_id
+        WHERE sv.sc_id = ?
+        ORDER BY v.vendor_name
+        """,
+        (sc_id,),
+    ).fetchall()
+    return [_row_to_dict(row) for row in rows]
 
 
 def _require_non_draft_business_fields(sc: dict) -> None:
@@ -380,6 +408,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ),
                 )
                 created = _get_sc(conn, sc_id)
+                _sync_sc_vendors(conn, sc_id, data.get("vendor_ids"))
                 write_audit_log(
                     conn,
                     action_type="create_sc_draft",
@@ -456,6 +485,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     ),
                 )
                 after = _get_sc(conn, sc_id)
+                _sync_sc_vendors(conn, sc_id, merged.get("vendor_ids"))
                 write_audit_log(
                     conn,
                     action_type="submit_sc",
@@ -548,6 +578,8 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     ),
                 )
                 after = _get_sc(conn, sc_id)
+                if "vendor_ids" in allowed:
+                    _sync_sc_vendors(conn, sc_id, allowed["vendor_ids"])
                 write_audit_log(
                     conn,
                     action_type="update_sc",
@@ -805,10 +837,11 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                         "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
                         (po_id,),
                     )
-                # Delete GRs → POs → SC
+                # Delete GRs → POs → SC (and junction table)
                 for po_id in po_ids:
                     conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
                     conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
                 conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
 
                 write_audit_log(
@@ -885,6 +918,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         "grs": grs,
         "audit_logs": audit_logs,
         "permissions": _sc_permissions(current_user, sc),
+        "vendors": _fetch_sc_vendors(conn, sc_id),
     }
 
 

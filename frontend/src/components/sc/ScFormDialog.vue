@@ -56,6 +56,22 @@
       <el-form-item :label="$t('sc.description')">
         <el-input v-model="form.description" type="textarea" :rows="3" />
       </el-form-item>
+      <el-form-item :label="$t('sc.vendors')">
+        <el-select
+          v-model="form.vendor_ids"
+          multiple
+          filterable
+          placeholder="Select vendors"
+          style="width:100%"
+        >
+          <el-option
+            v-for="v in vendors"
+            :key="v.vendor_id"
+            :label="`${v.vendor_name} — ${v.vendor_id}`"
+            :value="v.vendor_id"
+          />
+        </el-select>
+      </el-form-item>
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('sc.asset')">
@@ -129,7 +145,8 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   mode: { type: String, default: 'create' },
   record: { type: Object, default: null },
-  users: { type: Array, default: () => [] }
+  users: { type: Array, default: () => [] },
+  vendors: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:visible', 'save-draft', 'save-submit'])
@@ -148,6 +165,7 @@ const emptyForm = () => ({
   service_period_start: null,
   service_period_end: null,
   description: '',
+  vendor_ids: [],
   asset: 'N',
   asset_nums: '',
   internal_system_number: '',
@@ -161,6 +179,7 @@ const draftRules = {
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }]
 }
 const submitRules = {
+  sc_no: [{ required: true, message: t('sc.scNoRequired'), trigger: 'change' }],
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }],
   request_type: [{ required: true, message: t('sc.requestTypeRequired'), trigger: 'change' }],
   cost_center: [{ required: true, message: t('sc.costCenterRequired'), trigger: 'change' }],
@@ -182,7 +201,11 @@ watch(() => props.visible, (val) => {
     formRef.value?.clearValidate()
     pickedFiles.value = []
     if (props.mode === 'edit' && props.record) {
-      Object.assign(form, props.record)
+      Object.assign(form, emptyForm(), props.record)
+      // Populate vendor_ids from the vendors array in detail
+      if (props.record.vendors?.length) {
+        form.vendor_ids = props.record.vendors.map(v => v.vendor_id)
+      }
     } else {
       Object.assign(form, emptyForm())
     }
@@ -200,7 +223,7 @@ async function handlePickFiles() {
 }
 
 function _savePayload() {
-  return { ...form, _attachments: pickedFiles.value.map(f => f.path) }
+  return { ...form, vendor_ids: form.vendor_ids || [], _attachments: pickedFiles.value.map(f => f.path) }
 }
 
 async function saveDraft() {

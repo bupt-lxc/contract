@@ -39,6 +39,7 @@
       :mode="scDialogMode"
       :record="scDialogRecord"
       :users="activeUsers"
+      :vendors="vendors"
       @save-draft="handleSaveDraft"
       @save-submit="handleSaveSubmit"
     />
@@ -46,10 +47,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
+import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
@@ -58,6 +60,7 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
+const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const { t } = useI18n()
 const exporting = ref(false)
@@ -68,6 +71,7 @@ const scStatuses = [
 ]
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
+const vendors = computed(() => vendorState.rows)
 
 const deadlineOptions = [
   { label: t('filter.unlimited'), value: '' },
@@ -207,6 +211,6 @@ onMounted(async () => {
   try {
     activeUsers.value = await callApi('list_users')
   } catch { /* ignore */ }
-  await searchScs()
+  await Promise.all([searchScs(), searchVendors()])
 })
 </script>

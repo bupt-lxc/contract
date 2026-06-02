@@ -833,7 +833,7 @@ def test_requester_cannot_create_draft_for_another_owner(app_config):
         )
 
 
-def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
+def test_submit_draft_requires_business_fields_including_sc_no(app_config):
     migrate(app_config)
     seed_users(app_config)
 
@@ -842,7 +842,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
 
-    with pytest.raises(ValidationError, match="request_type is required"):
+    with pytest.raises(ValidationError, match="sc_no is required"):
         submit_sc(app_config, USER, sc_id, {})
 
     submitted = submit_sc(
@@ -850,6 +850,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
         USER,
         sc_id,
         {
+            "sc_no": "SC-TEST-001",
             "request_type": "service",
             "cost_center": 1001,
             "sc_amount": 1000,
@@ -859,7 +860,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
     )
 
     assert submitted["status"] == "pending"
-    assert submitted["sc_no"] is None
+    assert submitted["sc_no"] == "SC-TEST-001"
 
 
 def test_owner_can_edit_pending_sc(app_config):
@@ -868,13 +869,14 @@ def test_owner_can_edit_pending_sc(app_config):
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
 
-    created = create_sc_draft(app_config, USER, {"requester_id": "U1", "sc_no": "SC-001"})
+    created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
     submit_sc(
         app_config,
         USER,
         sc_id,
         {
+            "sc_no": "SC-001",
             "request_type": "service",
             "cost_center": 1001,
             "sc_amount": 1000,
@@ -908,6 +910,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
         USER,
         draft_sc_id,
         {
+            "sc_no": "SC001",
             "request_type": "service",
             "cost_center": 1001,
             "sc_amount": 1000,
@@ -915,11 +918,10 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
             "service_period_end": "2026-12-31",
         },
     )
-    updated = update_sc(app_config, ADMIN, draft_sc_id, {"sc_no": "SC001"})
     approved = approve_sc(app_config, ADMIN, draft_sc_id)
     closed = close_sc(app_config, ADMIN, draft_sc_id)
 
-    assert updated["sc_no"] == "SC001"
+    assert approved["sc_no"] == "SC001"
     assert approved["status"] == "approved"
     assert closed["status"] == "closed"
 

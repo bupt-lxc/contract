@@ -6,7 +6,10 @@
       @reset="handleReset"
     />
 
-    <div style="margin-bottom:12px">
+    <div style="margin-bottom:12px;display:flex;gap:8px">
+      <el-button type="primary" @click="openCreatePoDialog">
+        <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
+      </el-button>
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
@@ -32,11 +35,38 @@
       style="margin-top:12px;justify-content:flex-end"
     />
 
+    <!-- SC selection dialog for creating PO -->
+    <el-dialog
+      v-model="scSelectVisible"
+      :title="$t('po.addPo')"
+      width="420px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('po.selectSc')">
+          <el-select v-model="selectedScId" filterable placeholder="Search SC..." style="width:100%">
+            <el-option
+              v-for="sc in eligibleScs"
+              :key="sc.sc_id"
+              :label="`${sc.sc_no || sc.sc_id} — ${sc.description || ''}`"
+              :value="sc.sc_id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scSelectVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :disabled="!selectedScId" @click="confirmScSelection">
+          {{ $t('common.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
     <PoFormDialog
       v-model:visible="poDialogVisible"
       :mode="poDialogMode"
       :record="poDialogRecord"
       :vendors="vendors"
+      :sc-record="selectedScRecord"
       @save="handlePoSave"
     />
   </div>
@@ -45,7 +75,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Download } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
@@ -115,6 +145,38 @@ const poDialogVisible = ref(false)
 const poDialogMode = ref('create')
 const poDialogRecord = ref(null)
 
+// SC selection for creating PO
+const scSelectVisible = ref(false)
+const selectedScId = ref('')
+const selectedScRecord = ref(null)
+const eligibleScs = ref([])
+
+async function loadEligibleScs() {
+  try {
+    const result = await callApi('search_scs', {
+      filters: { status: 'approved' },
+      limit: 500, offset: 0,
+      sort: 'created_at', direction: 'desc'
+    })
+    eligibleScs.value = result.rows || result || []
+  } catch { eligibleScs.value = [] }
+}
+
+function openCreatePoDialog() {
+  selectedScId.value = ''
+  selectedScRecord.value = null
+  scSelectVisible.value = true
+}
+
+function confirmScSelection() {
+  if (!selectedScId.value) return
+  selectedScRecord.value = eligibleScs.value.find(s => s.sc_id === selectedScId.value) || null
+  scSelectVisible.value = false
+  poDialogMode.value = 'create'
+  poDialogRecord.value = null
+  poDialogVisible.value = true
+}
+
 function handleFilter({ text, filters }) {
   const transformed = { ...filters }
   if (transformed.deadline) {
@@ -156,9 +218,10 @@ async function handlePoSave(data) {
     const { _attachments, ...formData } = data
     let poId, scId
     if (poDialogMode.value === 'create') {
-      const created = await createPo(formData)
+      const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id }
+      const created = await createPo(payload)
       poId = created.po_id
-      scId = created.sc_id || formData.sc_id
+      scId = created.sc_id || payload.sc_id
     } else {
       poId = poDialogRecord.value?.po_id
       scId = poDialogRecord.value?.sc_id
@@ -209,6 +272,6 @@ async function handleExport() {
 }
 
 onMounted(async () => {
-  await Promise.all([searchPos(), searchVendors()])
+  await Promise.all([searchPos(), searchVendors(), loadEligibleScs()])
 })
 </script>

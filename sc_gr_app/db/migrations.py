@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 14
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -724,6 +724,25 @@ def _migrate_v7(conn) -> None:
     _record(conn, 7)
 
 
+def _migrate_v14(conn) -> None:
+    """Create sc_vendors junction table for SC-vendor many-to-many relationship."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sc_vendors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+            vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+            UNIQUE(sc_id, vendor_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_vendors_sc ON sc_vendors(sc_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_vendors_vendor ON sc_vendors(vendor_id)"
+    )
+    _record(conn, 14)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -794,6 +813,10 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v13(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 14 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v14(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
