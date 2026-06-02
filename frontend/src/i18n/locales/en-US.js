@@ -111,30 +111,18 @@ export default {
     switchRole: 'Switch role'
   },
 
-  home: {
+home: {
     workbench: 'Workbench',
-    pendingScs: 'Pending SCs',
-    pendingPos: 'Pending POs',
-    pendingGrs: 'Pending GRs',
-    myDrafts: 'My Drafts',
-    myPendingScs: 'My Pending SCs',
-    deniedScs: 'Denied SCs',
-    activePos: 'Active POs',
     scNo: 'SC No',
     poNo: 'PO No',
     grId: 'GR ID',
-    scId: 'SC ID',
-    amount: 'Amount',
-    estimated: 'Estimated',
-    noCards: 'No {title}',
     loadError: 'Load failed',
     colScNo: 'SC No',
     colRequester: 'Requester',
-    colAmount: 'Amount',
     colPoNo: 'PO No',
-    colVendor: 'Vendor',
     colGrId: 'GR ID',
-    colEstAmount: 'Est. Amount'
+    colDeadline: 'Deadline',
+    colCreatedAt: 'Created',
   },
 
   sc: {

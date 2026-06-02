@@ -24,7 +24,7 @@
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colScNo') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-amt">{{ $t('home.colAmount') }}</span>
+              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
             </div>
             <div
               v-for="row in (data.sc?.[cell.status]?.rows || [])"
@@ -34,7 +34,7 @@
             >
               <span class="wb-cell__td-id">{{ row.sc_no || row.sc_id }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-amt"><AmountDisplay :value="row.sc_amount" /></span>
+              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
             </div>
             <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -59,8 +59,8 @@
           <div class="wb-cell__table">
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colPoNo') }}</span>
-              <span class="wb-cell__th-sub">{{ $t('home.colVendor') }}</span>
-              <span class="wb-cell__th-amt">{{ $t('home.colAmount') }}</span>
+              <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
             </div>
             <div
               v-for="row in (data.po?.[cell.status]?.rows || [])"
@@ -69,8 +69,8 @@
               @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
             >
               <span class="wb-cell__td-id">{{ row.po_no || row.po_id }}</span>
-              <span class="wb-cell__td-sub">{{ row.vendor_name }}</span>
-              <span class="wb-cell__td-amt"><AmountDisplay :value="row.po_amount" /></span>
+              <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
             </div>
             <div v-if="!data.po?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -95,18 +95,18 @@
           <div class="wb-cell__table">
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colGrId') }}</span>
-              <span class="wb-cell__th-sub">{{ $t('home.colPoNo') }}</span>
-              <span class="wb-cell__th-amt">{{ $t('home.colEstAmount') }}</span>
+              <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-date">{{ $t('home.colCreatedAt') }}</span>
             </div>
             <div
               v-for="row in (data.gr?.[cell.status]?.rows || [])"
               :key="row.gr_id"
               class="wb-cell__tr"
-              @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+              @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)"
             >
               <span class="wb-cell__td-id">{{ row.gr_id }}</span>
-              <span class="wb-cell__td-sub">{{ row.po_no }}</span>
-              <span class="wb-cell__td-amt"><AmountDisplay :value="row.estimated_amount" /></span>
+              <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-date">{{ (row.created_at || '').slice(0, 10) || '-' }}</span>
             </div>
             <div v-if="!data.gr?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -121,7 +121,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
-import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 const { t } = useI18n()
 
@@ -283,7 +282,7 @@ onMounted(async () => {
 
 .wb-cell__th-id,
 .wb-cell__td-id {
-  flex: 1 1 35%;
+  flex: 1 1 32%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -292,15 +291,15 @@ onMounted(async () => {
 
 .wb-cell__th-sub,
 .wb-cell__td-sub {
-  flex: 0 0 28%;
+  flex: 0 0 30%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.wb-cell__th-amt,
-.wb-cell__td-amt {
+.wb-cell__th-date,
+.wb-cell__td-date {
   flex: 0 0 28%;
   min-width: 0;
   text-align: right;
@@ -339,10 +338,9 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
-.wb-cell__td-amt {
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: #334155;
+.wb-cell__td-date {
+  font-size: 0.68rem;
+  color: #94a3b8;
 }
 
 .wb-cell__empty {

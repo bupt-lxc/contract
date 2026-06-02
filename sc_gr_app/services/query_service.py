@@ -558,73 +558,100 @@ def workbench_data(
     config: AppConfig,
     current_user: dict | None = None,
 ) -> dict:
-    """Return per-status counts and top rows for the workbench grid."""
-    clauses, params = _sc_visibility_clauses(
-        current_user,
-        include_own_drafts=True,
-    )
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    """Return per-status counts and top rows for the workbench grid.
 
+    Visibility rules:
+    - Requester: own records only (all statuses)
+    - Admin:
+      - Draft / Approved: own records only
+      - Pending: all records
+    """
     sc_statuses = ["draft", "pending", "approved"]
     po_statuses = ["draft", "po_pending", "po_approved"]
     gr_statuses = ["draft", "pending", "approved"]
 
+    def _is_own_only(status: str) -> bool:
+        if current_user is None:
+            return False
+        role = current_user.get("role")
+        if role == "requester":
+            return True
+        if role == "admin":
+            return status not in ("pending", "po_pending")
+        return False
+
+    user_id = current_user["user_id"] if current_user else None
+
     with connect(config) as conn:
         sc_data = {}
         for st in sc_statuses:
-            st_clause = f"{where} AND sc.status = ?" if where else "WHERE sc.status = ?"
-            st_params = params + [st]
+            clauses = ["sc.status = ?"]
+            params = [st]
+            if _is_own_only(st) and user_id:
+                clauses.append("sc.requester_id = ?")
+                params.append(user_id)
+            where = "WHERE " + " AND ".join(clauses)
+
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM sc_records sc {st_clause}", st_params
+                f"SELECT COUNT(*) FROM sc_records sc {where}", params
             ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT sc.sc_id, sc.sc_no, sc.sc_amount, sc.requester_id, "
+                f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
+                f"sc.service_period_end AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
                 f"JOIN users u ON u.user_id = sc.requester_id "
-                f"{st_clause} ORDER BY sc.updated_at DESC LIMIT 6",
-                st_params,
+                f"{where} ORDER BY sc.service_period_end ASC LIMIT 6",
+                params,
             ).fetchall()
             sc_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
 
         po_data = {}
         for st in po_statuses:
-            st_clause = f"{where} AND po.status = ?" if where else "WHERE po.status = ?"
-            st_params = params + [st]
+            clauses = ["po.status = ?"]
+            params = [st]
+            if _is_own_only(st) and user_id:
+                clauses.append("po.requester_id = ?")
+                params.append(user_id)
+            where = "WHERE " + " AND ".join(clauses)
+
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM pos po "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id {st_clause}",
-                st_params,
+                f"SELECT COUNT(*) FROM pos po {where}", params
             ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT po.po_id, po.po_no, po.po_amount, po.sc_id, "
-                f"v.vendor_name "
+                f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
+                f"po.contract_to AS deadline, "
+                f"u.user_name AS requester_name "
                 f"FROM pos po "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
-                f"JOIN vendors v ON v.vendor_id = po.vendor_id "
-                f"{st_clause} ORDER BY po.updated_at DESC LIMIT 6",
-                st_params,
+                f"JOIN users u ON u.user_id = po.requester_id "
+                f"{where} ORDER BY po.contract_to ASC LIMIT 6",
+                params,
             ).fetchall()
             po_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
 
         gr_data = {}
         for st in gr_statuses:
-            st_clause = f"{where} AND gr.status = ?" if where else "WHERE gr.status = ?"
-            st_params = params + [st]
+            clauses = ["gr.status = ?"]
+            params = [st]
+            if _is_own_only(st) and user_id:
+                clauses.append("gr.requester_id = ?")
+                params.append(user_id)
+            where = "WHERE " + " AND ".join(clauses)
+
             cnt = conn.execute(
                 f"SELECT COUNT(*) FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id {st_clause}",
-                st_params,
+                f"{where}", params
             ).fetchone()[0]
             rows = conn.execute(
-                f"SELECT gr.gr_id, gr.estimated_amount, gr.con_value, gr.po_id, "
-                f"po.sc_id, po.po_no "
+                f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
+                f"gr.created_at, "
+                f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
-                f"{st_clause} ORDER BY gr.created_at DESC LIMIT 6",
-                st_params,
+                f"JOIN users u ON u.user_id = gr.requester_id "
+                f"{where} ORDER BY gr.created_at ASC LIMIT 6",
+                params,
             ).fetchall()
             gr_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
 

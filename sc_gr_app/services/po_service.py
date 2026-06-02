@@ -169,6 +169,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                       sc_id,
                       vendor_id,
                       po_no,
+                      requester_id,
                       po_amount,
                       status,
                       contract_from,
@@ -183,13 +184,14 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                       approved_date,
                       created_at,
                       updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         po_id,
                         sc_id,
                         data["vendor_id"],
                         data.get("po_no"),
+                        sc["requester_id"],
                         float(po_amount),
                         status,
                         data.get("contract_from"),

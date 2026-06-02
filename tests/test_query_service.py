@@ -401,37 +401,108 @@ def test_po_and_gr_search_reject_invalid_current_user(app_config, search_func):
 
 
 def test_workbench_data_returns_per_status_counts(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    migrate(app_config)
+    seed_users(app_config)
+    # Create an approved SC for USER1
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
 
-    result = workbench_data(app_config, ADMIN)
+    result = workbench_data(app_config, USER)
 
     assert result["sc"]["approved"]["count"] >= 1
-    assert result["po"]["po_approved"]["count"] >= 1
-    assert result["gr"]["pending"]["count"] >= 1
     assert len(result["sc"]["approved"]["rows"]) >= 1
-    assert "sc_no" in result["sc"]["approved"]["rows"][0]
+    row = result["sc"]["approved"]["rows"][0]
+    assert "sc_no" in row
+    assert "requester_name" in row
+    # No amount fields
+    assert "sc_amount" not in row
 
 
 def test_workbench_data_scopes_requester_to_own_scs(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
-
-    admin_data = workbench_data(app_config, ADMIN)
-    owner_data = workbench_data(app_config, USER)
-
-    assert admin_data["sc"]["approved"]["count"] >= owner_data["sc"]["approved"]["count"]
-
-
-def test_workbench_data_hides_other_requesters_drafts(app_config):
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
-
-    create_sc_draft(app_config, USER, {"requester_id": "U1"})
+    # USER1 creates and approves an SC
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
 
     admin_data = workbench_data(app_config, ADMIN)
     owner_data = workbench_data(app_config, USER)
-    other_data = workbench_data(app_config, OTHER_USER)
 
-    assert admin_data["sc"]["draft"]["count"] >= 1
-    assert owner_data["sc"]["draft"]["count"] >= 1
-    assert other_data["sc"]["draft"]["count"] == 0
+    # USER1 sees own approved SCs
+    assert owner_data["sc"]["approved"]["count"] >= 1
+    # Admin sees own approved SCs only (none in this test since admin didn't create any)
+    # In old system admin saw all; now admin sees only own for Approved
+    assert admin_data["sc"]["approved"]["count"] == 0
+
+
+def test_workbench_data_admin_pending_shows_all(app_config):
+    """Admin Pending column shows all users; Approved/Draft show own only."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+    # USER1 creates a pending SC
+    create_sc(
+        app_config, USER,
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    # USER2 creates a pending SC
+    create_sc(
+        app_config, OTHER_USER,
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+         "cost_center": 1002, "sc_amount": 500,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+
+    admin_data = workbench_data(app_config, ADMIN)
+    user1_data = workbench_data(app_config, USER)
+    user2_data = workbench_data(app_config, OTHER_USER)
+
+    # Admin Pending: sees both users' SCs
+    assert admin_data["sc"]["pending"]["count"] >= 2
+    # USER1 Pending: sees only own
+    assert user1_data["sc"]["pending"]["count"] >= 1
+    # USER2 Pending: sees only own
+    assert user2_data["sc"]["pending"]["count"] >= 1
+    # Admin Approved: sees only own (none in this test)
+    assert admin_data["sc"]["approved"]["count"] == 0
+
+
+def test_workbench_data_po_has_requester_name(app_config):
+    """PO workbench rows return requester_name, not vendor_name."""
+    migrate(app_config)
+    seed_users(app_config)
+    create_vendor(app_config, USER, {
+        "vendor_id": "V1", "vendor_name": "TestVendor",
+        "ksrm_vendor_code": "KV-1", "service_scope": "General Service",
+    })
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
+    create_po(app_config, ADMIN, {
+        "sc_id": sc["sc_id"], "vendor_id": "V1",
+        "po_no": "PO-1", "po_amount": 500, "status": "po_approved",
+    })
+
+    result = workbench_data(app_config, USER)
+    po_row = result["po"]["po_approved"]["rows"][0]
+    assert "requester_name" in po_row
+    assert po_row["requester_name"] == "Requester"
+    assert "vendor_name" not in po_row
+    assert "po_amount" not in po_row

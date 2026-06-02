@@ -35,18 +35,6 @@
 
       <div class="section-card">
         <div class="section-header">
-          <h3>{{ $t('attachment.attachments') }}</h3>
-        </div>
-        <AttachmentList
-          entity-type="sc"
-          :entity-id="detail.sc.sc_id"
-          :refresh-key="attachRefreshKey"
-          @changed="fetchDetail(scId)"
-        />
-      </div>
-
-      <div class="section-card">
-        <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
@@ -62,6 +50,18 @@
           @approve="row => handlePoApprove(row)"
           @finish="row => handlePoFinish(row)"
           @submit="row => handlePoSubmit(row)"
+        />
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('attachment.attachments') }}</h3>
+        </div>
+        <AttachmentList
+          entity-type="sc"
+          :entity-id="detail.sc.sc_id"
+          :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 

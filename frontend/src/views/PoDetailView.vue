@@ -42,19 +42,6 @@
 
       <div class="section-card">
         <div class="section-header">
-          <h3>{{ $t('attachment.attachments') }}</h3>
-        </div>
-        <AttachmentList
-          entity-type="po"
-          :entity-id="po.po_id"
-          :parent-sc-id="scId"
-          :refresh-key="attachRefreshKey"
-          @changed="fetchDetail(scId)"
-        />
-      </div>
-
-      <div class="section-card">
-        <div class="section-header">
           <h3>{{ $t('gr.grRecords') }}</h3>
           <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
@@ -71,6 +58,19 @@
           @cancel="row => handleGrCancel(row)"
           @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
+        />
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('attachment.attachments') }}</h3>
+        </div>
+        <AttachmentList
+          entity-type="po"
+          :entity-id="po.po_id"
+          :parent-sc-id="scId"
+          :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
     </template>
