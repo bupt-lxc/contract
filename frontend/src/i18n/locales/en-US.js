@@ -121,6 +121,8 @@ home: {
     colRequester: 'Requester',
     colPoNo: 'PO No',
     colGrId: 'GR ID',
+    colDeadline: 'Deadline',
+    colCreatedAt: 'Created',
   },
 
   sc: {

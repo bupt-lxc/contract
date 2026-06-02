@@ -597,10 +597,11 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
+                f"sc.service_period_end AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
                 f"JOIN users u ON u.user_id = sc.requester_id "
-                f"{where} ORDER BY sc.updated_at DESC LIMIT 6",
+                f"{where} ORDER BY sc.service_period_end ASC LIMIT 6",
                 params,
             ).fetchall()
             sc_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
@@ -619,10 +620,11 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
+                f"po.contract_to AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
-                f"{where} ORDER BY po.updated_at DESC LIMIT 6",
+                f"{where} ORDER BY po.contract_to ASC LIMIT 6",
                 params,
             ).fetchall()
             po_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}
@@ -643,11 +645,12 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
+                f"gr.created_at, "
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
                 f"JOIN users u ON u.user_id = gr.requester_id "
-                f"{where} ORDER BY gr.created_at DESC LIMIT 6",
+                f"{where} ORDER BY gr.created_at ASC LIMIT 6",
                 params,
             ).fetchall()
             gr_data[st] = {"count": cnt, "rows": [_row_to_dict(r) for r in rows]}

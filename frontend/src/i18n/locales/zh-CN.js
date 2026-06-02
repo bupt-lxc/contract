@@ -121,6 +121,8 @@ home: {
     colRequester: '申请人',
     colPoNo: 'PO编号',
     colGrId: 'GR ID',
+    colDeadline: '截止日期',
+    colCreatedAt: '申请日期',
   },
 
   sc: {
