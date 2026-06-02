@@ -43,6 +43,20 @@
       </el-table>
     </div>
 
+    <div v-if="isAdmin" class="section-card">
+      <div class="section-header">
+        <h3>{{ $t('settings.attachmentsDir') }}</h3>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <el-input :model-value="attachmentsDir" readonly style="flex:1" />
+        <el-button @click="handlePickFolder">{{ $t('common.browse') }}</el-button>
+        <el-button type="primary" :disabled="!pendingAttachmentsDir || pendingAttachmentsDir === attachmentsDir" @click="handleSaveAttachmentsDir">
+          {{ $t('common.save') }}
+        </el-button>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;margin-top:8px">{{ $t('settings.attachmentsDirHint') }}</p>
+    </div>
+
     <NotificationDefaults
       v-if="isAdmin"
       :defaults="notifState.defaults"
@@ -63,6 +77,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { Plus, Download } from '@element-plus/icons-vue'
+import { callApi } from '@/api/bridge.js'
 import { useUser } from '@/composables/useUser.js'
 import { useExport } from '@/composables/useExport.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -140,8 +155,39 @@ async function handleNotifDefaultsSave(data) {
   }
 }
 
+// ── Attachments directory ──
+const attachmentsDir = ref('')
+const pendingAttachmentsDir = ref('')
+
+async function fetchAttachmentsDir() {
+  try {
+    const result = await callApi('get_attachments_dir')
+    attachmentsDir.value = result.path || ''
+    pendingAttachmentsDir.value = ''
+  } catch { attachmentsDir.value = '' }
+}
+
+async function handlePickFolder() {
+  try {
+    const result = await callApi('pick_folder')
+    if (result.cancelled) return
+    pendingAttachmentsDir.value = result.path
+  } catch (e) { ElMessage.error(e.message) }
+}
+
+async function handleSaveAttachmentsDir() {
+  if (!pendingAttachmentsDir.value) return
+  try {
+    await callApi('set_attachments_dir', { path: pendingAttachmentsDir.value })
+    attachmentsDir.value = pendingAttachmentsDir.value
+    pendingAttachmentsDir.value = ''
+    ElMessage.success(t('common.saved'))
+  } catch (e) { ElMessage.error(e.message) }
+}
+
 onMounted(() => {
   if (isAdmin.value) fetchUsers()
   fetchDefaults()
+  fetchAttachmentsDir()
 })
 </script>

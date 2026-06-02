@@ -69,7 +69,8 @@ export default {
     from: ' 从',
     to: ' 到',
     min: ' 最小',
-    max: ' 最大'
+    max: ' 最大',
+    browse: '浏览'
   },
 
   status: {
@@ -487,6 +488,11 @@ home: {
     within3Months: '三个月内',
     within2Months: '两个月内',
     within1Month: '一个月内'
+  },
+
+  settings: {
+    attachmentsDir: '附件存储位置',
+    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。'
   },
 
   confirm: {

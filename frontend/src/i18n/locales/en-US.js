@@ -69,7 +69,8 @@ export default {
     from: ' from',
     to: ' to',
     min: ' min',
-    max: ' max'
+    max: ' max',
+    browse: 'Browse'
   },
 
   status: {
@@ -487,6 +488,11 @@ home: {
     within3Months: 'Within 3 Months',
     within2Months: 'Within 2 Months',
     within1Month: 'Within 1 Month'
+  },
+
+  settings: {
+    attachmentsDir: 'Attachments Directory',
+    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.'
   },
 
   confirm: {
