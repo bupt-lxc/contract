@@ -148,6 +148,8 @@ async function handleSaveDraft(data) {
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
     }
+    ElMessage.success(t('sc.draftSaved'))
+    scDialogVisible.value = false
     await searchScs()
   } catch (e) {
     ElMessage.error(e.message)
@@ -163,6 +165,8 @@ async function handleSaveSubmit(data) {
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
     }
+    ElMessage.success(t('common.saved'))
+    scDialogVisible.value = false
     await searchScs()
   } catch (e) {
     ElMessage.error(e.message)

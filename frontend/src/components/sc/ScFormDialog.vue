@@ -212,8 +212,6 @@ async function saveDraft() {
   submitting.value = true
   try {
     emit('save-draft', _savePayload())
-    emit('update:visible', false)
-    ElMessage.success(t('sc.draftSaved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
@@ -236,8 +234,6 @@ async function saveSubmit() {
   submitting.value = true
   try {
     emit('save-submit', _savePayload())
-    emit('update:visible', false)
-    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

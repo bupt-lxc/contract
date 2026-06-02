@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.errors import ConflictError, NotFound, ValidationError
-from sc_gr_app.rbac import require_admin
+from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
+from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import compute_sc_budget_decimal
@@ -12,7 +13,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("sc_id", "vendor_id", "po_amount")
-SUPPORTED_STATUSES = {"po_pending", "po_approved", "finished"}
+SUPPORTED_STATUSES = {"draft", "po_pending", "po_approved", "finished"}
 
 
 def utc_now() -> str:
@@ -105,12 +106,9 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
 
 
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     po_amount = _positive_number(data["po_amount"], "po_amount")
-    status = data.get("status", "po_pending")
-    if status not in SUPPORTED_STATUSES:
-        raise ValidationError("status is invalid")
 
     sc_id = data["sc_id"]
     timestamp = utc_now()
@@ -126,8 +124,25 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 ).fetchone()
                 if sc is None:
                     raise NotFound(f"SC not found: {sc_id}")
-                if sc["status"] != "approved":
-                    raise ConflictError("SC must be approved")
+
+                sc_status = sc["status"]
+                if sc_status not in ("draft", "approved"):
+                    raise ConflictError("SC must be draft or approved")
+
+                # Derive PO status from SC context
+                status = data.get("status")
+                if status is None:
+                    status = "draft" if sc_status == "draft" else "po_pending"
+                elif status not in SUPPORTED_STATUSES:
+                    raise ValidationError("status is invalid")
+                # Enforce: draft SC → draft PO only
+                if sc_status == "draft" and status != "draft":
+                    raise ConflictError("Draft SC only allows draft PO")
+                if sc_status == "approved" and status == "draft":
+                    raise ConflictError("Approved SC does not allow draft PO")
+
+                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner or admin can create POs")
 
                 vendor = conn.execute(
                     "select vendor_id from vendors where vendor_id = ?",
@@ -136,11 +151,16 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 if vendor is None:
                     raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
-                budget = compute_sc_budget_decimal(config, sc_id)
-                if budget["allocated_po_amount"] + po_amount > Decimal(
-                    str(sc["sc_amount"])
-                ):
-                    raise ConflictError("PO total would exceed SC amount")
+                is_draft = status == "draft"
+                if not is_draft:
+                    budget = compute_sc_budget_decimal(config, sc_id)
+                    if budget["allocated_po_amount"] + po_amount > Decimal(
+                        str(sc["sc_amount"])
+                    ):
+                        raise ConflictError("PO total would exceed SC amount")
+
+                pending_date_value = None if is_draft else timestamp
+                approved_date_value = timestamp if status == "po_approved" else None
 
                 conn.execute(
                     """
@@ -180,8 +200,8 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("contract_type"),
                         data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
                         data.get("purchaser"),
-                        timestamp,
-                        timestamp if status == "po_approved" else None,
+                        pending_date_value,
+                        approved_date_value,
                         timestamp,
                         timestamp,
                     ),
@@ -210,8 +230,99 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
     return created
 
 
+def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
+    """Submit draft POs in-place on an existing connection (no lock acquisition).
+
+    Used internally by approve_sc for cascade submission.
+    Returns list of submitted PO dicts.
+    """
+    submitted = []
+    for po_id in po_ids:
+        before = _get_po_or_raise(conn, po_id)
+        if before["status"] != "draft":
+            raise ConflictError(f"PO must be draft to submit: {po_id}")
+
+        conn.execute(
+            """
+            update pos
+            set status = 'po_pending',
+                pending_date = ?,
+                updated_at = ?
+            where po_id = ?
+            """,
+            (timestamp, timestamp, po_id),
+        )
+        after = _get_po_or_raise(conn, po_id)
+        write_audit_log(
+            conn,
+            action_type="submit_po",
+            object_type="po",
+            object_id=po_id,
+            sc_id=after["sc_id"],
+            operator_id=after.get("created_by", "SYSTEM"),
+            machine_id="SYSTEM_CASCADE",
+            before=before,
+            after=after,
+        )
+        sc = conn.execute(
+            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+            (after["sc_id"],),
+        ).fetchone()
+        notification_service.queue_status_change(
+            conn, "po", po_id, "submit",
+            {"requester_id": sc["requester_id"]} if sc else {},
+            {"user_id": after.get("created_by", "SYSTEM"), "machine_id": "SYSTEM_CASCADE"}
+        )
+        submitted.append(after)
+    return submitted
+
+
+def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Manually submit a draft PO to po_pending status (with budget check)."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                if before["status"] != "draft":
+                    raise ConflictError("PO must be draft to submit")
+
+                # SC must not be draft for PO submission
+                sc = conn.execute(
+                    "SELECT status, sc_amount FROM sc_records WHERE sc_id = ?", (sc_id,)
+                ).fetchone()
+                if sc is None:
+                    raise ConflictError("SC not found")
+                if sc["status"] == "draft":
+                    raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
+
+                # Budget check at submission time (skip if SC has no amount set)
+                if sc["sc_amount"] is not None:
+                    po_amount = Decimal(str(before["po_amount"]))
+                    budget = compute_sc_budget_decimal(config, sc_id)
+                    if budget["allocated_po_amount"] + po_amount > Decimal(
+                        str(sc["sc_amount"])
+                    ):
+                        raise ConflictError("PO total would exceed SC amount")
+
+                timestamp = utc_now()
+                _submit_po_drafts(conn, [po_id], timestamp)
+                after = _get_po_or_raise(conn, po_id)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
 def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
     allowed_fields = {
         "vendor_id",
         "po_no",
@@ -245,6 +356,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                 ).fetchone()
                 if sc["status"] == "closed":
                     raise ConflictError("Closed SC cannot be edited")
+                if before["status"] == "finished":
+                    raise ConflictError("Finished PO cannot be edited")
+                if before["status"] == "draft" and sc["status"] != "draft":
+                    raise ConflictError("Draft PO can only be edited under draft SC")
+                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner or admin can edit POs")
 
                 merged = {**before, **updates}
                 po_amount = _positive_number(merged["po_amount"], "po_amount")
@@ -330,7 +447,14 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
     return after
 
 
-def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+def approve_po(config: AppConfig, current_user: dict, po_id: str,
+               cascade_grs: bool = False) -> dict:
+    """Approve a PO (po_pending → po_approved). Admin only.
+
+    If cascade_grs=True, draft GRs are submitted (draft→pending) and
+    pending GRs are approved (pending→approved, con_value=estimated_amount).
+    If cascade_grs=False (default), blocks if unprocessed GRs exist.
+    """
     require_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -345,10 +469,30 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     "select status from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
+                if sc is None:
+                    raise ConflictError("SC not found")
                 if sc["status"] == "closed":
                     raise ConflictError("Closed SC cannot be edited")
+                if sc["status"] != "approved":
+                    raise ConflictError("SC must be approved before approving PO")
                 if before["status"] != "po_pending":
                     raise ConflictError("PO must be pending")
+
+                unprocessed = conn.execute(
+                    "SELECT gr_id, status FROM gr_requests WHERE po_id = ? AND status IN ('draft', 'pending')",
+                    (po_id,),
+                ).fetchall()
+
+                if unprocessed:
+                    if not cascade_grs:
+                        statuses = {r["status"] for r in unprocessed}
+                        desc = "unsubmitted draft" if statuses == {"draft"} else \
+                               "pending" if statuses == {"pending"} else \
+                               "unprocessed (draft/pending)"
+                        raise ConflictError(
+                            f"Cannot approve PO with {len(unprocessed)} {desc} GR(s). "
+                            "Approve all GRs first, or set cascade_grs=True."
+                        )
 
                 timestamp = utc_now()
                 conn.execute(
@@ -373,14 +517,27 @@ def approve_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     before=before,
                     after=after,
                 )
-                sc = conn.execute(
+                sc_requester = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
                 notification_service.queue_status_change(
                     conn, "po", po_id, "approve",
-                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
                 )
+
+                # Cascade: submit draft GRs + approve pending GRs
+                if cascade_grs and unprocessed:
+                    from sc_gr_app.services.gr_service import _submit_gr_drafts, _cascade_approve_grs
+
+                    draft_gr_ids = [r["gr_id"] for r in unprocessed if r["status"] == "draft"]
+                    pending_gr_ids = [r["gr_id"] for r in unprocessed if r["status"] == "pending"]
+
+                    if draft_gr_ids:
+                        _submit_gr_drafts(conn, draft_gr_ids, timestamp)
+                    if pending_gr_ids:
+                        _cascade_approve_grs(conn, pending_gr_ids, current_user["user_id"], timestamp)
+
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -445,3 +602,134 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 raise
 
     return after
+
+
+def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Roll back PO status. po_approved→po_pending, finished→po_approved (admin only)."""
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                sc = conn.execute(
+                    "select status from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if sc["status"] == "closed":
+                    raise ConflictError("Closed SC cannot be edited")
+
+                if before["status"] == "po_approved":
+                    new_status = "po_pending"
+                elif before["status"] == "finished":
+                    new_status = "po_approved"
+                else:
+                    raise ConflictError("PO must be approved or finished to revoke")
+
+                timestamp = utc_now()
+                conn.execute(
+                    "update pos set status = ?, updated_at = ? where po_id = ?",
+                    (new_status, timestamp, po_id),
+                )
+                after = _get_po_or_raise(conn, po_id)
+                write_audit_log(
+                    conn,
+                    action_type="revoke_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                sc_requester = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "po", po_id, "revoke",
+                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Delete a draft, po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_po_or_raise(conn, po_id)
+                if before["status"] not in {"draft", "po_pending", "finished"}:
+                    raise ConflictError("Only draft, pending or finished PO can be deleted")
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if current_user["role"] != "admin" and (
+                    sc is None or sc["requester_id"] != current_user["user_id"]
+                ):
+                    raise PermissionDenied("Only the SC owner or admin can delete")
+
+                # Collect attachment paths
+                attach_paths = [
+                    row["stored_path"] for row in conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    ).fetchall()
+                ]
+                attach_paths.extend(
+                    row["stored_path"] for row in conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    ).fetchall()
+                )
+
+                # Delete GRs → PO → attachments
+                conn.execute("DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                             "SELECT gr_id FROM gr_requests WHERE po_id = ?)", (po_id,))
+                conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?", (po_id,))
+                conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+
+                write_audit_log(
+                    conn,
+                    action_type="delete_po",
+                    object_type="po",
+                    object_id=po_id,
+                    sc_id=before["sc_id"],
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+
+                # Delete files from disk
+                for path in attach_paths:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            except Exception:
+                conn.rollback()
+                raise
+
+    return before

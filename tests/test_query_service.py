@@ -10,6 +10,7 @@ from sc_gr_app.services.query_service import (
     search_pos,
     search_scs,
     search_vendors,
+    workbench_data,
 )
 from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft
 from sc_gr_app.services.vendor_service import create_vendor
@@ -203,7 +204,7 @@ def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
     owner_rows = search_audit_logs(app_config, current_user=USER, limit=100)
     other_rows = search_audit_logs(app_config, current_user=OTHER_USER, limit=100)
 
-    assert [row["object_id"] for row in admin_rows] == []
+    assert [row["object_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["object_id"] for row in owner_rows] == [draft_sc_id]
     assert [row["object_id"] for row in other_rows] == []
 
@@ -308,7 +309,7 @@ def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
         limit=100,
     )
 
-    assert [row["sc_id"] for row in admin_rows] == []
+    assert [row["sc_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["sc_id"] for row in owner_rows] == [draft_sc_id]
     assert [row["sc_id"] for row in other_rows] == []
 
@@ -397,3 +398,40 @@ def test_po_and_gr_search_reject_invalid_current_user(app_config, search_func):
 
     with pytest.raises(ValidationError, match="current_user is invalid"):
         search_func(app_config, current_user={"role": "auditor"})
+
+
+def test_workbench_data_returns_per_status_counts(app_config):
+    sc_id, po_id, gr_id = seed_query_data(app_config)
+
+    result = workbench_data(app_config, ADMIN)
+
+    assert result["sc"]["approved"]["count"] >= 1
+    assert result["po"]["po_approved"]["count"] >= 1
+    assert result["gr"]["pending"]["count"] >= 1
+    assert len(result["sc"]["approved"]["rows"]) >= 1
+    assert "sc_no" in result["sc"]["approved"]["rows"][0]
+
+
+def test_workbench_data_scopes_requester_to_own_scs(app_config):
+    sc_id, po_id, gr_id = seed_query_data(app_config)
+
+    admin_data = workbench_data(app_config, ADMIN)
+    owner_data = workbench_data(app_config, USER)
+
+    assert admin_data["sc"]["approved"]["count"] >= owner_data["sc"]["approved"]["count"]
+
+
+def test_workbench_data_hides_other_requesters_drafts(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    create_sc_draft(app_config, USER, {"requester_id": "U1"})
+
+    admin_data = workbench_data(app_config, ADMIN)
+    owner_data = workbench_data(app_config, USER)
+    other_data = workbench_data(app_config, OTHER_USER)
+
+    assert admin_data["sc"]["draft"]["count"] >= 1
+    assert owner_data["sc"]["draft"]["count"] >= 1
+    assert other_data["sc"]["draft"]["count"] == 0

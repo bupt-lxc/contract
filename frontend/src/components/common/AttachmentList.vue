@@ -4,6 +4,9 @@
       <el-button size="small" @click="handleAddFiles" :loading="uploading">
         <el-icon><Paperclip /></el-icon> {{ $t('attachment.addAttachment') }}
       </el-button>
+      <el-button size="small" @click="handleOpenFolder">
+        <el-icon><FolderOpened /></el-icon> {{ $t('attachment.openFolder') }}
+      </el-button>
     </div>
 
     <el-table
@@ -45,15 +48,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Paperclip } from '@element-plus/icons-vue'
+import { Paperclip, FolderOpened } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   entityType: { type: String, required: true },
-  entityId: { type: String, required: true }
+  entityId: { type: String, required: true },
+  parentScId: { type: String, default: null },
+  parentPoId: { type: String, default: null },
+  refreshKey: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['changed'])
@@ -90,7 +96,9 @@ async function handleAddFiles() {
   try {
     const result = await callApi('select_files', {
       entity_type: props.entityType,
-      entity_id: props.entityId
+      entity_id: props.entityId,
+      parent_sc_id: props.parentScId,
+      parent_po_id: props.parentPoId,
     })
     if (result && result.length > 0) {
       ElMessage.success(t('attachment.addAttachment') + ' (' + result.length + ')')
@@ -101,6 +109,19 @@ async function handleAddFiles() {
     ElMessage.error(e.message)
   } finally {
     uploading.value = false
+  }
+}
+
+async function handleOpenFolder() {
+  try {
+    await callApi('open_attachment_dir', {
+      entity_type: props.entityType,
+      entity_id: props.entityId,
+      parent_sc_id: props.parentScId,
+      parent_po_id: props.parentPoId,
+    })
+  } catch (e) {
+    ElMessage.error(e.message)
   }
 }
 
@@ -124,4 +145,13 @@ async function handleDelete(row) {
 }
 
 onMounted(fetchAttachments)
+
+// Re-fetch when switching entities or when parent triggers a refresh
+watch([
+  () => props.entityType,
+  () => props.entityId,
+  () => props.refreshKey,
+], () => {
+  fetchAttachments()
+})
 </script>

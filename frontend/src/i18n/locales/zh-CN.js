@@ -126,7 +126,15 @@ export default {
     scId: '供应链ID',
     amount: '金额',
     estimated: '预估金额',
-    noCards: '暂无{title}'
+    noCards: '暂无{title}',
+    loadError: '加载失败',
+    colScNo: 'SC编号',
+    colRequester: '申请人',
+    colAmount: '金额',
+    colPoNo: 'PO编号',
+    colVendor: '供应商',
+    colGrId: 'GR ID',
+    colEstAmount: '预估金额'
   },
 
   sc: {
@@ -161,12 +169,21 @@ export default {
     denyConfirm: '确认拒绝此供应链？',
     closePrompt: '请输入 "I CONFIRM CLOSE THIS SC" 以继续。',
     closeTitle: '关闭供应链',
-    closeInputError: '请输入正确的确认文本。',
+    closeInputError: '请输入 "I CONFIRM CLOSE THIS SC"（注意大写和空格）。',
     scUpdated: '供应链已更新',
     scSubmitted: '供应链已提交',
     scApproved: '供应链已批准',
     scDenied: '供应链已拒绝',
     scClosed: '供应链已关闭',
+    revoke: '撤销',
+    revokeSc: '撤销供应链',
+    confirmRevoke: '确认撤销此供应链？将回到草稿状态。',
+    confirmRollback: '确认回退此供应链？将从已批准回到待审批状态。',
+    revoked: '已撤销',
+    rolledBack: '已回退',
+    deleteSc: '删除供应链',
+    confirmDelete: '确认删除此供应链？此操作不可恢复。',
+    deleted: '已删除',
     draftSaved: '草稿已保存',
     requesterRequired: '申请人为必填项',
     scNoRequired: '供应链编号为必填项',
@@ -214,6 +231,12 @@ export default {
     finish: '完成',
     vendorRequired: '供应商为必填项',
     poAmountRequired: '采购订单金额为必填项',
+    revoke: '回退',
+    confirmRevoke: '确认回退此采购订单？',
+    revoked: '已回退',
+    deletePo: '删除采购订单',
+    confirmDeletePo: '确认删除此采购订单？此操作不可恢复。',
+    poDeleted: '采购订单已删除',
     contractPos: '合同项',
     contractType: '合同类型',
     costCenter: '成本中心',
@@ -262,6 +285,12 @@ export default {
     invalidNumber: '请输入有效的正数',
     requesterRequired: '申请人为必填项',
     estimatedAmountRequired: '预估金额为必填项',
+    revoke: '回退',
+    confirmRevoke: '确认回退此收货记录？',
+    revoked: '已回退',
+    deleteGr: '删除收货记录',
+    confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
+    grDeleted: '收货记录已删除',
     pendingDate: '提交日期',
     approvedDate: '批准日期'
   },
@@ -317,7 +346,8 @@ export default {
     machine: '机器',
     mode: '模式',
     noRecords: '暂无审计日志。',
-    noRecordsInSc: '暂无审计记录。'
+    noRecordsInSc: '暂无审计记录。',
+    changes: '变更详情'
   },
 
   email: {
@@ -498,6 +528,7 @@ export default {
     noAttachments: '暂无附件',
     deleteConfirm: '确认删除此附件？',
     openFile: '打开附件',
+    openFolder: '打开文件夹',
     deleteAttachment: '删除附件'
   },
 

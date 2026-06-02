@@ -9,6 +9,8 @@
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && (gr.status === 'approved' || gr.status === 'cancelled')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -47,6 +49,10 @@
         <AttachmentList
           entity-type="gr"
           :entity-id="gr.gr_id"
+          :parent-sc-id="scId"
+          :parent-po-id="poId"
+          :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 
@@ -62,7 +68,7 @@
           <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
           <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
           <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="120" />
+          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
           <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
         </el-table>
       </div>
@@ -72,6 +78,7 @@
       v-model:visible="editDialogVisible"
       mode="edit"
       :record="gr"
+      :users="activeUsers"
       @save="handleEditSave"
     />
   </div>
@@ -80,7 +87,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSc } from '@/composables/useSc.js'
 import { useGr } from '@/composables/useGr.js'
 import { callApi } from '@/api/bridge.js'
@@ -91,6 +98,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updateGr, approveGr, cancelGr } = useGr()
@@ -114,12 +122,19 @@ const grAuditLogs = computed(() => {
 })
 
 const editDialogVisible = ref(false)
+const attachRefreshKey = ref(0)
+const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
 
 async function handleEditSave(data) {
   try {
-    await updateGr(data.gr_id || grId.value, data)
+    const { _attachments, ...formData } = data
+    await updateGr(formData.gr_id || grId.value, formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId.value, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
+    }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
     editDialogVisible.value = false
@@ -153,7 +168,26 @@ async function handleCancel() {
   } catch {}
 }
 
+async function handleRevoke() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.revoked'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmDeleteGr'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.grDeleted'))
+    router.replace(`/sc/${scId.value}/po/${poId.value}`)
+  } catch {}
+}
+
 onMounted(async () => {
+  try { activeUsers.value = await callApi('list_users') } catch {}
   await fetchDetail(scId.value)
 })
 </script>

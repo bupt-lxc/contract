@@ -126,7 +126,15 @@ export default {
     scId: 'SC ID',
     amount: 'Amount',
     estimated: 'Estimated',
-    noCards: 'No {title}'
+    noCards: 'No {title}',
+    loadError: 'Load failed',
+    colScNo: 'SC No',
+    colRequester: 'Requester',
+    colAmount: 'Amount',
+    colPoNo: 'PO No',
+    colVendor: 'Vendor',
+    colGrId: 'GR ID',
+    colEstAmount: 'Est. Amount'
   },
 
   sc: {
@@ -161,12 +169,21 @@ export default {
     denyConfirm: 'Deny this SC?',
     closePrompt: 'Type "I CONFIRM CLOSE THIS SC" to proceed.',
     closeTitle: 'Close SC',
-    closeInputError: 'Type the confirmation text exactly.',
+    closeInputError: 'Type exactly "I CONFIRM CLOSE THIS SC" (uppercase, spaces).',
     scUpdated: 'SC updated',
     scSubmitted: 'SC submitted',
     scApproved: 'SC approved',
     scDenied: 'SC denied',
     scClosed: 'SC closed',
+    revoke: 'Revoke',
+    revokeSc: 'Revoke SC',
+    confirmRevoke: 'Revoke this SC? It will return to draft status.',
+    confirmRollback: 'Roll back this SC? It will return to pending status.',
+    revoked: 'Revoked',
+    rolledBack: 'Rolled back',
+    deleteSc: 'Delete SC',
+    confirmDelete: 'Delete this SC? This cannot be undone.',
+    deleted: 'Deleted',
     draftSaved: 'Draft saved',
     requesterRequired: 'Requester is required',
     scNoRequired: 'SC No is required',
@@ -214,6 +231,12 @@ export default {
     finish: 'Finish',
     vendorRequired: 'Vendor is required',
     poAmountRequired: 'PO Amount is required',
+    revoke: 'Rollback',
+    confirmRevoke: 'Roll back this PO?',
+    revoked: 'Rolled back',
+    deletePo: 'Delete PO',
+    confirmDeletePo: 'Delete this PO? This cannot be undone.',
+    poDeleted: 'PO deleted',
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
@@ -262,6 +285,12 @@ export default {
     invalidNumber: 'Enter a valid positive number',
     requesterRequired: 'Requester is required',
     estimatedAmountRequired: 'Estimated Amount is required',
+    revoke: 'Rollback',
+    confirmRevoke: 'Roll back this GR?',
+    revoked: 'Rolled back',
+    deleteGr: 'Delete GR',
+    confirmDeleteGr: 'Delete this GR? This cannot be undone.',
+    grDeleted: 'GR deleted',
     pendingDate: 'Pending Date',
     approvedDate: 'Approved Date'
   },
@@ -317,7 +346,8 @@ export default {
     machine: 'Machine',
     mode: 'Mode',
     noRecords: 'No audit logs found.',
-    noRecordsInSc: 'No audit records.'
+    noRecordsInSc: 'No audit records.',
+    changes: 'Changes'
   },
 
   email: {
@@ -498,6 +528,7 @@ export default {
     noAttachments: 'No attachments',
     deleteConfirm: 'Delete this attachment?',
     openFile: 'Open',
+    openFolder: 'Open Folder',
     deleteAttachment: 'Delete'
   },
 

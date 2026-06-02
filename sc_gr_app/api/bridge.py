@@ -6,6 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
+from sc_gr_app.services.audit_service import write_audit_log
 from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
 
 
@@ -14,6 +15,18 @@ def _require_payload_field(payload: dict, field: str):
     if value is None or value == "":
         raise ValidationError(f"{field} is required")
     return value
+
+
+def _attachment_sc_id(entity_type: str, entity_id: str,
+                      parent_sc_id: str = None, parent_po_id: str = None) -> str | None:
+    """Resolve the sc_id that an attachment belongs to."""
+    if entity_type == "sc":
+        return entity_id
+    if entity_type == "po":
+        return parent_sc_id or None
+    if entity_type == "gr":
+        return parent_sc_id or None
+    return None
 
 
 class ApiBridge:
@@ -140,7 +153,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.approve_sc(self.config, current_user, sc_id))
+            cascade_pos = payload.get("cascade_pos", False)
+            return ok(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos))
         except Exception as exc:
             return fail(exc)
 
@@ -159,6 +173,26 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             return ok(sc_service.close_sc(self.config, current_user, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def revoke_sc(self, payload) -> dict:
+        """Move a pending SC back to draft."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(sc_service.revoke_sc(self.config, current_user, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_sc(self, payload) -> dict:
+        """Delete a draft SC and its attachments."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(sc_service.delete_sc(self.config, current_user, sc_id))
         except Exception as exc:
             return fail(exc)
 
@@ -186,7 +220,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.approve_po(self.config, current_user, po_id))
+            cascade_grs = payload.get("cascade_grs", False)
+            return ok(po_service.approve_po(self.config, current_user, po_id, cascade_grs=cascade_grs))
         except Exception as exc:
             return fail(exc)
 
@@ -196,6 +231,36 @@ class ApiBridge:
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             return ok(po_service.finish_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def submit_po(self, payload) -> dict:
+        """Submit a draft PO to po_pending (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.submit_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def revoke_po(self, payload) -> dict:
+        """Roll back PO status (admin only)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.revoke_po(self.config, current_user, po_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_po(self, payload) -> dict:
+        """Delete a po_pending or finished PO (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(po_service.delete_po(self.config, current_user, po_id))
         except Exception as exc:
             return fail(exc)
 
@@ -234,6 +299,44 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def submit_gr(self, payload) -> dict:
+        """Submit a draft GR to pending (admin or SC owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.submit_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def revoke_gr(self, payload) -> dict:
+        """Roll back GR status (admin only)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.revoke_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_gr(self, payload) -> dict:
+        """Delete a pending or cancelled GR (admin or GR owner)."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.delete_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def workbench_data(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            return ok(query_service.workbench_data(self.config, current_user))
         except Exception as exc:
             return fail(exc)
 
@@ -485,6 +588,8 @@ class ApiBridge:
             entity_type = _require_payload_field(payload, "entity_type")
             entity_id = _require_payload_field(payload, "entity_id")
             file_paths = _require_payload_field(payload, "file_paths")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
             current_user = self._require_current_user()
 
             if entity_type not in ("sc", "po", "gr"):
@@ -494,13 +599,17 @@ class ApiBridge:
 
             timestamp = datetime.now(timezone.utc).isoformat()
             results = []
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 for fp in file_paths:
                     src = Path(fp)
                     if not src.exists():
                         continue
-                    dest = self._resolve_target_path(entity_type, entity_id, src.name)
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, src.name,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
                     shutil.copy2(src, dest)
                     conn.execute(
                         "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
@@ -511,8 +620,9 @@ class ApiBridge:
                             current_user["user_id"], timestamp,
                         ),
                     )
-                    results.append({
-                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
                         "entity_type": entity_type,
                         "entity_id": entity_id,
                         "filename": dest.name,
@@ -520,15 +630,45 @@ class ApiBridge:
                         "file_size": dest.stat().st_size,
                         "created_by": current_user["user_id"],
                         "created_at": timestamp,
-                    })
+                    }
+                    results.append(attach_record)
+                    write_audit_log(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
                 conn.commit()
             return ok(results)
         except Exception as exc:
             return fail(exc)
 
-    def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str) -> Path:
+    def _resolve_target_path(self, entity_type: str, entity_id: str, filename: str,
+                              parent_sc_id: str = None, parent_po_id: str = None) -> Path:
         import os as _os
-        target_dir = self._attachments_dir() / entity_type / entity_id
+
+        # Build hierarchical path:
+        #   attachments/sc/<sc_id>/                  for SC
+        #   attachments/sc/<sc_id>/po/<po_id>/        for PO (under its SC)
+        #   attachments/sc/<sc_id>/po/<po_id>/gr/<gr_id>/  for GR (under its PO)
+        base = self._attachments_dir()
+        if entity_type == "sc":
+            target_dir = base / "sc" / entity_id
+        elif entity_type == "po":
+            pid = parent_sc_id or "unknown-sc"
+            target_dir = base / "sc" / pid / "po" / entity_id
+        elif entity_type == "gr":
+            sid = parent_sc_id or "unknown-sc"
+            pid = parent_po_id or "unknown-po"
+            target_dir = base / "sc" / sid / "po" / pid / "gr" / entity_id
+        else:
+            target_dir = base / entity_type / entity_id
+
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / filename
         # Handle filename conflicts with _1, _2, etc.
@@ -553,6 +693,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             entity_type = _require_payload_field(payload, "entity_type")
             entity_id = _require_payload_field(payload, "entity_id")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
             current_user = self._require_current_user()
 
             if entity_type not in ("sc", "po", "gr"):
@@ -569,12 +711,16 @@ class ApiBridge:
 
             timestamp = datetime.now(timezone.utc).isoformat()
             results = []
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 for src in file_paths:
                     src_path = Path(src)
                     filename = src_path.name
-                    dest = self._resolve_target_path(entity_type, entity_id, filename)
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, filename,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
                     shutil.copy2(src_path, dest)
                     conn.execute(
                         "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
@@ -585,8 +731,9 @@ class ApiBridge:
                             current_user["user_id"], timestamp,
                         ),
                     )
-                    results.append({
-                        "id": conn.execute("SELECT last_insert_rowid()").fetchone()[0],
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
                         "entity_type": entity_type,
                         "entity_id": entity_id,
                         "filename": dest.name,
@@ -594,7 +741,19 @@ class ApiBridge:
                         "file_size": dest.stat().st_size,
                         "created_by": current_user["user_id"],
                         "created_at": timestamp,
-                    })
+                    }
+                    results.append(attach_record)
+                    write_audit_log(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
                 conn.commit()
             return ok(results)
         except Exception as exc:
@@ -633,16 +792,59 @@ class ApiBridge:
         try:
             payload = self._required_payload(payload)
             attachment_id = _require_payload_field(payload, "id")
-            self._require_current_user()
+            current_user = self._require_current_user()
 
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
                 row = conn.execute(
-                    "SELECT id, stored_path FROM attachments WHERE id = ?",
+                    "SELECT id, entity_type, entity_id, filename, stored_path, file_size, created_by, created_at "
+                    "FROM attachments WHERE id = ?",
                     (attachment_id,),
                 ).fetchone()
                 if not row:
                     return fail(NotFound(f"Attachment {attachment_id} not found"))
+
+                # Resolve sc_id for audit
+                sc_id = None
+                if row["entity_type"] == "sc":
+                    sc_id = row["entity_id"]
+                elif row["entity_type"] == "po":
+                    sc_lookup = conn.execute(
+                        "SELECT sc_id FROM pos WHERE po_id = ?", (row["entity_id"],)
+                    ).fetchone()
+                    if sc_lookup:
+                        sc_id = sc_lookup["sc_id"]
+                elif row["entity_type"] == "gr":
+                    sc_lookup = conn.execute(
+                        "SELECT po.sc_id FROM gr_requests gr "
+                        "JOIN pos po ON po.po_id = gr.po_id "
+                        "WHERE gr.gr_id = ?", (row["entity_id"],)
+                    ).fetchone()
+                    if sc_lookup:
+                        sc_id = sc_lookup["sc_id"]
+
+                before = {
+                    "id": row["id"],
+                    "entity_type": row["entity_type"],
+                    "entity_id": row["entity_id"],
+                    "filename": row["filename"],
+                    "stored_path": row["stored_path"],
+                    "file_size": row["file_size"],
+                    "created_by": row["created_by"],
+                    "created_at": row["created_at"],
+                }
+                write_audit_log(
+                    conn,
+                    action_type="delete_attachment",
+                    object_type="attachment",
+                    object_id=str(attachment_id),
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+
                 stored_path = row["stored_path"]
                 conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
                 conn.commit()
@@ -671,6 +873,29 @@ class ApiBridge:
             if not row:
                 return fail(NotFound(f"Attachment {attachment_id} not found"))
             _os.startfile(row["stored_path"])
+            return ok({"opened": True})
+        except Exception as exc:
+            return fail(exc)
+
+    def open_attachment_dir(self, payload) -> dict:
+        """Open the attachments directory for an entity in File Explorer."""
+        try:
+            import os as _os
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+            parent_sc_id = payload.get("parent_sc_id")
+            parent_po_id = payload.get("parent_po_id")
+            self._require_current_user()
+
+            # Compute the same directory path used for storing attachments
+            dummy = self._resolve_target_path(
+                entity_type, entity_id, ".dummy",
+                parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+            )
+            target_dir = dummy.parent
+            target_dir.mkdir(parents=True, exist_ok=True)
+            _os.startfile(str(target_dir))
             return ok({"opened": True})
         except Exception as exc:
             return fail(exc)

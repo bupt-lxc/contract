@@ -13,6 +13,8 @@
         <el-button v-if="permissions.can_submit_sc" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
+        <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
+        <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
       </div>
     </div>
@@ -38,6 +40,8 @@
         <AttachmentList
           entity-type="sc"
           :entity-id="detail.sc.sc_id"
+          :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 
@@ -57,6 +61,7 @@
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @approve="row => handlePoApprove(row)"
           @finish="row => handlePoFinish(row)"
+          @submit="row => handlePoSubmit(row)"
         />
       </div>
 
@@ -75,7 +80,7 @@
           <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
           <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
           <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="120" />
+          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
           <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
         </el-table>
       </div>
@@ -109,7 +114,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
@@ -128,9 +133,10 @@ import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
-const { createPo, updatePo, approvePo, finishPo } = usePo()
+const { createPo, updatePo, approvePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
 const { exportRows } = useExport()
@@ -146,6 +152,7 @@ const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
 const poDialogMode = ref('create')
 const poDialogRecord = ref(null)
+const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -155,9 +162,11 @@ async function handleEditSave(data) {
     await updateSc(formData.sc_id || scId.value, formData)
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: scId.value, file_paths: _attachments })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('sc.updated'))
     await fetchDetail(scId.value)
+    editDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
@@ -173,7 +182,22 @@ async function handleSubmit() {
 async function handleApprove() {
   try {
     await ElMessageBox.confirm(t('sc.confirmApprove'), t('common.confirm'), { type: 'warning' })
-    await approveSc(scId.value)
+
+    // Check for draft POs — offer cascade
+    const draftPos = (detail.value.pos || []).filter(p => p.status === 'draft')
+    let cascadePos = false
+    if (draftPos.length > 0) {
+      try {
+        await ElMessageBox.confirm(
+          `${draftPos.length} draft PO(s) exist. Also submit them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade submit', cancelButtonText: 'No, leave as draft', type: 'warning' }
+        )
+        cascadePos = true
+      } catch { /* user chose No */ }
+    }
+
+    await approveSc(scId.value, cascadePos)
     ElMessage.success(t('sc.approved'))
     await fetchDetail(scId.value)
   } catch { /* cancelled */ }
@@ -194,7 +218,8 @@ async function handleClose() {
       confirmButtonText: t('common.close'),
       type: 'warning',
       inputPattern: /^I CONFIRM CLOSE THIS SC$/,
-      inputErrorMessage: t('sc.closeInputError')
+      inputErrorMessage: t('sc.closeInputError'),
+      inputPlaceholder: 'I CONFIRM CLOSE THIS SC'
     })
     await closeSc(scId.value)
     ElMessage.success(t('sc.closed'))
@@ -202,13 +227,60 @@ async function handleClose() {
   } catch { /* cancelled */ }
 }
 
+async function handleRevoke() {
+  try {
+    const status = detail.value.sc?.status
+    const messages = {
+      pending:  { confirm: 'sc.confirmRevoke',   success: 'sc.revoked' },
+      approved: { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
+      closed:   { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
+    }
+    const msg = messages[status] || messages.pending
+    await ElMessageBox.confirm(t(msg.confirm), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_sc', { sc_id: scId.value })
+    ElMessage.success(t(msg.success))
+    await fetchDetail(scId.value)
+  } catch { /* cancelled */ }
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('sc.confirmDelete'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.deleted'))
+    router.replace('/sc')
+  } catch { /* cancelled */ }
+}
+
 async function handlePoApprove(row) {
   try {
     await ElMessageBox.confirm(t('po.confirmApprove'), t('common.confirm'), { type: 'warning' })
-    await approvePo(row.po_id)
+
+    // Check for unprocessed GRs — offer cascade
+    const unprocessedGrs = (detail.value.grs || []).filter(
+      g => String(g.po_id) === String(row.po_id) && (g.status === 'draft' || g.status === 'pending')
+    )
+    let cascadeGrs = false
+    if (unprocessedGrs.length > 0) {
+      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
+      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
+      const parts = []
+      if (draftCount) parts.push(`${draftCount} draft`)
+      if (pendingCount) parts.push(`${pendingCount} pending`)
+      try {
+        await ElMessageBox.confirm(
+          `${parts.join(' and ')} GR(s) exist. Also process them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
+        )
+        cascadeGrs = true
+      } catch { /* user chose No */ }
+    }
+
+    await approvePo(row.po_id, cascadeGrs)
     ElMessage.success(t('po.approved'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handlePoFinish(row) {
@@ -218,6 +290,15 @@ async function handlePoFinish(row) {
     ElMessage.success(t('po.finished'))
     await fetchDetail(scId.value)
   } catch { /* cancelled */ }
+}
+
+async function handlePoSubmit(row) {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
+    await submitPo(row.po_id)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
+    await fetchDetail(scId.value)
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handlePoSave(data) {
@@ -232,7 +313,8 @@ async function handlePoSave(data) {
       await updatePo(poId, formData)
     }
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

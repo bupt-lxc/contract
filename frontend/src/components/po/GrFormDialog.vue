@@ -8,8 +8,10 @@
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
-          <el-form-item :label="$t('gr.requesterId')" prop="requester_id">
-            <el-input v-model="form.requester_id" />
+          <el-form-item :label="$t('gr.requester')" prop="requester_id">
+            <el-select v-model="form.requester_id" filterable>
+              <el-option v-for="u in availableUsers" :key="u.user_id" :label="`${u.user_name} — ${u.machine_id}`" :value="u.user_id" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
@@ -68,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -79,10 +81,20 @@ const { t } = useI18n()
 const props = defineProps({
   visible: Boolean,
   mode: { type: String, default: 'create' },
-  record: Object
+  record: Object,
+  users: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:visible', 'save'])
+
+const currentUser = computed(() => window.__currentUser || {})
+const isAdmin = computed(() => currentUser.value?.role === 'admin')
+
+// Non-admin users can only select themselves as requester
+const availableUsers = computed(() => {
+  if (isAdmin.value) return props.users
+  return props.users.filter(u => u.user_id === currentUser.value?.user_id)
+})
 
 const formRef = ref()
 const submitting = ref(false)
@@ -107,6 +119,10 @@ watch(() => props.visible, (val) => {
       Object.assign(form, props.record)
     } else {
       Object.assign(form, emptyForm())
+      // Auto-set requester for non-admin users
+      if (!isAdmin.value) {
+        form.requester_id = currentUser.value?.user_id || ''
+      }
       formRef.value?.resetFields()
     }
   }
@@ -127,8 +143,6 @@ async function handleSave() {
   submitting.value = true
   try {
     emit('save', { ...form, _attachments: pickedFiles.value.map(f => f.path) })
-    emit('update:visible', false)
-    ElMessage.success(t('po.saved'))
   } catch (e) {
     ElMessage.error(e.message)
   } finally {

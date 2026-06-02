@@ -41,6 +41,7 @@ export function useGr(pageSize = 20) {
   async function updateGr(grId, data) { return await callApi('update_gr', { gr_id: grId, data }) }
   async function approveGr(grId, conValue) { await callApi('approve_gr', { gr_id: grId, con_value: conValue }) }
   async function cancelGr(grId) { await callApi('cancel_gr', { gr_id: grId }) }
+  async function submitGr(grId) { await callApi('submit_gr', { gr_id: grId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
   function resetFilters() { state.filters = {}; state.currentPage = 1 }
@@ -50,7 +51,7 @@ export function useGr(pageSize = 20) {
 
   return {
     state: readonly(state),
-    searchGrs, createGr, updateGr, approveGr, cancelGr,
+    searchGrs, createGr, updateGr, approveGr, cancelGr, submitGr,
     setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange
   }
 }

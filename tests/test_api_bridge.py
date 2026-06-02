@@ -151,7 +151,7 @@ def test_bridge_sc_detail_and_write_methods_forward_payload_and_current_user(mon
     )
 
     def fake_service(name):
-        def _service(config, user, *args):
+        def _service(config, user, *args, **kwargs):
             calls.append((name, config, user, args))
             return {"name": name, "args": args}
 
@@ -220,7 +220,7 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
     )
 
     def fake_service(name):
-        def _service(config, user, *args):
+        def _service(config, user, *args, **kwargs):
             calls.append((name, config, user, args))
             return [name, *args]
 
@@ -363,7 +363,7 @@ def test_bridge_write_methods_wrap_service_permission_errors(monkeypatch, app_co
         lambda config, machine_id: {"user_id": "U1"},
     )
 
-    def fake_approve_po(config, user, po_id):
+    def fake_approve_po(config, user, po_id, cascade_grs=False):
         raise PermissionDenied("Only approver can approve PO")
 
     monkeypatch.setattr(bridge.po_service, "approve_po", fake_approve_po)

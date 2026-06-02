@@ -6,9 +6,12 @@
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'po_pending' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -44,6 +47,9 @@
         <AttachmentList
           entity-type="po"
           :entity-id="po.po_id"
+          :parent-sc-id="scId"
+          :refresh-key="attachRefreshKey"
+          @changed="fetchDetail(scId)"
         />
       </div>
 
@@ -63,6 +69,7 @@
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @cancel="row => handleGrCancel(row)"
+          @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
       </div>
@@ -72,6 +79,9 @@
       v-model:visible="grAttachVisible"
       entity-type="gr"
       :entity-id="grAttachRecord?.gr_id || ''"
+      :parent-sc-id="scId"
+      :parent-po-id="poId"
+      @changed="fetchDetail(scId)"
     />
 
     <PoFormDialog
@@ -86,6 +96,7 @@
       v-model:visible="grDialogVisible"
       :mode="grDialogMode"
       :record="grDialogRecord"
+      :users="activeUsers"
       @save="handleGrSave"
     />
   </div>
@@ -94,8 +105,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
+import { callApi } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
 import { usePo } from '@/composables/usePo.js'
@@ -111,10 +123,11 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updatePo, approvePo, finishPo } = usePo()
-const { createGr, updateGr, approveGr, cancelGr } = useGr()
+const { updatePo, approvePo, finishPo, submitPo } = usePo()
+const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
 
@@ -137,6 +150,8 @@ const grDialogMode = ref('create')
 const grDialogRecord = ref(null)
 const grAttachVisible = ref(false)
 const grAttachRecord = ref(null)
+const attachRefreshKey = ref(0)
+const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -146,20 +161,44 @@ async function handleEditSave(data) {
     const targetPoId = formData.po_id || poId.value
     await updatePo(targetPoId, formData)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('po.poUpdated'))
     await fetchDetail(scId.value)
+    editDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
 async function handleApprove() {
   try {
     await ElMessageBox.confirm(t('po.approveConfirm'), t('common.confirm'), { type: 'warning' })
-    await approvePo(poId.value)
+
+    // Check for unprocessed GRs — offer cascade
+    const unprocessedGrs = grs.value.filter(
+      g => g.status === 'draft' || g.status === 'pending'
+    )
+    let cascadeGrs = false
+    if (unprocessedGrs.length > 0) {
+      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
+      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
+      const parts = []
+      if (draftCount) parts.push(`${draftCount} draft`)
+      if (pendingCount) parts.push(`${pendingCount} pending`)
+      try {
+        await ElMessageBox.confirm(
+          `${parts.join(' and ')} GR(s) exist. Also process them?`,
+          t('common.confirm'),
+          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
+        )
+        cascadeGrs = true
+      } catch { /* user chose No */ }
+    }
+
+    await approvePo(poId.value, cascadeGrs)
     ElMessage.success(t('po.poApproved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleFinish() {
@@ -169,6 +208,33 @@ async function handleFinish() {
     ElMessage.success(t('po.poFinished'))
     await fetchDetail(scId.value)
   } catch {}
+}
+
+async function handleRevoke() {
+  try {
+    await ElMessageBox.confirm(t('po.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await callApi('revoke_po', { po_id: poId.value })
+    ElMessage.success(t('po.revoked'))
+    await fetchDetail(scId.value)
+  } catch {}
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(t('po.confirmDeletePo'), t('common.confirm'), { type: 'error' })
+    await callApi('delete_po', { po_id: poId.value })
+    ElMessage.success(t('po.poDeleted'))
+    router.replace(`/sc/${scId.value}`)
+  } catch {}
+}
+
+async function handleSubmit() {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
+    await submitPo(poId.value)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
+    await fetchDetail(scId.value)
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleGrApprove(row) {
@@ -198,6 +264,15 @@ async function handleGrCancel(row) {
   } catch {}
 }
 
+async function handleGrSubmit(row) {
+  try {
+    await ElMessageBox.confirm(t('common.submit') + ' this GR?', t('common.confirm'), { type: 'warning' })
+    await submitGr(row.gr_id)
+    ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
+    await fetchDetail(scId.value)
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+}
+
 async function handleExportGrs() {
   const columns = [
     { key: 'status', label: t('common.status') },
@@ -224,7 +299,8 @@ async function handleGrSave(data) {
       await updateGr(grId, formData)
     }
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments })
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)
@@ -233,6 +309,7 @@ async function handleGrSave(data) {
 }
 
 onMounted(async () => {
+  try { activeUsers.value = await callApi('list_users') } catch {}
   await Promise.all([fetchDetail(scId.value), searchVendors()])
 })
 </script>

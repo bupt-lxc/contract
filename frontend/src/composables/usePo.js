@@ -39,7 +39,8 @@ export function usePo(pageSize = 20) {
 
   async function createPo(data) { return await callApi('create_po', { data }) }
   async function updatePo(poId, data) { return await callApi('update_po', { po_id: poId, data }) }
-  async function approvePo(poId) { await callApi('approve_po', { po_id: poId }) }
+  async function approvePo(poId, cascadeGrs = false) { await callApi('approve_po', { po_id: poId, cascade_grs: cascadeGrs }) }
+  async function submitPo(poId) { await callApi('submit_po', { po_id: poId }) }
   async function finishPo(poId) { await callApi('finish_po', { po_id: poId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
@@ -50,7 +51,7 @@ export function usePo(pageSize = 20) {
 
   return {
     state: readonly(state),
-    searchPos, createPo, updatePo, approvePo, finishPo,
+    searchPos, createPo, updatePo, approvePo, submitPo, finishPo,
     setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange
   }
 }

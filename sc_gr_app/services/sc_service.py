@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import isfinite
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -122,32 +123,38 @@ def _assert_can_view_sc(user: dict, sc: dict) -> None:
 
 
 def _assert_can_edit_sc(user: dict, sc: dict) -> None:
-    if sc["status"] == "draft":
-        if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
-            return
-        raise PermissionDenied("Only the draft owner can edit this SC")
     if sc["status"] == "closed":
         raise ConflictError("Closed SC cannot be edited")
     if user.get("role") == "admin":
+        return
+    if sc["status"] in ("draft", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
         return
     raise PermissionDenied("Admin permission required")
 
 
 def _sc_permissions(user: dict, sc: dict) -> dict:
     is_admin = user.get("role") == "admin"
-    is_owner = user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]
+    is_owner = user.get("user_id") == sc["requester_id"]
     is_draft = sc["status"] == "draft"
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
     is_closed = sc["status"] == "closed"
+    is_denied = sc["status"] == "denied"
+    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_closed)
+    can_manage = (is_admin or is_owner) and (is_draft or is_approved)
     return {
-        "can_edit_sc": (is_owner and is_draft) or (is_admin and not is_draft and not is_closed),
-        "can_submit_sc": is_owner and is_draft,
-        "can_approve_sc": is_admin and is_pending,
+        "is_admin": is_admin,
+        "can_edit_sc": can_edit,
+        "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
+        "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
-        "can_manage_po": is_admin and is_approved,
-        "can_manage_gr": is_admin and is_approved,
+        "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and (is_approved or is_closed)),
+        "can_delete_sc": (is_admin or is_owner) and (is_draft or is_closed),
+        "can_delete_po": is_admin or is_owner,
+        "can_delete_gr": is_admin or is_owner,
+        "can_manage_po": can_manage,
+        "can_manage_gr": can_manage,
     }
 
 
@@ -395,8 +402,9 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
-                if before["status"] != "draft":
-                    raise ConflictError("SC must be draft")
+                if before["status"] not in ("draft", "denied"):
+                    raise ConflictError("SC must be draft or denied")
+
                 # Admin can submit any draft; requester can only submit their own
                 if (
                     current_user["role"] != "admin"
@@ -607,6 +615,33 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 if before["status"] != "approved":
                     raise ConflictError("SC must be approved")
 
+                # Block if any PO is not finished
+                unfinished_pos = conn.execute(
+                    "SELECT po_id, status FROM pos WHERE sc_id = ? AND status != 'finished'",
+                    (sc_id,),
+                ).fetchall()
+                if unfinished_pos:
+                    raise ConflictError(
+                        f"Cannot close SC: {len(unfinished_pos)} PO(s) not finished. "
+                        "Finish all POs first."
+                    )
+
+                # Block if any GR is not in a final state
+                non_final_grs = conn.execute(
+                    """
+                    SELECT gr.gr_id, gr.status
+                    FROM gr_requests gr
+                    JOIN pos po ON po.po_id = gr.po_id
+                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'cancelled')
+                    """,
+                    (sc_id,),
+                ).fetchall()
+                if non_final_grs:
+                    raise ConflictError(
+                        f"Cannot close SC: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve or cancel all GRs first."
+                    )
+
                 timestamp = utc_now()
                 conn.execute(
                     """
@@ -639,6 +674,160 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 raise
 
     return after
+
+
+def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Roll back SC status. pending→draft (owner/admin), approved→pending / closed→approved (admin only)."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_sc(conn, sc_id)
+
+                if before["status"] == "pending":
+                    # pending → draft: owner or admin
+                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the SC owner or admin can revoke")
+                    new_status = "draft"
+                    action_type = "revoke_sc"
+                elif before["status"] == "approved":
+                    # approved → pending: admin only
+                    require_admin(current_user)
+                    new_status = "pending"
+                    action_type = "rollback_sc"
+                elif before["status"] == "closed":
+                    # closed → approved: admin only
+                    require_admin(current_user)
+                    new_status = "approved"
+                    action_type = "rollback_sc"
+                else:
+                    raise ConflictError("SC must be pending, approved or closed to revoke")
+
+                timestamp = utc_now()
+                if new_status == "draft":
+                    conn.execute(
+                        "update sc_records set status = 'draft', updated_at = ? where sc_id = ?",
+                        (timestamp, sc_id),
+                    )
+                elif new_status == "pending":
+                    conn.execute(
+                        "update sc_records set status = 'pending', approved_by = NULL, approved_at = NULL, updated_at = ? where sc_id = ?",
+                        (timestamp, sc_id),
+                    )
+                else:
+                    # closed → approved: clear closed_at, keep approved_by/approved_at
+                    conn.execute(
+                        "update sc_records set status = 'approved', closed_at = NULL, updated_at = ? where sc_id = ?",
+                        (timestamp, sc_id),
+                    )
+                after = _get_sc(conn, sc_id)
+                write_audit_log(
+                    conn,
+                    action_type=action_type,
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "revoke", before, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Delete a draft or closed SC and its attachments. Admin or SC owner."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_sc(conn, sc_id)
+                if before["status"] not in {"draft", "closed"}:
+                    raise ConflictError("Only draft or closed SC can be deleted")
+                if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC owner or admin can delete")
+
+                # Collect attachment file paths before deleting DB records
+                attach_rows = conn.execute(
+                    "SELECT stored_path FROM attachments WHERE entity_type = 'sc' AND entity_id = ?",
+                    (sc_id,),
+                ).fetchall()
+                attach_paths = [row["stored_path"] for row in attach_rows]
+
+                # Also collect PO/GR attachments under this SC
+                po_ids = [row["po_id"] for row in conn.execute(
+                    "SELECT po_id FROM pos WHERE sc_id = ?", (sc_id,),
+                )]
+                for po_id in po_ids:
+                    gr_rows = conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    ).fetchall()
+                    attach_paths.extend(row["stored_path"] for row in gr_rows)
+                    po_attach = conn.execute(
+                        "SELECT stored_path FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    ).fetchall()
+                    attach_paths.extend(row["stored_path"] for row in po_attach)
+
+                # Delete attachment DB records for this SC and its POs/GRs
+                conn.execute(
+                    "DELETE FROM attachments WHERE entity_type = 'sc' AND entity_id = ?",
+                    (sc_id,),
+                )
+                for po_id in po_ids:
+                    conn.execute(
+                        "DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?",
+                        (po_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id IN ("
+                        "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
+                        (po_id,),
+                    )
+                # Delete GRs → POs → SC
+                for po_id in po_ids:
+                    conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
+                    conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
+
+                write_audit_log(
+                    conn,
+                    action_type="delete_sc",
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+
+                # Delete files from disk after successful commit
+                for path in attach_paths:
+                    try:
+                        Path(path).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            except Exception:
+                conn.rollback()
+                raise
+
+    return {"deleted": True, "sc_id": sc_id}
 
 
 def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
@@ -692,7 +881,14 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     }
 
 
-def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
+               cascade_pos: bool = False) -> dict:
+    """Approve an SC (pending → approved). Admin only.
+
+    If cascade_pos=True, draft POs under this SC are submitted
+    (draft → po_pending) in the same transaction.
+    If cascade_pos=False (default), draft POs are left as-is.
+    """
     require_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -702,6 +898,8 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 before = _get_sc(conn, sc_id)
                 if before["status"] != "pending":
                     raise ConflictError("SC must be pending")
+                if not before.get("sc_no"):
+                    raise ConflictError("Cannot approve SC without SC No")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -731,6 +929,17 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 notification_service.queue_status_change(
                     conn, "sc", sc_id, "approve", before, current_user
                 )
+
+                # Cascade: submit draft POs
+                if cascade_pos:
+                    from sc_gr_app.services.po_service import _submit_po_drafts
+                    draft_pos = conn.execute(
+                        "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
+                        (sc_id,),
+                    ).fetchall()
+                    if draft_pos:
+                        _submit_po_drafts(conn, [r["po_id"] for r in draft_pos], timestamp)
+
                 conn.commit()
             except Exception:
                 conn.rollback()
