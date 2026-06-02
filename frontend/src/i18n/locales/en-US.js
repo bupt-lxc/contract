@@ -182,6 +182,7 @@ home: {
     servicePeriodEndRequired: 'Service Period End is required',
     asset: 'Asset',
     assetNums: 'Asset Numbers',
+    internalSystemNumber: 'Internal System Number',
     pendingDate: 'Pending Date',
     approvedDate: 'Approved Date'
   },
@@ -549,6 +550,7 @@ home: {
     machine: 'Machine',
     asset: 'Asset',
     assetNums: 'Asset Numbers',
+    internalSystemNumber: 'Internal System Number',
     pendingDate: 'Pending Date',
     approvedDate: 'Approved Date',
     contractPos: 'Contract Pos.',

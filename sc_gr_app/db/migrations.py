@@ -502,6 +502,15 @@ def _migrate_v9(conn) -> None:
     _record(conn, 9)
 
 
+def _migrate_v11(conn) -> None:
+    """Add internal_system_number column to sc_records (FC request type)."""
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "internal_system_number" not in existing:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN internal_system_number TEXT")
+    _record(conn, 11)
+
+
 def _migrate_v10(conn) -> None:
     """Add requester_id column to pos table, backfill from SC."""
     if not _table_exists(conn, "pos"):
@@ -629,6 +638,10 @@ def migrate(config: AppConfig) -> None:
             if 10 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v10(conn)
+                conn.commit()
+            if 11 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v11(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

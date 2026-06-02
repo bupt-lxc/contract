@@ -71,6 +71,9 @@
           </el-form-item>
         </el-col>
       </el-row>
+      <el-form-item v-if="form.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">
+        <el-input v-model="form.internal_system_number" />
+      </el-form-item>
       <el-row v-if="mode === 'edit'" :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('sc.pendingDate')">
@@ -147,6 +150,7 @@ const emptyForm = () => ({
   description: '',
   asset: 'N',
   asset_nums: '',
+  internal_system_number: '',
   pending_date: null,
   approved_date: null
 })

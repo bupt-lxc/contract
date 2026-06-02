@@ -38,6 +38,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "asset_nums",
     "pending_date",
     "approved_date",
+    "internal_system_number",
 )
 REQUIRED_BUSINESS_FIELDS = (
     "request_type",
@@ -259,8 +260,9 @@ def create_sc(
                       asset,
                       asset_nums,
                       pending_date,
-                      approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      approved_date,
+                      internal_system_number
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -283,6 +285,7 @@ def create_sc(
                         data.get("asset_nums"),
                         timestamp,
                         timestamp if status == "approved" else None,
+                        data.get("internal_system_number"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -344,8 +347,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       asset,
                       asset_nums,
                       pending_date,
-                      approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      approved_date,
+                      internal_system_number
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -372,6 +376,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("asset_nums"),
                         None,
                         None,
+                        data.get("internal_system_number"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -517,6 +522,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset_nums = ?,
                         pending_date = ?,
                         approved_date = ?,
+                        internal_system_number = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -536,6 +542,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset_nums"),
                         merged.get("pending_date"),
                         merged.get("approved_date"),
+                        merged.get("internal_system_number"),
                         timestamp,
                         sc_id,
                     ),

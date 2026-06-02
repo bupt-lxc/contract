@@ -182,6 +182,7 @@ home: {
     servicePeriodEndRequired: '服务结束日期为必填项',
     asset: '资产',
     assetNums: '资产编号',
+    internalSystemNumber: '内部系统编号',
     pendingDate: '提交日期',
     approvedDate: '批准日期'
   },
@@ -549,6 +550,7 @@ home: {
     machine: '机器',
     asset: '资产',
     assetNums: '资产编号',
+    internalSystemNumber: '内部系统编号',
     pendingDate: '提交日期',
     approvedDate: '批准日期',
     contractPos: '合同项',

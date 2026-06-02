@@ -10,6 +10,7 @@
     <el-descriptions-item :label="$t('sc.servicePeriodEnd')">{{ formatDate(sc.service_period_end) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.asset')">{{ sc.asset || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.assetNums')">{{ sc.asset_nums || '-' }}</el-descriptions-item>
+    <el-descriptions-item v-if="sc.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">{{ sc.internal_system_number || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.description')" :span="2">{{ sc.description || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.pendingDate')">{{ formatDate(sc.pending_date) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.approvedDate')">{{ formatDate(sc.approved_date) }}</el-descriptions-item>
