@@ -111,30 +111,16 @@ export default {
     switchRole: '切换角色'
   },
 
-  home: {
+home: {
     workbench: '工作台',
-    pendingScs: '待处理供应链',
-    pendingPos: '待处理采购订单',
-    pendingGrs: '待处理收货记录',
-    myDrafts: '我的草稿',
-    myPendingScs: '我的待处理供应链',
-    deniedScs: '已拒绝供应链',
-    activePos: '进行中的采购订单',
-    scNo: '供应链编号',
-    poNo: '采购订单编号',
-    grId: '收货记录ID',
-    scId: '供应链ID',
-    amount: '金额',
-    estimated: '预估金额',
-    noCards: '暂无{title}',
+    scNo: 'SC编号',
+    poNo: 'PO编号',
+    grId: 'GR ID',
     loadError: '加载失败',
     colScNo: 'SC编号',
     colRequester: '申请人',
-    colAmount: '金额',
     colPoNo: 'PO编号',
-    colVendor: '供应商',
     colGrId: 'GR ID',
-    colEstAmount: '预估金额'
   },
 
   sc: {
