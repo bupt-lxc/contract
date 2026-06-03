@@ -28,13 +28,24 @@ _tray_wndproc = None
 _user32 = ctypes.windll.user32
 _kernel32 = ctypes.windll.kernel32
 
+# ── WNDPROC callback type (64-bit window procedure) ────────────────────
+WNDPROC = ctypes.WINFUNCTYPE(
+    ctypes.c_longlong,   # LRESULT
+    ctypes.c_void_p,     # HWND
+    ctypes.c_uint,       # UINT
+    ctypes.c_ulonglong,  # WPARAM
+    ctypes.c_longlong,   # LPARAM
+)
+
 # HWND / HANDLE / LONG_PTR — must be pointer-width on 64-bit
 _user32.FindWindowW.restype = ctypes.c_void_p
 _user32.FindWindowW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
 _user32.GetWindowLongPtrW.restype = ctypes.c_longlong
 _user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+_user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, WNDPROC]
 _user32.CallWindowProcW.restype = ctypes.c_longlong
+_user32.CallWindowProcW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.c_ulonglong, ctypes.c_longlong]
 _user32.ShowWindow.restype = ctypes.c_bool
 _user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _user32.SetForegroundWindow.restype = ctypes.c_bool
@@ -91,14 +102,6 @@ def _hook_close(hwnd, allow_close):
 
     GWLP_WNDPROC = -4
     WM_CLOSE = 0x0010
-
-    WNDPROC = ctypes.WINFUNCTYPE(
-        ctypes.c_longlong,   # LRESULT
-        ctypes.c_void_p,     # HWND
-        ctypes.c_uint,       # UINT
-        ctypes.c_ulonglong,  # WPARAM
-        ctypes.c_longlong,   # LPARAM
-    )
 
     original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
 
