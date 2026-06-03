@@ -37,6 +37,11 @@
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.taxRate')">{{ gr.tax_rate != null ? gr.tax_rate + '%' : '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.conValue')"><AmountDisplay :value="gr.con_value" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.goodsServiceDescription')" :span="2">{{ gr.goods_service_description || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.confirmationName')">{{ gr.confirmation_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.lastDelivery')">{{ gr.last_delivery === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.deliveryFrom')">{{ (gr.delivery_from || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.deliveryTo')">{{ (gr.delivery_to || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmedAt')">{{ (gr.confirmed_at || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>

@@ -233,8 +233,13 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       cancelled_by,
                       cancelled_at,
                       pending_date,
-                      approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      approved_date,
+                      goods_service_description,
+                      confirmation_name,
+                      delivery_from,
+                      delivery_to,
+                      last_delivery
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
@@ -254,6 +259,11 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         None if is_draft else timestamp,
                         None,
+                        data.get("goods_service_description"),
+                        data.get("confirmation_name"),
+                        data.get("delivery_from"),
+                        data.get("delivery_to"),
+                        data.get("last_delivery"),
                     ),
                 )
                 created = _get_gr(conn, gr_id)
@@ -649,6 +659,11 @@ def update_gr(
                             "gr_no",
                             "pending_date",
                             "approved_date",
+                            "goods_service_description",
+                            "confirmation_name",
+                            "delivery_from",
+                            "delivery_to",
+                            "last_delivery",
                         )
                         if key in updates
                     }
@@ -708,7 +723,12 @@ def update_gr(
                             remark = ?,
                             gr_no = ?,
                             pending_date = ?,
-                            approved_date = ?
+                            approved_date = ?,
+                            goods_service_description = ?,
+                            confirmation_name = ?,
+                            delivery_from = ?,
+                            delivery_to = ?,
+                            last_delivery = ?
                         where gr_id = ?
                         """,
                         (
@@ -720,13 +740,20 @@ def update_gr(
                             merged.get("gr_no"),
                             merged.get("pending_date"),
                             merged.get("approved_date"),
+                            merged.get("goods_service_description"),
+                            merged.get("confirmation_name"),
+                            merged.get("delivery_from"),
+                            merged.get("delivery_to"),
+                            merged.get("last_delivery"),
                             gr_id,
                         ),
                     )
                 else:
                     allowed = {
                         key: updates[key]
-                        for key in ("con_value", "tax_rate", "remark", "gr_no")
+                        for key in ("con_value", "tax_rate", "remark", "gr_no",
+                                    "goods_service_description", "confirmation_name",
+                                    "delivery_from", "delivery_to", "last_delivery")
                         if key in updates
                     }
                     if not allowed:
@@ -756,10 +783,18 @@ def update_gr(
                         set con_value = ?,
                             tax_rate = ?,
                             remark = ?,
-                            gr_no = ?
+                            gr_no = ?,
+                            goods_service_description = ?,
+                            confirmation_name = ?,
+                            delivery_from = ?,
+                            delivery_to = ?,
+                            last_delivery = ?
                         where gr_id = ?
                         """,
-                        (float(con_value), merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"), gr_id),
+                        (float(con_value), merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
+                         merged.get("goods_service_description"), merged.get("confirmation_name"),
+                         merged.get("delivery_from"), merged.get("delivery_to"), merged.get("last_delivery"),
+                         gr_id),
                     )
 
                 after = _get_gr(conn, gr_id)

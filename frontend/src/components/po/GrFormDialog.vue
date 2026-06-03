@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     :title="mode === 'edit' ? $t('gr.editGr') : $t('gr.addGr')"
-    width="520px"
+    width="600px"
     @update:model-value="$emit('update:visible', $event)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -38,6 +38,43 @@
         <el-col :span="12">
           <el-form-item :label="$t('gr.conValue')">
             <el-input-number :model-value="computedInclTax" :precision="2" :min="0" controls-position="right" style="width:100%" disabled />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="24">
+          <el-form-item :label="$t('gr.goodsServiceDescription')">
+            <el-input v-model="form.goods_service_description" type="textarea" :rows="2" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.confirmationName')">
+            <el-input v-model="form.confirmation_name" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.lastDelivery')">
+            <el-switch
+              v-model="form.last_delivery"
+              active-value="Y"
+              inactive-value="N"
+              :active-text="$t('common.confirm')"
+              :inactive-text="$t('common.cancel')"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.deliveryFrom')">
+            <el-date-picker v-model="form.delivery_from" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.deliveryTo')">
+            <el-date-picker v-model="form.delivery_to" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -116,7 +153,8 @@ const pickedFiles = ref([])
 
 const emptyForm = () => ({
   gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, remark: '',
-  pending_date: null, approved_date: null
+  pending_date: null, approved_date: null,
+  goods_service_description: '', confirmation_name: '', delivery_from: null, delivery_to: null, last_delivery: 'N'
 })
 
 const form = reactive(emptyForm())
