@@ -931,6 +931,23 @@ def _migrate_v20(conn) -> None:
     _record(conn, 20)
 
 
+def _migrate_v21(conn) -> None:
+    """Add PO revoke transition to default notification rules."""
+    if _table_exists(conn, "app_settings"):
+        timestamp = utc_now()
+        po_transitions = (
+            '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"revoke":{"to":["requester","notify.admin_recipients"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.po", po_transitions, timestamp),
+        )
+    _record(conn, 21)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -1032,6 +1049,10 @@ def migrate(config: AppConfig) -> None:
             if 20 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v20(conn)
+                conn.commit()
+            if 21 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v21(conn)
                 conn.commit()
         except Exception:
             conn.rollback()
