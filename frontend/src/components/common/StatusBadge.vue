@@ -16,6 +16,7 @@ const { t } = useI18n()
 
 const STATUS_LABELS = {
   draft: 'Draft',
+  manager_confirm: 'Manager Confirm',
   pending: 'Pending',
   approved: 'Approved',
   denied: 'Denied',
@@ -27,6 +28,7 @@ const STATUS_LABELS = {
 
 const STATUS_TYPES = {
   draft: 'info',
+  manager_confirm: '',
   pending: 'warning',
   approved: 'success',
   denied: 'danger',

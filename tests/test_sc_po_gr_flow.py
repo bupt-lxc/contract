@@ -7,7 +7,7 @@ from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr, submit_gr, delete_gr
 from sc_gr_app.services.po_service import create_po, submit_po, delete_po
-from sc_gr_app.services.sc_service import approve_sc, close_sc, create_sc, create_sc_draft, submit_sc
+from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -862,7 +862,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
         },
     )
 
-    assert submitted["status"] == "pending"
+    assert submitted["status"] == "manager_confirm"
     assert submitted.get("sc_no") is None
 
 
@@ -900,6 +900,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
 
     from sc_gr_app.services.sc_service import (
         close_sc,
+        confirm_sc,
         create_sc_draft,
         deny_sc,
         submit_sc,
@@ -921,6 +922,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
             "service_period_end": "2026-12-31",
         },
     )
+    confirm_sc(app_config, ADMIN, draft_sc_id)
     approved = approve_sc(app_config, ADMIN, draft_sc_id)
     closed = close_sc(app_config, ADMIN, draft_sc_id)
 
@@ -974,6 +976,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     assert detail["permissions"] == {
         "is_admin": True,
         "can_edit_sc": True,
+        "can_confirm_sc": False,
         "can_submit_sc": False,
         "can_approve_sc": False,
         "can_deny_sc": False,
@@ -1661,7 +1664,7 @@ def test_submit_sc_allowed_with_draft_po(app_config):
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
     updated = submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
-    assert updated["status"] == "pending"
+    assert updated["status"] == "manager_confirm"
 
     # PO is still draft
     with connect(app_config) as conn:
@@ -1689,6 +1692,7 @@ def test_approve_sc_succeeds_with_draft_po(app_config):
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
+    confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
 
     # approve_sc should succeed even with draft PO (no restrictions)
     approve_sc(app_config, ADMIN, sc_draft["sc_id"])
@@ -1728,6 +1732,7 @@ def test_approve_sc_with_cascade_pos(app_config):
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
+    confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
 
     # approve_sc with cascade_pos=True
     result = approve_sc(app_config, ADMIN, sc_draft["sc_id"], cascade_pos=True)
@@ -1762,6 +1767,7 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
+    confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc_draft["sc_id"])
     # PO is po_approved, not finished — close_sc should block
@@ -1835,12 +1841,13 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
          "cost_center": 1001, "sc_amount": 2000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
+    confirm_sc(app_config, ADMIN, sc["sc_id"])
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc["sc_id"])
 
     # PO is activing → submit_gr allowed
     result = submit_gr(app_config, USER, gr["gr_id"])
-    assert result["status"] == "pending"
+    assert result["status"] == "manager_confirm"
 
 
 

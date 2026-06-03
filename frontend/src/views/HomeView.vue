@@ -14,7 +14,7 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div class="wb-grid">
+      <div :class="['wb-grid', 'wb-grid--4']">
         <div v-for="cell in scCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
@@ -86,7 +86,7 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div class="wb-grid">
+      <div :class="['wb-grid', 'wb-grid--4']">
         <div v-for="cell in grCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
@@ -128,9 +128,10 @@ const data = ref({ sc: {}, po: {}, gr: {} })
 const error = ref(null)
 
 const scCells = computed(() => [
-  { status: 'draft',     label: t('status.draft') },
-  { status: 'pending',   label: t('status.pending') },
-  { status: 'approved',  label: t('status.approved') },
+  { status: 'draft',            label: t('status.draft') },
+  { status: 'manager_confirm',  label: t('status.manager_confirm') },
+  { status: 'pending',          label: t('status.pending') },
+  { status: 'approved',         label: t('status.approved') },
 ])
 
 const poCells = computed(() => [
@@ -139,13 +140,15 @@ const poCells = computed(() => [
 ])
 
 const grCells = computed(() => [
-  { status: 'draft',      label: t('status.draft') },
-  { status: 'pending',    label: t('status.pending') },
-  { status: 'approved',   label: t('status.approved') },
+  { status: 'draft',            label: t('status.draft') },
+  { status: 'manager_confirm',  label: t('status.manager_confirm') },
+  { status: 'pending',          label: t('status.pending') },
+  { status: 'approved',         label: t('status.approved') },
 ])
 
 function headStatus(status) {
   if (status.includes('draft')) return 'draft'
+  if (status.includes('manager')) return 'manager'
   if (status.includes('activing')) return 'pending'
   if (status.includes('pending')) return 'pending'
   if (status.includes('approved')) return 'approved'
@@ -248,11 +251,13 @@ onMounted(async () => {
 
 /* Status colors — head */
 .wb-cell__head--draft    { background: #f8fafc; }
+.wb-cell__head--manager  { background: #eff6ff; }
 .wb-cell__head--pending  { background: #fff7ed; }
 .wb-cell__head--approved { background: #f0fdf4; }
 
 /* Table area — single background, children transparent */
 .wb-cell--draft .wb-cell__table    { background: #fafbfc; }
+.wb-cell--manager .wb-cell__table  { background: #f8fafd; }
 .wb-cell--pending .wb-cell__table  { background: #fefaf5; }
 .wb-cell--approved .wb-cell__table { background: #f6fcf7; }
 

@@ -224,6 +224,7 @@ def search_scs(
             "sc.approved_by",
             "sc.asset",
             "sc.asset_nums",
+            "sc.confirmed_at",
         ),
         filters=filters,
         allowed_filters={
@@ -260,6 +261,9 @@ def search_scs(
             "approved_date": "sc.approved_date",
             "approved_date_from": "sc.approved_date",
             "approved_date_to": "sc.approved_date",
+            "confirmed_at": "sc.confirmed_at",
+            "confirmed_at_from": "sc.confirmed_at",
+            "confirmed_at_to": "sc.confirmed_at",
             "deadline": "sc.service_period_end",
             "deadline_from": "sc.service_period_end",
             "deadline_to": "sc.service_period_end",
@@ -279,6 +283,7 @@ def search_scs(
             "asset": "sc.asset",
             "pending_date": "sc.pending_date",
             "approved_date": "sc.approved_date",
+            "confirmed_at": "sc.confirmed_at",
         },
         direction=direction,
         limit=limit,
@@ -494,6 +499,7 @@ def search_grs(
             "gr.approved_by",
             "gr.pending_date",
             "gr.approved_date",
+            "gr.confirmed_at",
         ),
         filters=filters,
         allowed_filters={
@@ -525,6 +531,9 @@ def search_grs(
             "approved_date": "gr.approved_date",
             "approved_date_from": "gr.approved_date",
             "approved_date_to": "gr.approved_date",
+            "confirmed_at": "gr.confirmed_at",
+            "confirmed_at_from": "gr.confirmed_at",
+            "confirmed_at_to": "gr.confirmed_at",
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
@@ -544,6 +553,7 @@ def search_grs(
             "cancelled_at": "gr.cancelled_at",
             "pending_date": "gr.pending_date",
             "approved_date": "gr.approved_date",
+            "confirmed_at": "gr.confirmed_at",
         },
         direction=direction,
         limit=limit,
@@ -565,9 +575,9 @@ def workbench_data(
       - Draft / Approved: own records only
       - Pending: all records
     """
-    sc_statuses = ["draft", "pending", "approved"]
+    sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
     po_statuses = ["draft", "activing"]
-    gr_statuses = ["draft", "pending", "approved"]
+    gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
 
     def _is_own_only(status: str) -> bool:
         if current_user is None:
@@ -576,7 +586,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "activing")
+            return status not in ("pending", "activing", "manager_confirm")
         return False
 
     user_id = current_user["user_id"] if current_user else None

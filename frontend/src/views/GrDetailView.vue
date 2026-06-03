@@ -6,11 +6,12 @@
         <p><StatusBadge v-if="gr.status" :status="gr.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && (gr.status === 'pending' || gr.status === 'manager_confirm')" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.is_admin && (gr.status === 'approved' || gr.status === 'cancelled')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && (gr.status === 'approved' || gr.status === 'cancelled' || gr.status === 'pending')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'manager_confirm' || gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -36,6 +37,7 @@
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.conValue')"><AmountDisplay :value="gr.con_value" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.confirmedAt')">{{ (gr.confirmed_at || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.created')">{{ gr.created_at?.slice(0, 19) || '-' }}</el-descriptions-item>
@@ -142,6 +144,17 @@ async function handleEditSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
+async function handleConfirm() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmConfirm'), t('common.confirm'), { type: 'warning' })
+    await callApi('confirm_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.confirmed'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleApprove() {
   try {
     const { value } = await ElMessageBox.prompt(
@@ -175,7 +188,8 @@ async function handleCancel() {
 
 async function handleRevoke() {
   try {
-    await ElMessageBox.confirm(t('gr.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    const confirmMsg = gr.value.status === 'pending' ? t('gr.confirmRevokePending') : t('gr.confirmRevoke')
+    await ElMessageBox.confirm(confirmMsg, t('common.confirm'), { type: 'warning' })
     await callApi('revoke_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.revoked'))
     await fetchDetail(scId.value)

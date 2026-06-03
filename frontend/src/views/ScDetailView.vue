@@ -11,6 +11,7 @@
       <div class="header-actions">
         <el-button v-if="permissions.can_edit_sc" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="permissions.can_submit_sc" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="permissions.can_confirm_sc" type="primary" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
         <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
         <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
@@ -185,6 +186,17 @@ async function handleSubmit() {
   }
 }
 
+async function handleConfirm() {
+  try {
+    await ElMessageBox.confirm(t('sc.confirmConfirm'), t('common.confirm'), { type: 'warning' })
+    await callApi('confirm_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.confirmed'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleApprove() {
   try {
     await ElMessageBox.confirm(t('sc.confirmApprove'), t('common.confirm'), { type: 'warning' })
@@ -243,9 +255,10 @@ async function handleRevoke() {
   try {
     const status = detail.value.sc?.status
     const messages = {
-      pending:  { confirm: 'sc.confirmRevoke',   success: 'sc.revoked' },
-      approved: { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
-      closed:   { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
+      manager_confirm: { confirm: 'sc.confirmRevoke',   success: 'sc.revoked' },
+      pending:         { confirm: 'sc.confirmRevokePending', success: 'sc.revoked' },
+      approved:        { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
+      closed:          { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
     }
     const msg = messages[status] || messages.pending
     await ElMessageBox.confirm(t(msg.confirm), t('common.confirm'), { type: 'warning' })

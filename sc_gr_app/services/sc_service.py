@@ -25,7 +25,7 @@ REQUIRED_FIELDS = (
     "service_period_end",
 )
 SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
-SUPPORTED_STATUSES = {"pending", "approved", "denied", "closed"}
+SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "closed"}
 OPTIONAL_UPDATE_FIELDS = (
     "sc_no",
     "request_type",
@@ -129,7 +129,7 @@ def _assert_can_edit_sc(user: dict, sc: dict) -> None:
         raise ConflictError("Closed SC cannot be edited")
     if user.get("role") == "admin":
         return
-    if sc["status"] in ("draft", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
+    if sc["status"] in ("draft", "manager_confirm", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
         return
     raise PermissionDenied("Admin permission required")
 
@@ -138,6 +138,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_admin = user.get("role") == "admin"
     is_owner = user.get("user_id") == sc["requester_id"]
     is_draft = sc["status"] == "draft"
+    is_manager_confirm = sc["status"] == "manager_confirm"
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
     is_closed = sc["status"] == "closed"
@@ -148,10 +149,11 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "is_admin": is_admin,
         "can_edit_sc": can_edit,
         "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
+        "can_confirm_sc": is_admin and is_manager_confirm,
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
-        "can_revoke_sc": ((is_admin or is_owner) and is_pending) or (is_admin and (is_approved or is_closed)),
+        "can_revoke_sc": ((is_admin or is_owner) and (is_pending or is_manager_confirm)) or (is_admin and (is_approved or is_closed)),
         "can_delete_sc": (is_admin or is_owner) and (is_draft or is_closed),
         "can_delete_po": is_admin or is_owner,
         "can_delete_gr": is_admin or is_owner,
@@ -436,7 +438,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
                 if before["status"] not in ("draft", "denied"):
-                    raise ConflictError("SC must be draft or denied")
+                    raise ConflictError("SC must be draft or denied to submit")
 
                 # Admin can submit any draft; requester can only submit their own
                 if (
@@ -463,8 +465,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         description = ?,
                         asset = ?,
                         asset_nums = ?,
-                        status = 'pending',
-                        pending_date = ?,
+                        status = 'manager_confirm',
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -478,7 +479,6 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("description"),
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
-                        timestamp,
                         timestamp,
                         sc_id,
                     ),
@@ -498,6 +498,53 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 )
                 notification_service.queue_status_change(
                     conn, "sc", sc_id, "submit", before, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def confirm_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Admin confirms an SC in manager_confirm status, moving it to pending."""
+    require_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_sc(conn, sc_id)
+                if before["status"] != "manager_confirm":
+                    raise ConflictError("SC must be in manager_confirm status")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update sc_records
+                    set status = 'pending',
+                        confirmed_at = ?,
+                        pending_date = ?,
+                        updated_at = ?
+                    where sc_id = ?
+                    """,
+                    (timestamp, timestamp, timestamp, sc_id),
+                )
+                after = _get_sc(conn, sc_id)
+                write_audit_log(
+                    conn,
+                    action_type="confirm_sc",
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                notification_service.queue_status_change(
+                    conn, "sc", sc_id, "confirm", before, current_user
                 )
                 conn.commit()
             except Exception:
@@ -725,7 +772,13 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 before = _get_sc(conn, sc_id)
 
                 if before["status"] == "pending":
-                    # pending → draft: owner or admin
+                    # pending → manager_confirm: owner or admin
+                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the SC owner or admin can revoke")
+                    new_status = "manager_confirm"
+                    action_type = "revoke_sc"
+                elif before["status"] == "manager_confirm":
+                    # manager_confirm → draft: owner or admin
                     if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
                         raise PermissionDenied("Only the SC owner or admin can revoke")
                     new_status = "draft"
@@ -741,12 +794,17 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     new_status = "approved"
                     action_type = "rollback_sc"
                 else:
-                    raise ConflictError("SC must be pending, approved or closed to revoke")
+                    raise ConflictError("SC must be pending, manager_confirm, approved or closed to revoke")
 
                 timestamp = utc_now()
                 if new_status == "draft":
                     conn.execute(
-                        "update sc_records set status = 'draft', updated_at = ? where sc_id = ?",
+                        "update sc_records set status = 'draft', confirmed_at = NULL, updated_at = ? where sc_id = ?",
+                        (timestamp, sc_id),
+                    )
+                elif new_status == "manager_confirm":
+                    conn.execute(
+                        "update sc_records set status = 'manager_confirm', updated_at = ? where sc_id = ?",
                         (timestamp, sc_id),
                     )
                 elif new_status == "pending":
