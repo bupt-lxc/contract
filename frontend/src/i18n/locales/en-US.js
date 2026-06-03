@@ -544,6 +544,29 @@ home: {
     deleteAttachment: 'Delete'
   },
 
+  batch: {
+    selected: '{count} selected',
+    submit: 'Batch Submit',
+    confirm: 'Batch Confirm',
+    approve: 'Batch Approve',
+    submitConfirm: 'Submit {count} selected items?',
+    confirmConfirm: 'Confirm {count} selected items?',
+    approveConfirm: 'Approve {count} selected items?',
+    result: 'Batch {action} Complete',
+    success: 'Success: {count}',
+    failed: 'Failed: {count}',
+    failDetail: 'Failure Details',
+    processing: 'Processing {current}/{total}',
+    completed: 'Completed: {count}',
+    skipped: 'Skipped: {count}',
+    abort: 'Abort',
+    aborted: 'Aborted by user',
+    noQualifying: 'No selected items qualify for batch {action}',
+    titleSubmit: 'Batch Submit',
+    titleConfirm: 'Batch Confirm',
+    titleApprove: 'Batch Approve'
+  },
+
   exportCol: {
     status: 'Status',
     scNo: 'SC No',

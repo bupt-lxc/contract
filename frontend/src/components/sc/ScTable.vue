@@ -6,9 +6,11 @@
     border
     @sort-change="$emit('sort-change', $event)"
     @row-click="$emit('row-click', $event)"
+    @selection-change="$emit('selection-change', $event)"
     :row-class-name="rowClass"
     style="cursor:pointer"
   >
+    <el-table-column v-if="selectable" type="selection" width="50" />
     <el-table-column :label="$t('sc.status')" width="100">
       <template #default="{ row }">
         <StatusBadge :status="row.status" />
@@ -52,10 +54,11 @@ import AmountDisplay from '@/components/common/AmountDisplay.vue'
 const props = defineProps({
   rows: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  emptyText: { type: String, default: 'No SC records match the search and filters.' }
+  emptyText: { type: String, default: 'No SC records match the search and filters.' },
+  selectable: { type: Boolean, default: false }
 })
 
-defineEmits(['sort-change', 'row-click'])
+defineEmits(['sort-change', 'row-click', 'selection-change'])
 
 function rowClass({ row }) {
   return `status-row-${row.status || ''}`

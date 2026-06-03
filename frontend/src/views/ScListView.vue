@@ -15,12 +15,21 @@
       </template>
     </AdvancedFilterBar>
 
+    <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
+      <span style="font-size:13px;color:#1d4ed8;font-weight:500">{{ $t('batch.selected', { count: selectedRows.length }) }}</span>
+      <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
+      <el-button v-if="selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
+      <el-button v-if="selectedRows.some(r => r.status === 'pending')" size="small" type="success" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
+    </div>
+
     <ScTable
       :rows="state.rows"
       :loading="state.loading"
       :empty-text="state.error || $t('sc.noRecords')"
+      selectable
       @sort-change="handleSortChange"
       @row-click="row => $router.push(`/sc/${row.sc_id}`)"
+      @selection-change="val => selectedRows = val"
     />
 
     <el-pagination
@@ -43,6 +52,13 @@
       @save-draft="handleSaveDraft"
       @save-submit="handleSaveSubmit"
     />
+
+    <BatchProgressModal
+      :visible="batchState.active"
+      :title="batchTitle"
+      :state="batchState"
+      @abort="abort"
+    />
   </div>
 </template>
 
@@ -58,7 +74,9 @@ import { callApi } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
-import { ElMessage } from 'element-plus'
+import { useBatchAction } from '@/composables/useBatchAction.js'
+import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
@@ -74,6 +92,59 @@ const scStatuses = [
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
 const vendors = computed(() => vendorState.rows)
+
+// Batch operations
+const selectedRows = ref([])
+const { state: batchState, runBatch, abort } = useBatchAction()
+const batchTitle = ref('')
+
+function showBatchResult(summary, actionName) {
+  if (!summary) return
+  let msg = `<p><strong>${t('batch.result', { action: t(`batch.${actionName}`) })}</strong></p>`
+  msg += `<p style="color:#67c23a">${t('batch.success', { count: summary.succeeded })}</p>`
+  msg += `<p style="color:#f56c6c">${t('batch.failed', { count: summary.failed })}</p>`
+  if (summary.skipped) {
+    msg += `<p style="color:#e6a23c">${t('batch.skipped', { count: summary.skipped })}</p>`
+  }
+  if (summary.failedItems.length) {
+    msg += `<p><strong>${t('batch.failDetail')}:</strong></p><ul>`
+    summary.failedItems.forEach(f => {
+      msg += `<li>${f.id}: ${f.reason}</li>`
+    })
+    msg += '</ul>'
+  }
+  ElMessageBox.alert(msg, t('common.confirm'), {
+    dangerouslyUseHTMLString: true,
+    confirmButtonText: t('common.confirm')
+  })
+}
+
+async function handleBatchSubmit() {
+  batchTitle.value = t('batch.titleSubmit')
+  const summary = await runBatch(selectedRows.value, 'submit', async (row) => {
+    await callApi('submit_sc', { sc_id: row.sc_id, data: {} })
+  }, t)
+  if (summary) await searchScs()
+  showBatchResult(summary, 'submit')
+}
+
+async function handleBatchConfirm() {
+  batchTitle.value = t('batch.titleConfirm')
+  const summary = await runBatch(selectedRows.value, 'confirm', async (row) => {
+    await callApi('confirm_sc', { sc_id: row.sc_id })
+  }, t)
+  if (summary) await searchScs()
+  showBatchResult(summary, 'confirm')
+}
+
+async function handleBatchApprove() {
+  batchTitle.value = t('batch.titleApprove')
+  const summary = await runBatch(selectedRows.value, 'approve', async (row) => {
+    await callApi('approve_sc', { sc_id: row.sc_id, cascade_pos: false })
+  }, t)
+  if (summary) await searchScs()
+  showBatchResult(summary, 'approve')
+}
 
 const deadlineOptions = [
   { label: t('filter.unlimited'), value: '' },
