@@ -22,6 +22,30 @@ DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 # Store WNDPROC callback reference to prevent garbage collection
 _tray_wndproc = None
 
+# ── Win32 API type-safety setup ──────────────────────────────────────────
+# Without restype, ctypes defaults to c_int (32-bit), which truncates
+# 64-bit pointers (HWND, WNDPROC, LONG_PTR) and corrupts window state.
+_user32 = ctypes.windll.user32
+_kernel32 = ctypes.windll.kernel32
+
+# HWND / HANDLE / LONG_PTR — must be pointer-width on 64-bit
+_user32.FindWindowW.restype = ctypes.c_void_p
+_user32.FindWindowW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+_user32.GetWindowLongPtrW.restype = ctypes.c_longlong
+_user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+_user32.CallWindowProcW.restype = ctypes.c_longlong
+_user32.ShowWindow.restype = ctypes.c_bool
+_user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_user32.SetForegroundWindow.restype = ctypes.c_bool
+_user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+_user32.MessageBoxW.restype = ctypes.c_int
+_user32.MessageBoxW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+
+# Mutex handle
+_kernel32.CreateMutexW.restype = ctypes.c_void_p
+_kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+
 
 def _patch_webview2():
     _original = EdgeChrome.on_webview_ready
@@ -37,16 +61,15 @@ def _patch_webview2():
 
 
 def _single_instance_check():
-    kernel32 = ctypes.windll.kernel32
-    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-    if kernel32.GetLastError() != 183:
+    mutex = _kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if _kernel32.GetLastError() != 183:
         return
-    hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+    hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
     if hwnd:
         # SW_SHOW (5) reveals a window hidden to tray; SW_RESTORE (9) handles minimized
-        ctypes.windll.user32.ShowWindow(hwnd, 5)    # SW_SHOW
-        ctypes.windll.user32.ShowWindow(hwnd, 9)    # SW_RESTORE
-        ctypes.windll.user32.SetForegroundWindow(hwnd)
+        _user32.ShowWindow(hwnd, 5)    # SW_SHOW
+        _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
+        _user32.SetForegroundWindow(hwnd)
     sys.exit(0)
 
 
@@ -77,18 +100,18 @@ def _hook_close(hwnd, allow_close):
         ctypes.c_longlong,   # LPARAM
     )
 
-    original = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
+    original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
 
     @WNDPROC
     def wnd_proc(hwnd_, msg, wparam, lparam):
         if msg == WM_CLOSE and not allow_close[0]:
-            ctypes.windll.user32.ShowWindow(hwnd_, 0)  # SW_HIDE
+            _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
             return 0
-        return ctypes.windll.user32.CallWindowProcW(
+        return _user32.CallWindowProcW(
             ctypes.c_void_p(original), hwnd_, msg, wparam, lparam,
         )
 
-    ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
+    _user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
     _tray_wndproc = wnd_proc  # prevent GC
 
 
@@ -120,7 +143,7 @@ def _setup_tray(window):
 
     def _on_shown():
         """Hook WM_CLOSE after the native window is ready."""
-        hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+        hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
         if hwnd:
             _hook_close(hwnd, _allow_close)
 
@@ -138,7 +161,7 @@ def _setup_tray(window):
 def _show_error_and_exit(title: str, message: str):
     """Show a Windows error dialog and exit."""
     try:
-        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)  # MB_ICONERROR
+        _user32.MessageBoxW(0, message, title, 0x10)  # MB_ICONERROR
     except Exception:
         pass
     sys.exit(1)
