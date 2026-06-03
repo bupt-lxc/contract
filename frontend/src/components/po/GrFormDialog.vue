@@ -57,12 +57,10 @@
         </el-col>
         <el-col :span="12">
           <el-form-item :label="$t('gr.lastDelivery')">
-            <el-switch
-              :model-value="form.last_delivery === 'Y'"
-              @update:model-value="val => form.last_delivery = val ? 'Y' : 'N'"
-              :active-text="$t('common.confirm')"
-              :inactive-text="$t('common.cancel')"
-            />
+            <el-select v-model="form.last_delivery" style="width:100%">
+              <el-option :label="$t('common.yes')" value="Y" />
+              <el-option :label="$t('common.no')" value="N" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
@@ -195,10 +193,6 @@ watch(() => props.visible, (val) => {
     pickedFiles.value = []
     if (props.mode === 'edit' && props.record) {
       Object.assign(form, props.record)
-      // 兼容旧记录 last_delivery 为 null 的情况，el-switch 需要 'Y' 或 'N'
-      if (form.last_delivery !== 'Y' && form.last_delivery !== 'N') {
-        form.last_delivery = 'N'
-      }
     } else {
       Object.assign(form, emptyForm())
       // Auto-set requester for non-admin users
