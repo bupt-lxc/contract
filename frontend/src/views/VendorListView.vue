@@ -17,6 +17,9 @@
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="vendor_name" :label="$t('vendor.vendor')" sortable="custom" min-width="160" />
+      <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140">
+        <template #default="{ row }">{{ row.company_name_cn || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="ksrm_vendor_code" :label="$t('vendor.ksrmCode')" width="110" />
       <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="180" />
       <el-table-column prop="contact_person" :label="$t('vendor.contact')" width="110" />
@@ -63,6 +66,7 @@ const exporting = ref(false)
 
 const vendorFilterConfig = [
   { name: 'vendor_name', label: t('vendor.vendorName'), type: 'input' },
+  { name: 'company_name_cn', label: t('vendor.companyNameCn'), type: 'input' },
   { name: 'vendor_id', label: t('vendor.vendorId'), type: 'input' },
   { name: 'ksrm_vendor_code', label: t('vendor.ksrmCode'), type: 'input' },
   { name: 'service_scope', label: t('vendor.serviceScope'), type: 'input' },
@@ -88,6 +92,7 @@ async function handleExport() {
   try {
     const columns = [
       { key: 'vendor_name', label: t('vendor.vendorName') },
+      { key: 'company_name_cn', label: t('vendor.companyNameCn') },
       { key: 'ksrm_vendor_code', label: t('vendor.ksrmCode') },
       { key: 'service_scope', label: t('vendor.serviceScope') },
       { key: 'contact_person', label: t('vendor.contact') },

@@ -35,6 +35,7 @@ def test_sc_draft_saves_vendor_snapshot(app_config):
     create_vendor(app_config, USER, {
         "vendor_id": "V1",
         "vendor_name": "Original Name",
+        "company_name_cn": "原始名称有限公司",
         "service_scope": "General Service",
         "contact_person": "Alice",
         "phone": "123456",
@@ -52,6 +53,7 @@ def test_sc_draft_saves_vendor_snapshot(app_config):
     assert row["vendor_snapshot"] is not None
     snapshot = json.loads(row["vendor_snapshot"])
     assert snapshot["vendor_name"] == "Original Name"
+    assert snapshot["company_name_cn"] == "原始名称有限公司"
     assert snapshot["contact_person"] == "Alice"
     assert snapshot["phone"] == "123456"
 
@@ -109,6 +111,7 @@ def test_vendor_snapshot_null_falls_back_to_live_vendor(app_config):
     create_vendor(app_config, USER, {
         "vendor_id": "V1",
         "vendor_name": "Live Vendor",
+        "company_name_cn": "实时供应商有限公司",
         "service_scope": "General Service",
         "contact_person": "Bob",
     })
@@ -126,6 +129,7 @@ def test_vendor_snapshot_null_falls_back_to_live_vendor(app_config):
     detail = get_sc_detail(app_config, ADMIN, sc["sc_id"])
     assert len(detail["vendors"]) == 1
     assert detail["vendors"][0]["vendor_name"] == "Live Vendor"
+    assert detail["vendors"][0]["company_name_cn"] == "实时供应商有限公司"
     assert detail["vendors"][0]["contact_person"] == "Bob"
 
 

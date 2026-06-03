@@ -18,6 +18,13 @@
           </el-form-item>
         </el-col>
       </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('vendor.companyNameCn')">
+            <el-input v-model="form.company_name_cn" />
+          </el-form-item>
+        </el-col>
+      </el-row>
       <el-form-item :label="$t('vendor.serviceScope')" prop="service_scope">
         <el-select v-model="form.service_scope" filterable>
           <el-option v-for="s in serviceScopes" :key="s" :label="s" :value="s" />
@@ -85,8 +92,9 @@ const serviceScopes = [
 ]
 
 const emptyForm = () => ({
-  vendor_id: '', vendor_name: '', service_scope: '', ksrm_vendor_code: '',
-  contact_person: '', phone: '', email: '', description: '', inquiry_history: ''
+  vendor_id: '', vendor_name: '', company_name_cn: '', service_scope: '',
+  ksrm_vendor_code: '', contact_person: '', phone: '', email: '',
+  description: '', inquiry_history: ''
 })
 
 const form = reactive(emptyForm())

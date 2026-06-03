@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -903,6 +903,15 @@ def _migrate_v17(conn) -> None:
     _record(conn, 17)
 
 
+def _migrate_v18(conn) -> None:
+    """Add company_name_cn column to vendors table."""
+    if _table_exists(conn, "vendors"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
+        if "company_name_cn" not in existing:
+            conn.execute("ALTER TABLE vendors ADD COLUMN company_name_cn TEXT")
+    _record(conn, 18)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -992,6 +1001,10 @@ def migrate(config: AppConfig) -> None:
             if 17 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v17(conn)
+                conn.commit()
+            if 18 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v18(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

@@ -320,6 +320,7 @@ home: {
     email: 'Email',
     description: 'Description',
     inquiryHistory: 'Inquiry History',
+    companyNameCn: 'Company Name (CN)',
     disableConfirm: 'Disable this vendor?',
     noRecords: 'No vendors found.',
     vendorDisabled: 'Vendor disabled',

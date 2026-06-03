@@ -320,6 +320,7 @@ home: {
     email: '邮箱',
     description: '描述',
     inquiryHistory: '询价历史',
+    companyNameCn: '公司中文名',
     disableConfirm: '确认禁用此供应商？',
     noRecords: '暂无供应商信息。',
     vendorDisabled: '供应商已禁用',

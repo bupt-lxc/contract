@@ -310,6 +310,7 @@ def search_vendors(
         text_columns=(
             "vendor_name",
             "ksrm_vendor_code",
+            "company_name_cn",
             "contact_person",
             "service_scope",
             "email",
@@ -322,6 +323,7 @@ def search_vendors(
             "vendor_id": "vendor_id",
             "vendor_name": "vendor_name",
             "ksrm_vendor_code": "ksrm_vendor_code",
+            "company_name_cn": "company_name_cn",
             "service_scope": "service_scope",
             "status": "status",
             "created_by": "created_by",
@@ -337,6 +339,7 @@ def search_vendors(
             "vendor_id": "vendor_id",
             "vendor_name": "vendor_name",
             "ksrm_vendor_code": "ksrm_vendor_code",
+            "company_name_cn": "company_name_cn",
             "service_scope": "service_scope",
             "created_at": "created_at",
             "updated_at": "updated_at",
@@ -346,7 +349,7 @@ def search_vendors(
         offset=offset,
         base_clauses=["(status IS NULL OR status != 'disabled')"],
         base_params=[],
-        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "service_scope", "contact_person", "email"},
+        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "company_name_cn", "service_scope", "contact_person", "email"},
     )
 
 

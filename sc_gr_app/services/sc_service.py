@@ -46,6 +46,7 @@ _VENDOR_SNAPSHOT_FIELDS = (
     "vendor_id",
     "vendor_name",
     "ksrm_vendor_code",
+    "company_name_cn",
     "contact_person",
     "phone",
     "email",
@@ -215,6 +216,7 @@ def _build_vendor_from_live(row) -> dict:
         "vendor_id": row["vendor_id"],
         "vendor_name": row["vendor_name"],
         "ksrm_vendor_code": row["ksrm_vendor_code"],
+        "company_name_cn": row["company_name_cn"],
         "contact_person": row["contact_person"],
         "phone": row["phone"],
         "email": row["email"],
@@ -229,8 +231,8 @@ def _fetch_sc_vendors(conn, sc_id: str) -> list[dict]:
         """
         SELECT sv.vendor_snapshot,
                v.vendor_id, v.vendor_name, v.ksrm_vendor_code,
-               v.contact_person, v.phone, v.email, v.service_scope,
-               v.description, v.inquiry_history
+               v.company_name_cn, v.contact_person, v.phone, v.email,
+               v.service_scope, v.description, v.inquiry_history
         FROM sc_vendors sv
         LEFT JOIN vendors v ON v.vendor_id = sv.vendor_id
         WHERE sv.sc_id = ?

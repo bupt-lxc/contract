@@ -23,6 +23,10 @@
               <el-tag size="small" type="info" style="margin-left:8px">{{ v.vendor_id }}</el-tag>
             </template>
             <div class="vendor-detail-grid">
+              <div class="vendor-field" v-if="v.company_name_cn">
+                <span class="vendor-label">{{ $t('vendor.companyNameCn') }}</span>
+                <span>{{ v.company_name_cn }}</span>
+              </div>
               <div class="vendor-field">
                 <span class="vendor-label">{{ $t('vendor.serviceScope') }}</span>
                 <span>{{ v.service_scope || '-' }}</span>
