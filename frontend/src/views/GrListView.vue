@@ -36,6 +36,9 @@
       <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
         <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
       </el-table-column>
+      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center">
+        <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
+      </el-table-column>
       <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
       </el-table-column>
@@ -172,6 +175,7 @@ const grFilterConfig = [
   { name: 'requester_id', label: t('gr.requester'), type: 'input' },
   { name: 'vendor_id', label: t('gr.vendorId'), type: 'input' },
   { name: 'estimated_amount', label: t('gr.estAmount'), type: 'amount-range' },
+  { name: 'tax_rate', label: t('gr.taxRate'), type: 'input' },
   { name: 'con_value', label: t('gr.conValue'), type: 'amount-range' },
   { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
   { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
@@ -335,6 +339,7 @@ async function handleExport() {
       { key: 'sc_no', label: t('gr.scNo') },
       { key: 'vendor_name', label: t('gr.vendor') },
       { key: 'estimated_amount', label: t('gr.estimated') },
+      { key: 'tax_rate', label: t('gr.taxRate') },
       { key: 'con_value', label: t('gr.conValue') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }

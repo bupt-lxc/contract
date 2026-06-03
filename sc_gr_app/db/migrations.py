@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -912,6 +912,15 @@ def _migrate_v18(conn) -> None:
     _record(conn, 18)
 
 
+def _migrate_v19(conn) -> None:
+    """Add tax_rate column to gr_requests."""
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "tax_rate" not in existing:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN tax_rate REAL")
+    _record(conn, 19)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -1005,6 +1014,10 @@ def migrate(config: AppConfig) -> None:
             if 18 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v18(conn)
+                conn.commit()
+            if 19 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v19(conn)
                 conn.commit()
         except Exception:
             conn.rollback()
