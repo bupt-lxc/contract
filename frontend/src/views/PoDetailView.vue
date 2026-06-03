@@ -282,7 +282,12 @@ async function handleGrSave(data) {
     const { _attachments, ...formData } = data
     let grId
     if (grDialogMode.value === 'create') {
-      const created = await createGr({ ...formData, po_id: poId.value })
+      const payload = { ...formData, po_id: poId.value }
+      // 非 draft PO 下新建 GR 进入 manager_confirm 状态
+      if (po.value?.status !== 'draft') {
+        payload.status = 'manager_confirm'
+      }
+      const created = await createGr(payload)
       grId = created.gr_id
     } else {
       grId = formData.gr_id

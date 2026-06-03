@@ -269,7 +269,7 @@ function confirmGrSelection() {
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
-    const payload = { ...formData, po_id: grSelectedPoId.value }
+    const payload = { ...formData, po_id: grSelectedPoId.value, status: 'manager_confirm' }
     const result = await callApi('create_gr', { data: payload })
     const created = result
     if (_attachments?.length && created?.gr_id) {

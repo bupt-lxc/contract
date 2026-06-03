@@ -146,7 +146,7 @@ def _validate_gr_creation_context(
     """Validate that a GR can be created in the given PO/SC context.
 
     - draft PO under draft SC → only draft GR allowed, no budget check
-    - activing PO under approved SC → only pending GR allowed, full budget check
+    - activing PO under approved SC → only pending / manager_confirm GR allowed, full budget check
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
@@ -158,8 +158,8 @@ def _validate_gr_creation_context(
         return  # no budget check for draft
 
     if po_status == "activing" and sc_status == "approved":
-        if gr_status != "pending":
-            raise ConflictError("Activing PO only allows pending GR")
+        if gr_status not in ("pending", "manager_confirm"):
+            raise ConflictError("Activing PO only allows pending or manager_confirm GR")
         sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
         po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
         if sc_budget["sc_available_amount"] < amount:
@@ -405,7 +405,7 @@ def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestam
 
 
 def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Manually submit a draft GR to pending status (with budget check)."""
+    """Manually submit a draft GR to manager_confirm status (with budget check)."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
