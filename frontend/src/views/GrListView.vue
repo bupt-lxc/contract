@@ -20,6 +20,9 @@
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
       <el-table-column prop="gr_id" :label="$t('gr.grId')" width="120" />
+      <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120">
+        <template #default="{ row }">{{ row.gr_no || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="po_no" :label="$t('gr.poNo')" width="130" />
       <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="130" />
       <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="150" show-overflow-tooltip />
@@ -146,6 +149,7 @@ function computeDeadlineEnd(value) {
 const grFilterConfig = [
   { name: 'status', label: t('common.status'), type: 'select', options: grStatuses },
   { name: 'gr_id', label: t('gr.grId'), type: 'input' },
+  { name: 'gr_no', label: t('gr.grNo'), type: 'input' },
   { name: 'po_id', label: t('gr.poId'), type: 'input' },
   { name: 'sc_id', label: t('gr.scId'), type: 'input' },
   { name: 'requester_id', label: t('gr.requester'), type: 'input' },

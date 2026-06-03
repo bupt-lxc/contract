@@ -210,7 +210,7 @@ async function handleExport() {
 onMounted(async () => {
   try {
     activeUsers.value = await callApi('list_users')
-  } catch { /* ignore */ }
+  } catch { /* ignore — user list is non-critical */ }
   await Promise.all([searchScs(), searchVendors()])
 })
 </script>

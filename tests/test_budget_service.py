@@ -166,6 +166,7 @@ def seed_gr(
         """
         insert into gr_requests (
           gr_id,
+          gr_no,
           po_id,
           requester_id,
           estimated_amount,
@@ -178,10 +179,11 @@ def seed_gr(
           approved_at,
           cancelled_by,
           cancelled_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             gr_id,
+            None,
             po_id,
             "U1",
             estimated_amount,

@@ -201,7 +201,9 @@ async function handleSubmitPo(row) {
     await submitPo(row.po_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await searchPos()
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleFinishPo(row) {
@@ -210,7 +212,9 @@ async function handleFinishPo(row) {
     await finishPo(row.po_id)
     ElMessage.success(t('msg.poFinished'))
     await searchPos()
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handlePoSave(data) {

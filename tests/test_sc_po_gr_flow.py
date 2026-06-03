@@ -624,6 +624,7 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
             """
             insert into gr_requests (
               gr_id,
+              gr_no,
               po_id,
               requester_id,
               estimated_amount,
@@ -636,10 +637,11 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
               approved_at,
               cancelled_by,
               cancelled_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "GR_BAD",
+                None,
                 po_id,
                 "U1",
                 100,
@@ -833,7 +835,7 @@ def test_requester_cannot_create_draft_for_another_owner(app_config):
         )
 
 
-def test_submit_draft_requires_business_fields_including_sc_no(app_config):
+def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
     migrate(app_config)
     seed_users(app_config)
 
@@ -842,15 +844,16 @@ def test_submit_draft_requires_business_fields_including_sc_no(app_config):
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
 
-    with pytest.raises(ValidationError, match="sc_no is required"):
-        submit_sc(app_config, USER, sc_id, {})
+    # sc_no is NOT required for draft→pending; only approve needs it
+    # But other business fields are required
+    with pytest.raises(ValidationError, match="request_type"):
+        submit_sc(app_config, USER, sc_id, {"sc_no": "SC-TEST-001"})
 
     submitted = submit_sc(
         app_config,
         USER,
         sc_id,
         {
-            "sc_no": "SC-TEST-001",
             "request_type": "service",
             "cost_center": 1001,
             "sc_amount": 1000,
@@ -860,7 +863,7 @@ def test_submit_draft_requires_business_fields_including_sc_no(app_config):
     )
 
     assert submitted["status"] == "pending"
-    assert submitted["sc_no"] == "SC-TEST-001"
+    assert submitted.get("sc_no") is None
 
 
 def test_owner_can_edit_pending_sc(app_config):

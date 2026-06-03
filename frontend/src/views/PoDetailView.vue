@@ -174,7 +174,9 @@ async function handleFinish() {
     await finishPo(poId.value)
     ElMessage.success(t('po.poFinished'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleRevoke() {
@@ -183,7 +185,9 @@ async function handleRevoke() {
     await callApi('revoke_po', { po_id: poId.value })
     ElMessage.success(t('po.revoked'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDelete() {
@@ -192,7 +196,9 @@ async function handleDelete() {
     await callApi('delete_po', { po_id: poId.value })
     ElMessage.success(t('po.poDeleted'))
     router.replace(`/sc/${scId.value}`)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleSubmit() {
@@ -219,7 +225,9 @@ async function handleGrApprove(row) {
     await approveGr(row.gr_id, parseFloat(value))
     ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrCancel(row) {
@@ -228,7 +236,9 @@ async function handleGrCancel(row) {
     await cancelGr(row.gr_id)
     ElMessage.success(t('gr.grCancelled'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrSubmit(row) {

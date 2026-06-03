@@ -249,6 +249,7 @@ home: {
     selectPo: '选择所属采购订单',
     editGr: '编辑收货记录',
     grId: '收货记录ID',
+    grNo: '收货编号',
     id: '收货记录ID',
     requester: '申请人',
     requesterId: '申请人ID',

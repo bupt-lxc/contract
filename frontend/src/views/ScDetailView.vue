@@ -180,7 +180,9 @@ async function handleSubmit() {
     await submitSc(scId.value, {})
     ElMessage.success(t('sc.submitted'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleApprove() {
@@ -204,7 +206,9 @@ async function handleApprove() {
     await approveSc(scId.value, cascadePos)
     ElMessage.success(t('sc.approved'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDeny() {
@@ -213,7 +217,9 @@ async function handleDeny() {
     await denySc(scId.value)
     ElMessage.success(t('sc.denied'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleClose() {
@@ -228,7 +234,9 @@ async function handleClose() {
     await closeSc(scId.value)
     ElMessage.success(t('sc.closed'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleRevoke() {
@@ -244,7 +252,9 @@ async function handleRevoke() {
     await callApi('revoke_sc', { sc_id: scId.value })
     ElMessage.success(t(msg.success))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDelete() {
@@ -253,7 +263,9 @@ async function handleDelete() {
     await callApi('delete_sc', { sc_id: scId.value })
     ElMessage.success(t('sc.deleted'))
     router.replace('/sc')
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handlePoFinish(row) {
@@ -262,7 +274,9 @@ async function handlePoFinish(row) {
     await finishPo(row.po_id)
     ElMessage.success(t('po.finished'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handlePoSubmit(row) {

@@ -481,6 +481,7 @@ def search_grs(
         """,
         text=text,
         text_columns=(
+            "gr.gr_no",
             "gr.remark",
             "gr.status",
             "po.po_no",
@@ -497,6 +498,7 @@ def search_grs(
         filters=filters,
         allowed_filters={
             "gr_id": "gr.gr_id",
+            "gr_no": "gr.gr_no",
             "po_id": "gr.po_id",
             "requester_id": "gr.requester_id",
             "status": "gr.status",
@@ -530,6 +532,7 @@ def search_grs(
         sort=sort,
         allowed_sorts={
             "gr_id": "gr.gr_id",
+            "gr_no": "gr.gr_no",
             "po_no": "po.po_no",
             "sc_no": "sc.sc_no",
             "vendor_name": "vendor.vendor_name",

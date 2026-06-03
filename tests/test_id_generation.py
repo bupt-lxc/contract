@@ -99,9 +99,9 @@ def test_generate_gr_id_creates_sequential_ids(app_config):
         conn.commit()
     with connect(app_config) as conn:
         conn.execute(
-            "INSERT INTO gr_requests (gr_id, po_id, requester_id, estimated_amount, status, created_by, created_at) "
-            "VALUES (?, 'PO-GR', 'U-001', 50, 'pending', 'U-001', ?)",
-            (id1, timestamp),
+            "INSERT INTO gr_requests (gr_id, gr_no, po_id, requester_id, estimated_amount, status, created_by, created_at) "
+            "VALUES (?, ?, 'PO-GR', 'U-001', 50, 'pending', 'U-001', ?)",
+            (id1, None, timestamp),
         )
         conn.commit()
     id2 = _generate_gr_id(app_config, mid)

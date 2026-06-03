@@ -249,6 +249,7 @@ home: {
     selectPo: 'Select PO',
     editGr: 'Edit GR',
     grId: 'GR ID',
+    grNo: 'GR No',
     id: 'GR ID',
     requester: 'Requester',
     requesterId: 'Requester ID',

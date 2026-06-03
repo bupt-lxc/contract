@@ -182,7 +182,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                       activing_date,
                       created_at,
                       updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         po_id,
