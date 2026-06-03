@@ -586,7 +586,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "activing", "manager_confirm")
+            return status not in ("pending", "activing", "manager_confirm", "approved")
         return False
 
     user_id = current_user["user_id"] if current_user else None
