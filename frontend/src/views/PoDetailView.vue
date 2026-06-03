@@ -24,6 +24,9 @@
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('po.poId')">{{ po.po_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poNo')">{{ po.po_no || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('filter.scId')">{{ scDetail?.sc_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('filter.scNo')">{{ scDetail?.sc_no || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('filter.requesterName')">{{ scDetail?.requester_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>

@@ -12,6 +12,9 @@
     <el-table-column prop="po_no" :label="$t('po.poNo')" width="130">
       <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
     </el-table-column>
+    <el-table-column prop="sc_id" :label="$t('filter.scId')" width="130" />
+    <el-table-column prop="sc_no" :label="$t('filter.scNo')" width="130" />
+    <el-table-column prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip />
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" />
     <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" />
