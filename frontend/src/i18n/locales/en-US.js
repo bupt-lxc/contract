@@ -70,7 +70,8 @@ export default {
     to: ' to',
     min: ' min',
     max: ' max',
-    browse: 'Browse'
+    browse: 'Browse',
+    vendor: 'Vendor'
   },
 
   status: {
@@ -126,6 +127,7 @@ home: {
     colGrId: 'GR ID',
     colDeadline: 'Deadline',
     colCreatedAt: 'Created',
+    viewAllOfType: 'View all of this type',
   },
 
   sc: {

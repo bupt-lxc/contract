@@ -38,6 +38,7 @@
             </div>
             <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
+          <div class="wb-cell__link" @click="$router.push(`/sc?status=${cell.status}`)">{{ $t('home.viewAllOfType') }}</div>
         </div>
       </div>
     </div>
@@ -74,6 +75,7 @@
             </div>
             <div v-if="!data.po?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
+          <div class="wb-cell__link" @click="$router.push(`/po?status=${cell.status}`)">{{ $t('home.viewAllOfType') }}</div>
         </div>
       </div>
     </div>
@@ -110,6 +112,7 @@
             </div>
             <div v-if="!data.gr?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
+          <div class="wb-cell__link" @click="$router.push(`/gr?status=${cell.status}`)">{{ $t('home.viewAllOfType') }}</div>
         </div>
       </div>
     </div>
@@ -353,5 +356,19 @@ onMounted(async () => {
   text-align: center;
   font-size: 0.75rem;
   color: #cbd5e1;
+}
+
+.wb-cell__link {
+  padding: 0.35em 0.7em;
+  text-align: center;
+  font-size: 0.7rem;
+  color: #3b82f6;
+  cursor: pointer;
+  border-top: 1px solid #e8ecf0;
+  transition: background 0.12s;
+}
+
+.wb-cell__link:hover {
+  background: rgba(59, 130, 246, 0.06);
 }
 </style>

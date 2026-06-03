@@ -74,6 +74,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -85,6 +86,7 @@ import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const route = useRoute()
 const { t } = useI18n()
 
 const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
@@ -276,6 +278,11 @@ async function handleExport() {
 }
 
 onMounted(async () => {
-  await Promise.all([searchPos(), searchVendors(), loadEligibleScs()])
+  const filters = {}
+  if (route.query.status) {
+    filters.status = route.query.status
+    setFilters(filters)
+  }
+  await Promise.all([searchPos(null, Object.keys(filters).length ? filters : null), searchVendors(), loadEligibleScs()])
 })
 </script>

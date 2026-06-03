@@ -934,7 +934,11 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         pos = [
             _row_to_dict(row)
             for row in conn.execute(
-                "select * from pos where sc_id = ? order by created_at, po_id",
+                """select po.*, v.vendor_name, v.ksrm_vendor_code
+                   from pos po
+                   join vendors v on v.vendor_id = po.vendor_id
+                   where po.sc_id = ?
+                   order by po.created_at, po.po_id""",
                 (sc_id,),
             )
         ]

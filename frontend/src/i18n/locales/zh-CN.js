@@ -70,7 +70,8 @@ export default {
     to: ' 到',
     min: ' 最小',
     max: ' 最大',
-    browse: '浏览'
+    browse: '浏览',
+    vendor: '供应商'
   },
 
   status: {
@@ -126,6 +127,7 @@ home: {
     colGrId: 'GR ID',
     colDeadline: '截止日期',
     colCreatedAt: '申请日期',
+    viewAllOfType: '查看此类全部',
   },
 
   sc: {
