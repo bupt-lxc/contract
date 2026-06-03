@@ -544,6 +544,29 @@ home: {
     deleteAttachment: '删除附件'
   },
 
+  batch: {
+    selected: '已选择 {count} 项',
+    submit: '批量提交',
+    confirm: '批量确认',
+    approve: '批量审批',
+    submitConfirm: '确认批量提交选中的 {count} 项？',
+    confirmConfirm: '确认批量确认选中的 {count} 项？',
+    approveConfirm: '确认批量审批选中的 {count} 项？',
+    result: '批量{action}完成',
+    success: '成功: {count} 项',
+    failed: '失败: {count} 项',
+    failDetail: '失败详情',
+    processing: '正在处理 {current}/{total}',
+    completed: '已完成: {count}',
+    skipped: '已跳过: {count}',
+    abort: '终止操作',
+    aborted: '用户终止',
+    noQualifying: '所选项目中没有符合批量{action}条件的记录',
+    titleSubmit: '批量提交',
+    titleConfirm: '批量确认',
+    titleApprove: '批量审批'
+  },
+
   exportCol: {
     status: '状态',
     scNo: '供应链编号',
