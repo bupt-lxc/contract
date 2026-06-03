@@ -158,8 +158,8 @@ def _validate_gr_creation_context(
         return  # no budget check for draft
 
     if po_status == "activing" and sc_status == "approved":
-        if gr_status not in ("pending", "manager_confirm"):
-            raise ConflictError("Activing PO only allows pending or manager_confirm GR")
+        if gr_status not in ("draft", "pending", "manager_confirm"):
+            raise ConflictError("Activing PO only allows draft, pending or manager_confirm GR")
         sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
         po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
         if sc_budget["sc_available_amount"] < amount:
