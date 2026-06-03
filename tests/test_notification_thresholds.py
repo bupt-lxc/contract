@@ -38,7 +38,7 @@ def _seed_vendor(conn, vendor_id="V1"):
 def _seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=100000):
     conn.execute(
         """INSERT OR IGNORE INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at)
-           VALUES (?, ?, 'V1', ?, 'po_approved', ?, ?)""",
+           VALUES (?, ?, 'V1', ?, 'activing', ?, ?)""",
         (po_id, sc_id, po_amount, TIMESTAMP, TIMESTAMP),
     )
 

@@ -6,7 +6,10 @@
       @reset="handleReset"
     />
 
-    <div style="margin-bottom:12px">
+    <div style="margin-bottom:12px;display:flex;gap:8px">
+      <el-button type="primary" @click="openCreateGrDialog">
+        <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
+      </el-button>
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
@@ -45,19 +48,65 @@
       @size-change="handleSizeChange"
       style="margin-top:12px;justify-content:flex-end"
     />
+
+    <!-- SC+PO selection dialog for creating GR -->
+    <el-dialog
+      v-model="grSelectVisible"
+      :title="$t('gr.addGr')"
+      width="420px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('gr.selectSc')">
+          <el-select v-model="grSelectedScId" filterable placeholder="Search SC..." style="width:100%" @change="onGrScChange">
+            <el-option
+              v-for="sc in eligibleScs"
+              :key="sc.sc_id"
+              :label="`${sc.sc_no || sc.sc_id} — ${sc.description || ''}`"
+              :value="sc.sc_id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="$t('gr.selectPo')">
+          <el-select v-model="grSelectedPoId" filterable placeholder="Search PO..." style="width:100%" :disabled="!grSelectedScId">
+            <el-option
+              v-for="po in eligiblePos"
+              :key="po.po_id"
+              :label="`${po.po_no || po.po_id} — ${po.vendor_name || ''}`"
+              :value="po.po_id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="grSelectVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :disabled="!grSelectedPoId" @click="confirmGrSelection">
+          {{ $t('common.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <GrFormDialog
+      v-model:visible="grDialogVisible"
+      :mode="grDialogMode"
+      :record="grDialogRecord"
+      :users="activeUsers"
+      @save="handleGrSave"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download } from '@element-plus/icons-vue'
+import { Plus, Download } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
+import { callApi } from '@/api/bridge.js'
 import { useGr } from '@/composables/useGr.js'
 import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -135,6 +184,82 @@ function handleRowClick(row) {
 function handlePageChange(page) { onPageChange(page); searchGrs() }
 function handleSizeChange(size) { onPageSizeChange(size); searchGrs() }
 
+// ── Create GR with SC→PO selection ──
+const grSelectVisible = ref(false)
+const grSelectedScId = ref('')
+const grSelectedPoId = ref('')
+const eligibleScs = ref([])
+const eligiblePos = ref([])
+const activeUsers = ref([])
+
+const grDialogVisible = ref(false)
+const grDialogMode = ref('create')
+const grDialogRecord = ref(null)
+
+async function loadEligibleScs() {
+  try {
+    const result = await callApi('search_scs', {
+      filters: { status: 'approved' },
+      limit: 500, offset: 0,
+      sort: 'created_at', direction: 'desc'
+    })
+    eligibleScs.value = result.rows || result || []
+  } catch { eligibleScs.value = [] }
+}
+
+async function onGrScChange(scId) {
+  grSelectedPoId.value = ''
+  eligiblePos.value = []
+  if (!scId) return
+  try {
+    const result = await callApi('search_pos', {
+      filters: { sc_id: scId },
+      limit: 200, offset: 0,
+      sort: 'created_at', direction: 'desc'
+    })
+    eligiblePos.value = result.rows || result || []
+  } catch { eligiblePos.value = [] }
+}
+
+function openCreateGrDialog() {
+  grSelectedScId.value = ''
+  grSelectedPoId.value = ''
+  eligiblePos.value = []
+  grSelectVisible.value = true
+}
+
+function confirmGrSelection() {
+  if (!grSelectedPoId.value) return
+  grSelectVisible.value = false
+  grDialogMode.value = 'create'
+  grDialogRecord.value = null
+  grDialogVisible.value = true
+}
+
+async function handleGrSave(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const payload = { ...formData, po_id: grSelectedPoId.value }
+    const result = await callApi('create_gr', { data: payload })
+    const created = result
+    if (_attachments?.length && created?.gr_id) {
+      // Get po info for parent references
+      const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
+      await callApi('add_attachments', {
+        entity_type: 'gr', entity_id: created.gr_id,
+        file_paths: _attachments,
+        parent_sc_id: po?.sc_id, parent_po_id: grSelectedPoId.value
+      })
+    }
+    ElMessage.success(t('common.saved'))
+    grDialogVisible.value = false
+    await searchGrs()
+  } catch (e) {
+    ElMessage.error(e.message)
+    throw e
+  }
+}
+
 async function handleExport() {
   exporting.value = true
   try {
@@ -162,5 +287,8 @@ async function handleExport() {
   }
 }
 
-onMounted(() => searchGrs())
+onMounted(async () => {
+  try { activeUsers.value = await callApi('list_users') } catch {}
+  await Promise.all([searchGrs(), loadEligibleScs()])
+})
 </script>

@@ -143,7 +143,7 @@ def seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=800):
             "V1",
             f"{po_id}-NO",
             po_amount,
-            "po_approved",
+            "activing",
             None,
             None,
             None,

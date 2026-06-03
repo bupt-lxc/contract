@@ -420,12 +420,9 @@ def search_pos(
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
             "purchaser": "po.purchaser",
-            "pending_date": "po.pending_date",
-            "pending_date_from": "po.pending_date",
-            "pending_date_to": "po.pending_date",
-            "approved_date": "po.approved_date",
-            "approved_date_from": "po.approved_date",
-            "approved_date_to": "po.approved_date",
+            "activing_date": "po.activing_date",
+            "activing_date_from": "po.activing_date",
+            "activing_date_to": "po.activing_date",
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
@@ -443,8 +440,7 @@ def search_pos(
             "contract_to": "po.contract_to",
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
-            "pending_date": "po.pending_date",
-            "approved_date": "po.approved_date",
+            "activing_date": "po.activing_date",
             "created_at": "po.created_at",
             "updated_at": "po.updated_at",
         },
@@ -567,7 +563,7 @@ def workbench_data(
       - Pending: all records
     """
     sc_statuses = ["draft", "pending", "approved"]
-    po_statuses = ["draft", "po_pending", "po_approved"]
+    po_statuses = ["draft", "activing"]
     gr_statuses = ["draft", "pending", "approved"]
 
     def _is_own_only(status: str) -> bool:
@@ -577,7 +573,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "po_pending")
+            return status not in ("pending", "activing")
         return False
 
     user_id = current_user["user_id"] if current_user else None

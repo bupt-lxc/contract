@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "element-plus-vue3": {
+      "source": "teachingai/full-stack-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vue-ui-skills/element-plus-vue3/SKILL.md",
+      "computedHash": "134c5e69fc64bba22d73416f3091fe7767ad1cac170772e7d6c82b12b24178e4"
+    }
+  }
+}

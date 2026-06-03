@@ -69,7 +69,8 @@ export default {
     from: ' 从',
     to: ' 到',
     min: ' 最小',
-    max: ' 最大'
+    max: ' 最大',
+    browse: '浏览'
   },
 
   status: {
@@ -77,6 +78,7 @@ export default {
     pending: '待处理',
     approved: '已批准',
     denied: '已拒绝',
+    activing: '进行中',
     closed: '已关闭',
     finished: '已完成',
     cancelled: '已取消',
@@ -182,8 +184,9 @@ home: {
     servicePeriodEndRequired: '服务结束日期为必填项',
     asset: '资产',
     assetNums: '资产编号',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    internalSystemNumber: '内部系统编号',
+    activingDate: '生效日期',
+    vendors: '供应商'
   },
 
   po: {
@@ -193,6 +196,7 @@ home: {
     poInformation: '采购订单信息',
     poRecords: '采购订单记录',
     addPo: '添加采购订单',
+    selectSc: '选择所属供应链',
     editPo: '编辑采购订单',
     poId: '采购订单ID',
     poNo: '采购订单编号',
@@ -210,7 +214,6 @@ home: {
     noRecords: '暂无采购订单记录。',
     approveConfirm: '确认批准此采购订单？',
     finishConfirm: '确认完成此采购订单？',
-    poApproved: '采购订单已批准',
     poFinished: '采购订单已完成',
     saved: '已保存',
     actions: '操作',
@@ -219,6 +222,9 @@ home: {
     finish: '完成',
     vendorRequired: '供应商为必填项',
     poAmountRequired: '采购订单金额为必填项',
+    contractFromRequired: '合同开始日期为必填项',
+    contractToRequired: '合同结束日期为必填项',
+    contractNoRequired: '合同编号为必填项',
     revoke: '回退',
     confirmRevoke: '确认回退此采购订单？',
     revoked: '已回退',
@@ -229,8 +235,7 @@ home: {
     contractType: '合同类型',
     costCenter: '成本中心',
     purchaser: '采购员',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    activingDate: '生效日期'
   },
 
   gr: {
@@ -240,6 +245,8 @@ home: {
     grRecords: '收货记录',
     grInformation: '收货记录信息',
     addGr: '添加收货记录',
+    selectSc: '选择所属供应链',
+    selectPo: '选择所属采购订单',
     editGr: '编辑收货记录',
     grId: '收货记录ID',
     id: '收货记录ID',
@@ -279,8 +286,7 @@ home: {
     deleteGr: '删除收货记录',
     confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
     grDeleted: '收货记录已删除',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期'
+    activingDate: '生效日期'
   },
 
   vendor: {
@@ -470,8 +476,7 @@ home: {
     asset: '资产',
     contractType: '合同类型',
     purchaser: '采购员',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期',
+    activingDate: '生效日期',
     deadline: '截止日期',
     unlimited: '不限',
     within3Years: '三年内',
@@ -485,11 +490,15 @@ home: {
     within1Month: '一个月内'
   },
 
+  settings: {
+    attachmentsDir: '附件存储位置',
+    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。'
+  },
+
   confirm: {
     approveSc: '确认批准此供应链？',
     denySc: '确认拒绝此供应链？',
     submitSc: '确认提交此供应链？',
-    approvePo: '确认批准此采购订单？',
     finishPo: '确认完成此采购订单？',
     cancelGr: '确认取消此收货记录？'
   },
@@ -497,7 +506,6 @@ home: {
   msg: {
     exportedSuccessfully: '导出成功',
     exportFailed: '导出失败',
-    poApproved: '采购订单已批准',
     poFinished: '采购订单已完成',
     scUpdated: '供应链已更新',
     scSubmitted: '供应链已提交',
@@ -546,8 +554,8 @@ home: {
     machine: '机器',
     asset: '资产',
     assetNums: '资产编号',
-    pendingDate: '提交日期',
-    approvedDate: '批准日期',
+    internalSystemNumber: '内部系统编号',
+    activingDate: '生效日期',
     contractPos: '合同项',
     contractType: '合同类型',
     costCenter: '成本中心',

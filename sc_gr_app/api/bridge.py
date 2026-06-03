@@ -215,16 +215,6 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def approve_po(self, payload) -> dict:
-        try:
-            payload = self._required_payload(payload)
-            current_user = self._require_current_user()
-            po_id = _require_payload_field(payload, "po_id")
-            cascade_grs = payload.get("cascade_grs", False)
-            return ok(po_service.approve_po(self.config, current_user, po_id, cascade_grs=cascade_grs))
-        except Exception as exc:
-            return fail(exc)
-
     def finish_po(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -235,7 +225,7 @@ class ApiBridge:
             return fail(exc)
 
     def submit_po(self, payload) -> dict:
-        """Submit a draft PO to po_pending (admin or SC owner)."""
+        """Submit a draft PO to activing (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
@@ -552,7 +542,71 @@ class ApiBridge:
 
     def _attachments_dir(self) -> Path:
         from pathlib import Path
+        from sc_gr_app.db.connection import connect
+        # Check for custom attachments directory in app_settings
+        try:
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'attachments_dir'"
+                ).fetchone()
+                if row and row["setting_value"]:
+                    custom = Path(row["setting_value"])
+                    if custom.exists() or custom.parent.exists():
+                        return custom
+        except Exception:
+            pass
         return Path(self.config.db_path).parent / "attachments"
+
+    def get_attachments_dir(self, _payload=None) -> dict:
+        """Return the current attachments directory path."""
+        try:
+            self._require_current_user()
+            return ok({"path": str(self._attachments_dir())})
+        except Exception as exc:
+            return fail(exc)
+
+    def set_attachments_dir(self, payload) -> dict:
+        """Set a custom attachments directory. Old files stay in place; new files go to the new path."""
+        try:
+            from sc_gr_app.db.connection import connect
+            from datetime import datetime, timezone
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            new_path = _require_payload_field(payload, "path")
+            target = Path(new_path)
+            if not target.exists():
+                target.mkdir(parents=True, exist_ok=True)
+            if not target.is_dir():
+                return fail(ValidationError("Path is not a directory"))
+            timestamp = datetime.now(timezone.utc).isoformat()
+            with connect(self.config) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                    ("attachments_dir", str(target), timestamp),
+                )
+                conn.commit()
+            return ok({"path": str(target)})
+        except Exception as exc:
+            return fail(exc)
+
+    def pick_folder(self, _payload=None) -> dict:
+        """Open native folder picker dialog, return chosen path."""
+        try:
+            import tkinter.filedialog as fd
+            import tkinter as tk
+            self._require_current_user()
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            folder = fd.askdirectory(title="Select attachments folder")
+            root.destroy()
+            if not folder:
+                return ok({"cancelled": True})
+            return ok({"path": str(Path(folder))})
+        except Exception as exc:
+            return fail(exc)
 
     def pick_files(self, _payload=None) -> dict:
         """Open native multi-file dialog, return selected file paths only (no copy, no DB)."""

@@ -10,6 +10,15 @@
     <el-descriptions-item :label="$t('sc.servicePeriodEnd')">{{ formatDate(sc.service_period_end) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.asset')">{{ sc.asset || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.assetNums')">{{ sc.asset_nums || '-' }}</el-descriptions-item>
+    <el-descriptions-item v-if="sc.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">{{ sc.internal_system_number || '-' }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.vendors')" :span="2">
+      <template v-if="vendors && vendors.length">
+        <el-tag v-for="v in vendors" :key="v.vendor_id" size="small" style="margin-right:4px;margin-bottom:2px">
+          {{ v.vendor_name }}
+        </el-tag>
+      </template>
+      <span v-else>-</span>
+    </el-descriptions-item>
     <el-descriptions-item :label="$t('sc.description')" :span="2">{{ sc.description || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.pendingDate')">{{ formatDate(sc.pending_date) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.approvedDate')">{{ formatDate(sc.approved_date) }}</el-descriptions-item>
@@ -22,7 +31,8 @@
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 defineProps({
-  sc: { type: Object, required: true }
+  sc: { type: Object, required: true },
+  vendors: { type: Array, default: () => [] }
 })
 
 function formatDate(val) {
