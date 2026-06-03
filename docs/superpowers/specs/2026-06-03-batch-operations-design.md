@@ -36,8 +36,33 @@ Appears between the filter bar and the table whenever one or more rows are check
 1. User checks rows via checkbox column
 2. Clicks a batch action button
 3. Confirmation dialog: "批量提交选中的 N 项?" (or confirm/approve)
-4. Processes serially in the background (no progress bar needed for < 20 items)
-5. Result summary dialog via `ElMessageBox.alert`
+4. Progress modal opens (blocking), showing:
+   - Current progress: "正在处理 3/7..."
+   - Current item ID being processed
+   - A **终止 (Abort)** button to stop further processing
+5. While modal is open, the user cannot interact with the rest of the page
+6. On completion (or abort), modal closes
+7. Result summary dialog via `ElMessageBox.alert`
+
+### Progress Modal
+
+An `el-dialog` with `:close-on-click-modal="false"` and `:show-close="false"` to block dismissal:
+
+```
+┌─────────────────────────────────┐
+│  批量提交                        │
+│                                 │
+│  ◌ 正在处理 3/7                  │
+│  SC-2026001-003                 │
+│                                 │
+│  ✓ 已完成: 2    ✗ 已跳过: 0      │
+│                                 │
+│         [ 终止操作 ]             │
+└─────────────────────────────────┘
+```
+
+- **Abort behavior**: sets an `AbortController` signal. The processing loop checks `signal.aborted` before each item. Already-processed items are NOT rolled back — they stay in their new status. Remaining items are skipped with reason "用户终止".
+- **Modal state on abort**: transitions to showing the same summary format (success/failed/skipped counts) before closing.
 
 ### Result Summary
 
@@ -57,21 +82,39 @@ Appears between the filter bar and the table whenever one or more rows are check
 
 ### New: `frontend/src/composables/useBatchAction.js`
 
+Returns reactive state and control methods for the batch flow:
+
 ```javascript
 export function useBatchAction() {
+  const state = reactive({
+    active: false,        // true during batch processing
+    total: 0,
+    current: 0,           // 0-based index of current item
+    currentId: '',        // display ID of current item
+    succeeded: 0,
+    failed: 0,
+    failedItems: [],      // [{id, reason}]
+    aborted: false
+  })
+
+  const abortController = ref(null)
+
   async function runBatch(rows, actionName, actionFn) {
     // 1. Confirm with user
-    // 2. Process serially, catch per-row errors
-    // 3. Return { total, succeeded, failed: [{id, reason}] }
+    // 2. Open progress modal (state.active = true)
+    // 3. Create AbortController
+    // 4. Loop: before each row, check signal.aborted; if so, mark remaining as skipped
+    // 5. Call actionFn(row), catch errors per-row, update state in real-time
+    // 6. On completion/abort: state.active = false, return summary
   }
-  return { runBatch }
+
+  function abort() {
+    abortController.value?.abort()
+  }
+
+  return { state, runBatch, abort }
 }
 ```
-
-- `rows`: array of selected row objects
-- `actionName`: display name for the confirm dialog ("提交" / "确认" / "审批")
-- `actionFn`: async `(row) => result` — calls the appropriate bridge method
-- Returns structured result for the view to format and display
 
 ### Modified: `frontend/src/components/sc/ScTable.vue`
 
@@ -125,6 +168,11 @@ Rows that fail the API's own permission/business-rule checks are caught and repo
 | `batch.success` | 成功: {count} 项 | Success: {count} |
 | `batch.failed` | 失败: {count} 项 | Failed: {count} |
 | `batch.failDetail` | 失败详情 | Failure Details |
+| `batch.processing` | 正在处理 {current}/{total} | Processing {current}/{total} |
+| `batch.completed` | 已完成: {count} | Completed: {count} |
+| `batch.skipped` | 已跳过: {count} | Skipped: {count} |
+| `batch.abort` | 终止操作 | Abort |
+| `batch.aborted` | 用户终止 | Aborted by user |
 
 ## Backward Compatibility
 
@@ -139,4 +187,6 @@ Rows that fail the API's own permission/business-rule checks are caught and repo
 - Edge case: select 0 rows → batch bar hidden
 - Edge case: select rows but none qualify for chosen action → all skipped, reported
 - Edge case: network error during processing → caught per-row, reported
+- Edge case: user aborts mid-processing → already-processed items stay in new status, remaining skipped with reason "用户终止"
+- Edge case: attempt to close progress modal while processing → blocked (no close button, no click-outside-to-dismiss)
 - Existing tests continue to pass (no backend changes)
