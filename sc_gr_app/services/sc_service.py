@@ -55,7 +55,6 @@ _VENDOR_SNAPSHOT_FIELDS = (
     "inquiry_history",
 )
 REQUIRED_BUSINESS_FIELDS = (
-    "sc_no",
     "request_type",
     "cost_center",
     "sc_amount",
