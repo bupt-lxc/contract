@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -342,9 +342,11 @@ def _migrate_v3(conn) -> None:
             (
                 "notify.transitions.sc",
                 '{"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"confirm":{"to":["requester"],"cc":["actor"]},'
                 '"approve":{"to":["requester"],"cc":["actor"]},'
                 '"deny":{"to":["requester"],"cc":["actor"]},'
-                '"close":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
+                '"close":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+                '"revoke":{"to":["requester"],"cc":[]}}',
             ),
             (
                 "notify.transitions.po",
@@ -355,8 +357,11 @@ def _migrate_v3(conn) -> None:
             (
                 "notify.transitions.gr",
                 '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+                '"confirm":{"to":["requester"],"cc":["actor"]},'
                 '"approve":{"to":["requester"],"cc":["actor"]},'
-                '"cancel":{"to":["requester","notify.admin_recipients"],"cc":[]}}',
+                '"cancel":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+                '"revoke":{"to":["requester"],"cc":[]}}',
             ),
             ("notify.default_cc", "[]"),
             ("notify.default_date_thresholds", "[6, 3, 1, 0.5]"),
@@ -752,6 +757,143 @@ def _migrate_v15(conn) -> None:
     _record(conn, 15)
 
 
+def _migrate_v16(conn) -> None:
+    """Add manager_confirm status to SC and GR workflows, and confirmed_at column."""
+    # Rebuild sc_records to add manager_confirm to CHECK constraint + confirmed_at
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "confirmed_at" not in existing or "manager_confirm" not in _sc_records_sql(conn):
+            conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+            conn.execute("""
+                CREATE TABLE sc_records (
+                  sc_id TEXT PRIMARY KEY,
+                  sc_no TEXT,
+                  requester_id TEXT NOT NULL REFERENCES users(user_id),
+                  request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+                  cost_center INTEGER,
+                  sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+                  service_period_start TEXT,
+                  service_period_end TEXT,
+                  status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'closed')),
+                  description TEXT,
+                  created_by TEXT NOT NULL REFERENCES users(user_id),
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  approved_by TEXT REFERENCES users(user_id),
+                  approved_at TEXT,
+                  closed_at TEXT,
+                  confirmed_at TEXT,
+                  asset TEXT NOT NULL DEFAULT 'N',
+                  asset_nums TEXT,
+                  pending_date TEXT,
+                  approved_date TEXT,
+                  internal_system_number TEXT,
+                  CHECK (
+                    status = 'draft'
+                    OR status = 'manager_confirm'
+                    OR (
+                      request_type IS NOT NULL
+                      AND cost_center IS NOT NULL
+                      AND sc_amount IS NOT NULL
+                      AND service_period_start IS NOT NULL
+                      AND service_period_end IS NOT NULL
+                    )
+                  )
+                )
+            """)
+            conn.execute("""
+                INSERT INTO sc_records (
+                  sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+                  service_period_start, service_period_end, status, description,
+                  created_by, created_at, updated_at, approved_by, approved_at, closed_at,
+                  confirmed_at, asset, asset_nums, pending_date, approved_date,
+                  internal_system_number
+                )
+                SELECT
+                  sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+                  service_period_start, service_period_end, status, description,
+                  created_by, created_at, updated_at, approved_by, approved_at, closed_at,
+                  NULL, asset, asset_nums, pending_date, approved_date,
+                  internal_system_number
+                FROM sc_records_old
+            """)
+            conn.execute("DROP TABLE sc_records_old")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+
+    # Rebuild gr_requests to add manager_confirm to CHECK constraint + confirmed_at
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "confirmed_at" not in existing:
+            conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+            conn.execute("""
+                CREATE TABLE gr_requests (
+                  gr_id TEXT PRIMARY KEY,
+                  gr_no TEXT,
+                  po_id TEXT NOT NULL REFERENCES pos(po_id),
+                  requester_id TEXT NOT NULL REFERENCES users(user_id),
+                  estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+                  con_value REAL CHECK (con_value >= 0),
+                  status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'cancelled')),
+                  remark TEXT,
+                  created_by TEXT NOT NULL REFERENCES users(user_id),
+                  created_at TEXT NOT NULL,
+                  approved_by TEXT REFERENCES users(user_id),
+                  approved_at TEXT,
+                  cancelled_by TEXT REFERENCES users(user_id),
+                  cancelled_at TEXT,
+                  confirmed_at TEXT,
+                  pending_date TEXT,
+                  approved_date TEXT
+                )
+            """)
+            conn.execute("""
+                INSERT INTO gr_requests (
+                  gr_id, gr_no, po_id, requester_id, estimated_amount, con_value, status,
+                  remark, created_by, created_at, approved_by, approved_at,
+                  cancelled_by, cancelled_at, confirmed_at, pending_date, approved_date
+                )
+                SELECT
+                  gr_id, gr_no, po_id, requester_id, estimated_amount, con_value, status,
+                  remark, created_by, created_at, approved_by, approved_at,
+                  cancelled_by, cancelled_at, NULL, pending_date, approved_date
+                FROM gr_requests_old
+            """)
+            conn.execute("DROP TABLE gr_requests_old")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+
+    # Update notification transition defaults for new confirm/revoke transitions
+    if _table_exists(conn, "app_settings"):
+        timestamp = utc_now()
+        sc_transitions = (
+            '{"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"confirm":{"to":["requester"],"cc":["actor"]},'
+            '"approve":{"to":["requester"],"cc":["actor"]},'
+            '"deny":{"to":["requester"],"cc":["actor"]},'
+            '"close":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"revoke":{"to":["requester"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.sc", sc_transitions, timestamp),
+        )
+        gr_transitions = (
+            '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"confirm":{"to":["requester"],"cc":["actor"]},'
+            '"approve":{"to":["requester"],"cc":["actor"]},'
+            '"cancel":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"revoke":{"to":["requester"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.gr", gr_transitions, timestamp),
+        )
+
+    _record(conn, 16)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -830,6 +972,14 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v15(conn)
                 conn.commit()
+            if 16 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("PRAGMA legacy_alter_table = ON")
+                conn.execute("BEGIN")
+                _migrate_v16(conn)
+                conn.commit()
+                conn.execute("PRAGMA legacy_alter_table = OFF")
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

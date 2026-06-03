@@ -16,7 +16,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("po_id", "requester_id", "estimated_amount")
-SUPPORTED_STATUSES = {"draft", "pending", "approved", "cancelled"}
+SUPPORTED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "cancelled"}
 
 
 def utc_now() -> str:
@@ -297,11 +297,10 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
         conn.execute(
             """
             update gr_requests
-            set status = 'pending',
-                pending_date = ?
+            set status = 'manager_confirm'
             where gr_id = ?
             """,
-            (timestamp, gr_id),
+            (gr_id,),
         )
         after = _get_gr(conn, gr_id)
 
@@ -438,6 +437,60 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
+def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    """Admin confirms a GR in manager_confirm status, moving it to pending."""
+    require_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_gr(conn, gr_id)
+                if before["status"] != "manager_confirm":
+                    raise ConflictError("GR must be in manager_confirm status")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update gr_requests
+                    set status = 'pending',
+                        confirmed_at = ?,
+                        pending_date = ?
+                    where gr_id = ?
+                    """,
+                    (timestamp, timestamp, gr_id),
+                )
+                after = _get_gr(conn, gr_id)
+                write_audit_log(
+                    conn,
+                    action_type="confirm_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (sc_id,),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "gr", gr_id, "confirm",
+                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
 def approve_gr(
     config: AppConfig,
     current_user: dict,
@@ -557,7 +610,7 @@ def update_gr(
                 before = _get_gr(conn, gr_id)
                 if before["status"] == "cancelled":
                     raise ConflictError("Cancelled GR cannot be edited")
-                if before["status"] not in ("draft", "pending", "approved"):
+                if before["status"] not in ("draft", "manager_confirm", "pending", "approved"):
                     raise ConflictError("GR cannot be edited in its current status")
 
                 updates = dict(data)
@@ -763,11 +816,17 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
 
 
 def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Roll back GR status. approved→pending, cancelled→pending (admin only)."""
-    require_admin(current_user)
+    """Roll back GR status. pending→manager_confirm, approved→pending, cancelled→pending."""
+    require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
         sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+        sc = lookup_conn.execute(
+            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+            (sc_id,),
+        ).fetchone()
+        if current_user["role"] != "admin" and (sc is None or sc["requester_id"] != current_user["user_id"]):
+            raise PermissionDenied("Only the SC owner or admin can revoke GRs")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -776,7 +835,15 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
 
-                if before["status"] == "approved":
+                if before["status"] == "pending":
+                    # pending → manager_confirm
+                    conn.execute(
+                        """update gr_requests
+                        set status = 'manager_confirm'
+                        where gr_id = ?""",
+                        (gr_id,),
+                    )
+                elif before["status"] == "approved":
                     conn.execute(
                         """update gr_requests
                         set status = 'pending',
@@ -796,7 +863,7 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                         (gr_id,),
                     )
                 else:
-                    raise ConflictError("GR must be approved or cancelled to revoke")
+                    raise ConflictError("GR must be pending, approved or cancelled to revoke")
 
                 after = _get_gr(conn, gr_id)
                 write_audit_log(
@@ -838,8 +905,8 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_gr(conn, gr_id)
-                if before["status"] not in {"draft", "pending", "cancelled"}:
-                    raise ConflictError("Only draft, pending or cancelled GR can be deleted")
+                if before["status"] not in {"draft", "manager_confirm", "pending", "cancelled"}:
+                    raise ConflictError("Only draft, manager_confirm, pending or cancelled GR can be deleted")
                 if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the GR owner or admin can delete")
 

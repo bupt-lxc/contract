@@ -176,6 +176,16 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def confirm_sc(self, payload) -> dict:
+        """Admin confirms an SC in manager_confirm status."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            return ok(sc_service.confirm_sc(self.config, current_user, sc_id))
+        except Exception as exc:
+            return fail(exc)
+
     def revoke_sc(self, payload) -> dict:
         """Move a pending SC back to draft."""
         try:
@@ -289,6 +299,16 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def confirm_gr(self, payload) -> dict:
+        """Admin confirms a GR in manager_confirm status."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            return ok(gr_service.confirm_gr(self.config, current_user, gr_id))
         except Exception as exc:
             return fail(exc)
 
