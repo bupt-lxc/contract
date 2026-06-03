@@ -100,7 +100,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { callApi } from '@/api/bridge.js'
@@ -112,6 +112,7 @@ import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
+const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
@@ -293,6 +294,11 @@ async function handleExport() {
 
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  await Promise.all([searchGrs(), loadEligibleScs()])
+  const filters = {}
+  if (route.query.status) {
+    filters.status = route.query.status
+    setFilters(filters)
+  }
+  await Promise.all([searchGrs(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
 })
 </script>

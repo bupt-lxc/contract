@@ -48,6 +48,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
@@ -59,6 +60,7 @@ import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { ElMessage } from 'element-plus'
 
+const route = useRoute()
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
@@ -211,6 +213,11 @@ onMounted(async () => {
   try {
     activeUsers.value = await callApi('list_users')
   } catch { /* ignore — user list is non-critical */ }
-  await Promise.all([searchScs(), searchVendors()])
+  const filters = {}
+  if (route.query.status) {
+    filters.status = route.query.status
+    setFilters(filters)
+  }
+  await Promise.all([searchScs(null, Object.keys(filters).length ? filters : null), searchVendors()])
 })
 </script>
