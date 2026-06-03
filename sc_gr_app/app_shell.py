@@ -43,8 +43,10 @@ def _single_instance_check():
         return
     hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
     if hwnd:
+        # SW_SHOW (5) reveals a window hidden to tray; SW_RESTORE (9) handles minimized
+        ctypes.windll.user32.ShowWindow(hwnd, 5)    # SW_SHOW
+        ctypes.windll.user32.ShowWindow(hwnd, 9)    # SW_RESTORE
         ctypes.windll.user32.SetForegroundWindow(hwnd)
-        ctypes.windll.user32.ShowWindow(hwnd, 9)
     sys.exit(0)
 
 
