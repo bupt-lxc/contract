@@ -19,6 +19,9 @@ DEV_MODE = os.getenv("SC_GR_DEV") == "1"
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 
+# Store WNDPROC callback reference to prevent garbage collection
+_tray_wndproc = None
+
 
 def _patch_webview2():
     _original = EdgeChrome.on_webview_ready
@@ -57,6 +60,36 @@ def _check_update(window):
     # Placeholder — replace UPDATE_URL with actual update server when available
 
 
+def _hook_close(hwnd, allow_close):
+    """Subclass the Win32 window to hide on close instead of destroying."""
+    global _tray_wndproc
+
+    GWLP_WNDPROC = -4
+    WM_CLOSE = 0x0010
+
+    WNDPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_longlong,   # LRESULT
+        ctypes.c_void_p,     # HWND
+        ctypes.c_uint,       # UINT
+        ctypes.c_ulonglong,  # WPARAM
+        ctypes.c_longlong,   # LPARAM
+    )
+
+    original = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
+
+    @WNDPROC
+    def wnd_proc(hwnd_, msg, wparam, lparam):
+        if msg == WM_CLOSE and not allow_close[0]:
+            ctypes.windll.user32.ShowWindow(hwnd_, 0)  # SW_HIDE
+            return 0
+        return ctypes.windll.user32.CallWindowProcW(
+            ctypes.c_void_p(original), hwnd_, msg, wparam, lparam,
+        )
+
+    ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
+    _tray_wndproc = wnd_proc  # prevent GC
+
+
 def _setup_tray(window):
     """Minimize to tray on close. Tray icon with context menu."""
     try:
@@ -71,24 +104,30 @@ def _setup_tray(window):
 
     image = Image.open(icon_path)
 
+    _allow_close = [False]  # mutable container shared across closures
+
     def show_window(icon, item):
         window.show()
         window.restore()
 
     def exit_app(icon, item):
+        _allow_close[0] = True
         icon.stop()
         window.destroy()
         os._exit(0)
 
+    def _on_shown():
+        """Hook WM_CLOSE after the native window is ready."""
+        hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+        if hwnd:
+            _hook_close(hwnd, _allow_close)
+
+    window.events.shown += _on_shown
+
     icon = Icon("sc-gr-mgmt", image, WINDOW_TITLE, Menu(
         MenuItem("Show Window", show_window, default=True),
-        MenuItem("Exit", exit_app)
+        MenuItem("Exit", exit_app),
     ))
-
-    def _on_closing():
-        window.hide()
-
-    window.events.closing += _on_closing
 
     threading.Thread(target=icon.run, daemon=True).start()
     return icon
