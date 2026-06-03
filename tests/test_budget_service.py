@@ -143,7 +143,7 @@ def seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=800):
             "V1",
             f"{po_id}-NO",
             po_amount,
-            "po_approved",
+            "activing",
             None,
             None,
             None,
@@ -166,6 +166,7 @@ def seed_gr(
         """
         insert into gr_requests (
           gr_id,
+          gr_no,
           po_id,
           requester_id,
           estimated_amount,
@@ -178,10 +179,11 @@ def seed_gr(
           approved_at,
           cancelled_by,
           cancelled_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             gr_id,
+            None,
             po_id,
             "U1",
             estimated_amount,

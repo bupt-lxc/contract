@@ -69,7 +69,8 @@ export default {
     from: ' from',
     to: ' to',
     min: ' min',
-    max: ' max'
+    max: ' max',
+    browse: 'Browse'
   },
 
   status: {
@@ -77,6 +78,7 @@ export default {
     pending: 'Pending',
     approved: 'Approved',
     denied: 'Denied',
+    activing: 'Activing',
     closed: 'Closed',
     finished: 'Finished',
     cancelled: 'Cancelled',
@@ -182,8 +184,9 @@ home: {
     servicePeriodEndRequired: 'Service Period End is required',
     asset: 'Asset',
     assetNums: 'Asset Numbers',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    internalSystemNumber: 'Internal System Number',
+    activingDate: 'Activing Date',
+    vendors: 'Vendors'
   },
 
   po: {
@@ -193,6 +196,7 @@ home: {
     poInformation: 'PO Information',
     poRecords: 'PO Records',
     addPo: 'Add PO',
+    selectSc: 'Select SC',
     editPo: 'Edit PO',
     poId: 'PO ID',
     poNo: 'PO No',
@@ -210,7 +214,6 @@ home: {
     noRecords: 'No PO records.',
     approveConfirm: 'Approve this PO?',
     finishConfirm: 'Finish this PO?',
-    poApproved: 'PO approved',
     poFinished: 'PO finished',
     saved: 'Saved',
     actions: 'Actions',
@@ -219,6 +222,9 @@ home: {
     finish: 'Finish',
     vendorRequired: 'Vendor is required',
     poAmountRequired: 'PO Amount is required',
+    contractFromRequired: 'Contract Start is required',
+    contractToRequired: 'Contract End is required',
+    contractNoRequired: 'Contract Number is required',
     revoke: 'Rollback',
     confirmRevoke: 'Roll back this PO?',
     revoked: 'Rolled back',
@@ -229,8 +235,7 @@ home: {
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
     purchaser: 'Purchaser',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    activingDate: 'Activing Date'
   },
 
   gr: {
@@ -240,8 +245,11 @@ home: {
     grRecords: 'GR Records',
     grInformation: 'GR Information',
     addGr: 'Add GR',
+    selectSc: 'Select SC',
+    selectPo: 'Select PO',
     editGr: 'Edit GR',
     grId: 'GR ID',
+    grNo: 'GR No',
     id: 'GR ID',
     requester: 'Requester',
     requesterId: 'Requester ID',
@@ -279,8 +287,7 @@ home: {
     deleteGr: 'Delete GR',
     confirmDeleteGr: 'Delete this GR? This cannot be undone.',
     grDeleted: 'GR deleted',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date'
+    activingDate: 'Activing Date'
   },
 
   vendor: {
@@ -470,8 +477,7 @@ home: {
     asset: 'Asset',
     contractType: 'Contract Type',
     purchaser: 'Purchaser',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date',
+    activingDate: 'Activing Date',
     deadline: 'Deadline',
     unlimited: 'Unlimited',
     within3Years: 'Within 3 Years',
@@ -485,11 +491,15 @@ home: {
     within1Month: 'Within 1 Month'
   },
 
+  settings: {
+    attachmentsDir: 'Attachments Directory',
+    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.'
+  },
+
   confirm: {
     approveSc: 'Approve this SC?',
     denySc: 'Deny this SC?',
     submitSc: 'Submit this SC?',
-    approvePo: 'Approve this PO?',
     finishPo: 'Finish this PO?',
     cancelGr: 'Cancel this GR?'
   },
@@ -497,7 +507,6 @@ home: {
   msg: {
     exportedSuccessfully: 'Exported successfully',
     exportFailed: 'Export failed',
-    poApproved: 'PO approved',
     poFinished: 'PO finished',
     scUpdated: 'SC updated',
     scSubmitted: 'SC submitted',
@@ -546,8 +555,8 @@ home: {
     machine: 'Machine',
     asset: 'Asset',
     assetNums: 'Asset Numbers',
-    pendingDate: 'Pending Date',
-    approvedDate: 'Approved Date',
+    internalSystemNumber: 'Internal System Number',
+    activingDate: 'Activing Date',
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',
     costCenter: 'Cost Center',

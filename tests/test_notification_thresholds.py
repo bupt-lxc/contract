@@ -38,19 +38,19 @@ def _seed_vendor(conn, vendor_id="V1"):
 def _seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=100000):
     conn.execute(
         """INSERT OR IGNORE INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at)
-           VALUES (?, ?, 'V1', ?, 'po_approved', ?, ?)""",
+           VALUES (?, ?, 'V1', ?, 'activing', ?, ?)""",
         (po_id, sc_id, po_amount, TIMESTAMP, TIMESTAMP),
     )
 
 
 def _seed_gr(conn, gr_id, po_id="PO1", estimated_amount=80000, con_value=80000, status="approved"):
     conn.execute(
-        """INSERT INTO gr_requests (gr_id, po_id, requester_id, estimated_amount, con_value,
+        """INSERT INTO gr_requests (gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
            status, created_by, created_at, approved_by, approved_at)
-           VALUES (?, ?, 'U1', ?, ?, ?, 'U1', ?,
+           VALUES (?, ?, ?, 'U1', ?, ?, ?, 'U1', ?,
                    CASE WHEN ? = 'approved' THEN 'U1' ELSE NULL END,
                    CASE WHEN ? = 'approved' THEN ? ELSE NULL END)""",
-        (gr_id, po_id, estimated_amount, con_value, status, TIMESTAMP, status, status, TIMESTAMP),
+        (gr_id, None, po_id, estimated_amount, con_value, status, TIMESTAMP, status, status, TIMESTAMP),
     )
 
 

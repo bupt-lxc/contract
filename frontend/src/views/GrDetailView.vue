@@ -23,6 +23,7 @@
         <h3 style="margin-bottom:12px">{{ $t('gr.grInformation') }}</h3>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('gr.grId')">{{ gr.gr_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.grNo')">{{ gr.gr_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.status')"><StatusBadge :status="gr.status" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.requesterId')">{{ gr.requester_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.poNo')">
@@ -156,7 +157,9 @@ async function handleApprove() {
     await approveGr(grId.value, parseFloat(value))
     ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleCancel() {
@@ -165,7 +168,9 @@ async function handleCancel() {
     await cancelGr(grId.value)
     ElMessage.success(t('gr.grCancelled'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleRevoke() {
@@ -174,7 +179,9 @@ async function handleRevoke() {
     await callApi('revoke_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.revoked'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDelete() {
@@ -183,7 +190,9 @@ async function handleDelete() {
     await callApi('delete_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.grDeleted'))
     router.replace(`/sc/${scId.value}/po/${poId.value}`)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 onMounted(async () => {

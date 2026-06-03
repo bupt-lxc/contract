@@ -4,6 +4,9 @@
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
     <el-table-column prop="gr_id" :label="$t('gr.id')" width="120" />
+    <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120">
+      <template #default="{ row }">{{ row.gr_no || '-' }}</template>
+    </el-table-column>
     <el-table-column prop="requester_id" :label="$t('gr.requester')" width="120" />
     <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
       <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>

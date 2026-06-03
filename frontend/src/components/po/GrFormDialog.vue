@@ -16,6 +16,13 @@
         </el-col>
       </el-row>
       <el-row :gutter="16">
+        <el-col :span="24">
+          <el-form-item :label="$t('gr.grNo')">
+            <el-input v-model="form.gr_no" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('gr.estimatedAmount')">
             <el-input-number v-model="form.estimated_amount" :precision="2" :min="0" controls-position="right" style="width:100%" />
@@ -101,7 +108,7 @@ const submitting = ref(false)
 const pickedFiles = ref([])
 
 const emptyForm = () => ({
-  requester_id: '', estimated_amount: null, con_value: null, remark: '',
+  gr_no: null, requester_id: '', estimated_amount: null, con_value: null, remark: '',
   pending_date: null, approved_date: null
 })
 

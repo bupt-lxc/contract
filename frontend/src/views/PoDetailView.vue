@@ -8,10 +8,9 @@
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'po_approved'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.is_admin && (po.status === 'po_approved' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'po_pending' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && (po.status === 'activing' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'activing' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -35,8 +34,7 @@
           <el-descriptions-item :label="$t('po.contractType')">{{ po.contract_type || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.costCenter')">{{ po.cost_center || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.purchaser')">{{ po.purchaser || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('po.pendingDate')">{{ (po.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('po.approvedDate')">{{ (po.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.activingDate')">{{ (po.activing_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
 
@@ -126,7 +124,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updatePo, approvePo, finishPo, submitPo } = usePo()
+const { updatePo, finishPo, submitPo } = usePo()
 const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
@@ -170,44 +168,15 @@ async function handleEditSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
-async function handleApprove() {
-  try {
-    await ElMessageBox.confirm(t('po.approveConfirm'), t('common.confirm'), { type: 'warning' })
-
-    // Check for unprocessed GRs — offer cascade
-    const unprocessedGrs = grs.value.filter(
-      g => g.status === 'draft' || g.status === 'pending'
-    )
-    let cascadeGrs = false
-    if (unprocessedGrs.length > 0) {
-      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
-      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
-      const parts = []
-      if (draftCount) parts.push(`${draftCount} draft`)
-      if (pendingCount) parts.push(`${pendingCount} pending`)
-      try {
-        await ElMessageBox.confirm(
-          `${parts.join(' and ')} GR(s) exist. Also process them?`,
-          t('common.confirm'),
-          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
-        )
-        cascadeGrs = true
-      } catch { /* user chose No */ }
-    }
-
-    await approvePo(poId.value, cascadeGrs)
-    ElMessage.success(t('po.poApproved'))
-    await fetchDetail(scId.value)
-  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
-}
-
 async function handleFinish() {
   try {
     await ElMessageBox.confirm(t('po.finishConfirm'), t('common.confirm'), { type: 'warning' })
     await finishPo(poId.value)
     ElMessage.success(t('po.poFinished'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleRevoke() {
@@ -216,7 +185,9 @@ async function handleRevoke() {
     await callApi('revoke_po', { po_id: poId.value })
     ElMessage.success(t('po.revoked'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDelete() {
@@ -225,7 +196,9 @@ async function handleDelete() {
     await callApi('delete_po', { po_id: poId.value })
     ElMessage.success(t('po.poDeleted'))
     router.replace(`/sc/${scId.value}`)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleSubmit() {
@@ -252,7 +225,9 @@ async function handleGrApprove(row) {
     await approveGr(row.gr_id, parseFloat(value))
     ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrCancel(row) {
@@ -261,7 +236,9 @@ async function handleGrCancel(row) {
     await cancelGr(row.gr_id)
     ElMessage.success(t('gr.grCancelled'))
     await fetchDetail(scId.value)
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrSubmit(row) {

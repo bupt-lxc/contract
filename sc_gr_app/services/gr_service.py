@@ -146,7 +146,7 @@ def _validate_gr_creation_context(
     """Validate that a GR can be created in the given PO/SC context.
 
     - draft PO under draft SC → only draft GR allowed, no budget check
-    - po_approved PO under approved SC → only pending GR allowed, full budget check
+    - activing PO under approved SC → only pending GR allowed, full budget check
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
@@ -157,9 +157,9 @@ def _validate_gr_creation_context(
             raise ConflictError("Draft PO only allows draft GR")
         return  # no budget check for draft
 
-    if po_status == "po_approved" and sc_status == "approved":
+    if po_status == "activing" and sc_status == "approved":
         if gr_status != "pending":
-            raise ConflictError("Approved PO only allows pending GR")
+            raise ConflictError("Activing PO only allows pending GR")
         sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
         po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
         if sc_budget["sc_available_amount"] < amount:
@@ -168,8 +168,6 @@ def _validate_gr_creation_context(
             raise ConflictError("PO open amount is insufficient")
         return
 
-    if po_status == "po_pending":
-        raise ConflictError("PO must be approved before adding GR")
     raise ConflictError("SC must be draft or approved to add GR")
 
 
@@ -220,6 +218,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     """
                     insert into gr_requests (
                       gr_id,
+                      gr_no,
                       po_id,
                       requester_id,
                       estimated_amount,
@@ -234,10 +233,11 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       cancelled_at,
                       pending_date,
                       approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
+                        data.get("gr_no"),
                         po_id,
                         requester_id,
                         float(estimated_amount),
@@ -415,8 +415,8 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 ).fetchone()
                 if po is None:
                     raise ConflictError("PO not found")
-                if po["status"] != "po_approved":
-                    raise ConflictError("PO must be approved before submitting GR")
+                if po["status"] != "activing":
+                    raise ConflictError("PO must be activing before submitting GR")
 
                 # Budget check at submission time
                 estimated_amount = Decimal(str(before["estimated_amount"]))
@@ -569,6 +569,7 @@ def update_gr(
                             "requester_id",
                             "estimated_amount",
                             "remark",
+                            "gr_no",
                             "pending_date",
                             "approved_date",
                         )
@@ -595,8 +596,8 @@ def update_gr(
                     else:
                         if po_sc["sc_status"] != "approved":
                             raise ConflictError("SC must be approved")
-                        if po_sc["status"] != "po_approved":
-                            raise ConflictError("PO must be approved")
+                        if po_sc["status"] != "activing":
+                            raise ConflictError("PO must be activing")
 
                     if not is_draft_gr:
                         old_amount = Decimal(str(before["estimated_amount"]))
@@ -627,6 +628,7 @@ def update_gr(
                             requester_id = ?,
                             estimated_amount = ?,
                             remark = ?,
+                            gr_no = ?,
                             pending_date = ?,
                             approved_date = ?
                         where gr_id = ?
@@ -636,6 +638,7 @@ def update_gr(
                             merged["requester_id"],
                             float(amount),
                             merged.get("remark"),
+                            merged.get("gr_no"),
                             merged.get("pending_date"),
                             merged.get("approved_date"),
                             gr_id,
@@ -644,7 +647,7 @@ def update_gr(
                 else:
                     allowed = {
                         key: updates[key]
-                        for key in ("con_value", "remark")
+                        for key in ("con_value", "remark", "gr_no")
                         if key in updates
                     }
                     if not allowed:
@@ -672,10 +675,11 @@ def update_gr(
                         """
                         update gr_requests
                         set con_value = ?,
-                            remark = ?
+                            remark = ?,
+                            gr_no = ?
                         where gr_id = ?
                         """,
-                        (float(con_value), merged.get("remark"), gr_id),
+                        (float(con_value), merged.get("remark"), merged.get("gr_no"), gr_id),
                     )
 
                 after = _get_gr(conn, gr_id)

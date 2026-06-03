@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS pos (
 
 CREATE TABLE IF NOT EXISTS gr_requests (
   gr_id TEXT PRIMARY KEY,
+  gr_no TEXT,
   po_id TEXT NOT NULL REFERENCES pos(po_id),
   requester_id TEXT NOT NULL REFERENCES users(user_id),
   estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),

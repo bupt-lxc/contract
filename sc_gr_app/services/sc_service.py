@@ -38,6 +38,8 @@ OPTIONAL_UPDATE_FIELDS = (
     "asset_nums",
     "pending_date",
     "approved_date",
+    "internal_system_number",
+    "vendor_ids",
 )
 REQUIRED_BUSINESS_FIELDS = (
     "request_type",
@@ -165,6 +167,32 @@ def _validate_service_period(data: dict) -> None:
         raise ValidationError("service period is invalid")
 
 
+def _sync_sc_vendors(conn, sc_id: str, vendor_ids: list[str] | None) -> None:
+    """Replace the vendor associations for an SC with the given list."""
+    if vendor_ids is None:
+        return
+    conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
+    for vid in vendor_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO sc_vendors (sc_id, vendor_id) VALUES (?, ?)",
+            (sc_id, vid),
+        )
+
+
+def _fetch_sc_vendors(conn, sc_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT v.*
+        FROM vendors v
+        JOIN sc_vendors sv ON sv.vendor_id = v.vendor_id
+        WHERE sv.sc_id = ?
+        ORDER BY v.vendor_name
+        """,
+        (sc_id,),
+    ).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
 def _require_non_draft_business_fields(sc: dict) -> None:
     if sc["status"] == "draft":
         return
@@ -259,8 +287,9 @@ def create_sc(
                       asset,
                       asset_nums,
                       pending_date,
-                      approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      approved_date,
+                      internal_system_number
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -283,6 +312,7 @@ def create_sc(
                         data.get("asset_nums"),
                         timestamp,
                         timestamp if status == "approved" else None,
+                        data.get("internal_system_number"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -344,8 +374,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       asset,
                       asset_nums,
                       pending_date,
-                      approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      approved_date,
+                      internal_system_number
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -372,9 +403,11 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("asset_nums"),
                         None,
                         None,
+                        data.get("internal_system_number"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
+                _sync_sc_vendors(conn, sc_id, data.get("vendor_ids"))
                 write_audit_log(
                     conn,
                     action_type="create_sc_draft",
@@ -451,6 +484,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     ),
                 )
                 after = _get_sc(conn, sc_id)
+                _sync_sc_vendors(conn, sc_id, merged.get("vendor_ids"))
                 write_audit_log(
                     conn,
                     action_type="submit_sc",
@@ -517,6 +551,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset_nums = ?,
                         pending_date = ?,
                         approved_date = ?,
+                        internal_system_number = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -536,11 +571,14 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset_nums"),
                         merged.get("pending_date"),
                         merged.get("approved_date"),
+                        merged.get("internal_system_number"),
                         timestamp,
                         sc_id,
                     ),
                 )
                 after = _get_sc(conn, sc_id)
+                if "vendor_ids" in allowed:
+                    _sync_sc_vendors(conn, sc_id, allowed["vendor_ids"])
                 write_audit_log(
                     conn,
                     action_type="update_sc",
@@ -798,10 +836,11 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                         "SELECT gr_id FROM gr_requests WHERE po_id = ?)",
                         (po_id,),
                     )
-                # Delete GRs → POs → SC
+                # Delete GRs → POs → SC (and junction table)
                 for po_id in po_ids:
                     conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
                     conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
+                conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
                 conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
 
                 write_audit_log(
@@ -878,6 +917,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         "grs": grs,
         "audit_logs": audit_logs,
         "permissions": _sc_permissions(current_user, sc),
+        "vendors": _fetch_sc_vendors(conn, sc_id),
     }
 
 
@@ -886,7 +926,7 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
     """Approve an SC (pending → approved). Admin only.
 
     If cascade_pos=True, draft POs under this SC are submitted
-    (draft → po_pending) in the same transaction.
+    (draft → activing) in the same transaction.
     If cascade_pos=False (default), draft POs are left as-is.
     """
     require_admin(current_user)

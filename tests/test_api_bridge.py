@@ -228,7 +228,6 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
 
     monkeypatch.setattr(bridge.po_service, "create_po", fake_service("create_po"))
     monkeypatch.setattr(bridge.po_service, "update_po", fake_service("update_po"))
-    monkeypatch.setattr(bridge.po_service, "approve_po", fake_service("approve_po"))
     monkeypatch.setattr(bridge.po_service, "finish_po", fake_service("finish_po"))
 
     api = bridge.ApiBridge(app_config)
@@ -241,10 +240,6 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
         "ok": True,
         "data": ["update_po", "PO1", {"price": 3}],
     }
-    assert api.approve_po({"po_id": "PO2"}) == {
-        "ok": True,
-        "data": ["approve_po", "PO2"],
-    }
     assert api.finish_po({"po_id": "PO3"}) == {
         "ok": True,
         "data": ["finish_po", "PO3"],
@@ -252,7 +247,6 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
     assert calls == [
         ("create_po", app_config, current_user, ({"sc_id": "SC1"},)),
         ("update_po", app_config, current_user, ("PO1", {"price": 3})),
-        ("approve_po", app_config, current_user, ("PO2",)),
         ("finish_po", app_config, current_user, ("PO3",)),
     ]
 
@@ -362,20 +356,6 @@ def test_bridge_write_methods_wrap_service_permission_errors(monkeypatch, app_co
         "get_user_by_machine_id",
         lambda config, machine_id: {"user_id": "U1"},
     )
-
-    def fake_approve_po(config, user, po_id, cascade_grs=False):
-        raise PermissionDenied("Only approver can approve PO")
-
-    monkeypatch.setattr(bridge.po_service, "approve_po", fake_approve_po)
-
-    assert bridge.ApiBridge(app_config).approve_po({"po_id": "PO1"}) == {
-        "ok": False,
-        "error": {
-            "code": "PERMISSION_DENIED",
-            "message": "Only approver can approve PO",
-        },
-    }
-
 
 def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path):
     import sc_gr_app.app_shell as app_shell

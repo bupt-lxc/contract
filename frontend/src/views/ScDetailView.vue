@@ -29,16 +29,20 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('sc.scInformation') }}</h3>
-        </div>
-        <ScDetailCard :sc="detail.sc" />
-      </div>
-
-      <div class="section-card">
-        <div class="section-header">
-          <h3>{{ $t('po.poRecords') }}</h3>
-          <el-button v-if="permissions.can_manage_po" type="primary" size="small" @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null">
+          <el-button
+            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'closed')"
+            type="primary" size="small"
+            @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
+          >
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
           </el-button>
+        </div>
+        <ScDetailCard :sc="detail.sc" :vendors="detail.vendors || []" />
+      </div>
+
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('po.poRecords') }}</h3>
           <el-button size="small" @click="handleExportPos">
             <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
@@ -47,7 +51,6 @@
           :rows="detail.pos || []"
           @row-click="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
-          @approve="row => handlePoApprove(row)"
           @finish="row => handlePoFinish(row)"
           @submit="row => handlePoSubmit(row)"
         />
@@ -97,8 +100,9 @@
     <ScFormDialog
       v-model:visible="editDialogVisible"
       mode="edit"
-      :record="detail.sc"
+      :record="{ ...detail.sc, vendors: detail.vendors }"
       :users="activeUsers"
+      :vendors="vendors"
       @save-submit="handleEditSave"
     />
 
@@ -136,7 +140,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
-const { createPo, updatePo, approvePo, finishPo, submitPo } = usePo()
+const { createPo, updatePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
 const { exportRows } = useExport()
@@ -176,7 +180,9 @@ async function handleSubmit() {
     await submitSc(scId.value, {})
     ElMessage.success(t('sc.submitted'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleApprove() {
@@ -200,7 +206,9 @@ async function handleApprove() {
     await approveSc(scId.value, cascadePos)
     ElMessage.success(t('sc.approved'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDeny() {
@@ -209,7 +217,9 @@ async function handleDeny() {
     await denySc(scId.value)
     ElMessage.success(t('sc.denied'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleClose() {
@@ -224,7 +234,9 @@ async function handleClose() {
     await closeSc(scId.value)
     ElMessage.success(t('sc.closed'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleRevoke() {
@@ -240,7 +252,9 @@ async function handleRevoke() {
     await callApi('revoke_sc', { sc_id: scId.value })
     ElMessage.success(t(msg.success))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleDelete() {
@@ -249,38 +263,9 @@ async function handleDelete() {
     await callApi('delete_sc', { sc_id: scId.value })
     ElMessage.success(t('sc.deleted'))
     router.replace('/sc')
-  } catch { /* cancelled */ }
-}
-
-async function handlePoApprove(row) {
-  try {
-    await ElMessageBox.confirm(t('po.confirmApprove'), t('common.confirm'), { type: 'warning' })
-
-    // Check for unprocessed GRs — offer cascade
-    const unprocessedGrs = (detail.value.grs || []).filter(
-      g => String(g.po_id) === String(row.po_id) && (g.status === 'draft' || g.status === 'pending')
-    )
-    let cascadeGrs = false
-    if (unprocessedGrs.length > 0) {
-      const draftCount = unprocessedGrs.filter(g => g.status === 'draft').length
-      const pendingCount = unprocessedGrs.filter(g => g.status === 'pending').length
-      const parts = []
-      if (draftCount) parts.push(`${draftCount} draft`)
-      if (pendingCount) parts.push(`${pendingCount} pending`)
-      try {
-        await ElMessageBox.confirm(
-          `${parts.join(' and ')} GR(s) exist. Also process them?`,
-          t('common.confirm'),
-          { confirmButtonText: 'Yes, cascade process', cancelButtonText: 'No', type: 'warning' }
-        )
-        cascadeGrs = true
-      } catch { /* user chose No */ }
-    }
-
-    await approvePo(row.po_id, cascadeGrs)
-    ElMessage.success(t('po.approved'))
-    await fetchDetail(scId.value)
-  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handlePoFinish(row) {
@@ -289,7 +274,9 @@ async function handlePoFinish(row) {
     await finishPo(row.po_id)
     ElMessage.success(t('po.finished'))
     await fetchDetail(scId.value)
-  } catch { /* cancelled */ }
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handlePoSubmit(row) {

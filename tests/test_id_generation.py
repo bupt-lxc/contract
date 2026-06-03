@@ -62,7 +62,7 @@ def test_generate_po_id_creates_sequential_ids(app_config):
     with connect(app_config) as conn:
         conn.execute(
             "INSERT INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at) "
-            "VALUES (?, 'SC-001', 'V-001', 100, 'po_pending', ?, ?)",
+            "VALUES (?, 'SC-001', 'V-001', 100, 'activing', ?, ?)",
             (id1, timestamp, timestamp),
         )
         conn.commit()
@@ -93,15 +93,15 @@ def test_generate_gr_id_creates_sequential_ids(app_config):
         )
         conn.execute(
             "INSERT INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at) "
-            "VALUES ('PO-GR', 'SC-GR', 'V-001', 100, 'po_approved', ?, ?)",
+            "VALUES ('PO-GR', 'SC-GR', 'V-001', 100, 'activing', ?, ?)",
             (timestamp, timestamp),
         )
         conn.commit()
     with connect(app_config) as conn:
         conn.execute(
-            "INSERT INTO gr_requests (gr_id, po_id, requester_id, estimated_amount, status, created_by, created_at) "
-            "VALUES (?, 'PO-GR', 'U-001', 50, 'pending', 'U-001', ?)",
-            (id1, timestamp),
+            "INSERT INTO gr_requests (gr_id, gr_no, po_id, requester_id, estimated_amount, status, created_by, created_at) "
+            "VALUES (?, ?, 'PO-GR', 'U-001', 50, 'pending', 'U-001', ?)",
+            (id1, None, timestamp),
         )
         conn.commit()
     id2 = _generate_gr_id(app_config, mid)
