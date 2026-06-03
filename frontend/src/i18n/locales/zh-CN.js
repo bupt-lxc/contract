@@ -71,7 +71,9 @@ export default {
     min: ' 最小',
     max: ' 最大',
     browse: '浏览',
-    vendor: '供应商'
+    vendor: '供应商',
+    yes: '是',
+    no: '否'
   },
 
   status: {
@@ -303,7 +305,12 @@ home: {
     deleteGr: '删除收货记录',
     confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
     grDeleted: '收货记录已删除',
-    activingDate: '生效日期'
+    activingDate: '生效日期',
+    goodsServiceDescription: '货物/服务描述',
+    confirmationName: '确认名称',
+    deliveryFrom: '交付从',
+    deliveryTo: '交付至',
+    lastDelivery: '最后交付'
   },
 
   vendor: {
