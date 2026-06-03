@@ -4,9 +4,7 @@
     v-loading="loading"
     stripe
     border
-    @row-click="$emit('row-click', $event)"
     :row-class-name="rowClass"
-    style="cursor:pointer"
   >
     <el-table-column :label="$t('po.status')" width="100">
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -32,8 +30,9 @@
     <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120">
       <template #default="{ row }">{{ formatDate(row.activing_date) }}</template>
     </el-table-column>
-    <el-table-column :label="$t('po.actions')" width="140" fixed="right">
+    <el-table-column :label="$t('po.actions')" width="200" fixed="right">
       <template #default="{ row }">
+        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
         <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
         <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
         <el-button v-if="row.status === 'activing'" type="info" link size="small" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
@@ -52,7 +51,7 @@ defineProps({
   loading: { type: Boolean, default: false }
 })
 
-defineEmits(['row-click', 'edit', 'finish', 'submit'])
+defineEmits(['detail', 'edit', 'finish', 'submit'])
 
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }

@@ -21,7 +21,7 @@
       <el-button v-if="selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border @row-click="handleRowClick" @selection-change="val => selectedRows = val">
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val">
       <el-table-column type="selection" width="50" />
       <el-table-column :label="$t('common.status')" width="100">
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -44,6 +44,11 @@
       </el-table-column>
       <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
         <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="70" fixed="right">
+        <template #default="{ row }">
+          <el-button type="primary" link size="small" @click.stop="goToDetail(row)">{{ $t('common.detail') }}</el-button>
+        </template>
       </el-table-column>
       <template #empty><el-empty :description="$t('gr.noRecords')" /></template>
     </el-table>
@@ -196,10 +201,8 @@ function handleReset() {
   searchGrs()
 }
 
-function handleRowClick(row) {
-  if (row.sc_id && row.po_id) {
-    router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
-  }
+function goToDetail(row) {
+  router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
 }
 
 function handlePageChange(page) { onPageChange(page); searchGrs() }
