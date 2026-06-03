@@ -28,6 +28,17 @@ def test_migration_creates_core_tables(app_config):
     }.issubset(tables)
 
 
+def test_sc_vendors_has_vendor_snapshot_column(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(sc_vendors)")
+        }
+    assert "vendor_snapshot" in columns
+
+
 def test_migration_records_versions_once(app_config):
     migrate(app_config)
     migrate(app_config)
@@ -37,7 +48,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     assert rows[0][1]
     assert rows[1][1]
 
@@ -53,7 +64,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
@@ -276,7 +287,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):

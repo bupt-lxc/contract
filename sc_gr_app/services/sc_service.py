@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import isfinite
@@ -41,7 +42,19 @@ OPTIONAL_UPDATE_FIELDS = (
     "internal_system_number",
     "vendor_ids",
 )
+_VENDOR_SNAPSHOT_FIELDS = (
+    "vendor_id",
+    "vendor_name",
+    "ksrm_vendor_code",
+    "contact_person",
+    "phone",
+    "email",
+    "service_scope",
+    "description",
+    "inquiry_history",
+)
 REQUIRED_BUSINESS_FIELDS = (
+    "sc_no",
     "request_type",
     "cost_center",
     "sc_amount",
@@ -170,29 +183,74 @@ def _validate_service_period(data: dict) -> None:
 
 
 def _sync_sc_vendors(conn, sc_id: str, vendor_ids: list[str] | None) -> None:
-    """Replace the vendor associations for an SC with the given list."""
+    """Replace the vendor associations for an SC with the given list.
+
+    Captures a JSON snapshot of each vendor's current state so historical
+    SC records are unaffected by later vendor edits.
+    """
     if vendor_ids is None:
         return
     conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
     for vid in vendor_ids:
+        vendor_row = conn.execute(
+            "SELECT * FROM vendors WHERE vendor_id = ?", (vid,)
+        ).fetchone()
+        snapshot = None
+        if vendor_row is not None:
+            snapshot_data = {
+                field: vendor_row[field]
+                for field in _VENDOR_SNAPSHOT_FIELDS
+            }
+            snapshot = json.dumps(snapshot_data, ensure_ascii=False)
         conn.execute(
-            "INSERT OR IGNORE INTO sc_vendors (sc_id, vendor_id) VALUES (?, ?)",
-            (sc_id, vid),
+            "INSERT OR IGNORE INTO sc_vendors (sc_id, vendor_id, vendor_snapshot) "
+            "VALUES (?, ?, ?)",
+            (sc_id, vid, snapshot),
         )
+
+
+def _build_vendor_from_live(row) -> dict:
+    """Extract vendor fields from a live JOIN row (backward compat fallback)."""
+    return {
+        "vendor_id": row["vendor_id"],
+        "vendor_name": row["vendor_name"],
+        "ksrm_vendor_code": row["ksrm_vendor_code"],
+        "contact_person": row["contact_person"],
+        "phone": row["phone"],
+        "email": row["email"],
+        "service_scope": row["service_scope"],
+        "description": row["description"],
+        "inquiry_history": row["inquiry_history"],
+    }
 
 
 def _fetch_sc_vendors(conn, sc_id: str) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT v.*
-        FROM vendors v
-        JOIN sc_vendors sv ON sv.vendor_id = v.vendor_id
+        SELECT sv.vendor_snapshot,
+               v.vendor_id, v.vendor_name, v.ksrm_vendor_code,
+               v.contact_person, v.phone, v.email, v.service_scope,
+               v.description, v.inquiry_history
+        FROM sc_vendors sv
+        LEFT JOIN vendors v ON v.vendor_id = sv.vendor_id
         WHERE sv.sc_id = ?
-        ORDER BY v.vendor_name
         """,
         (sc_id,),
     ).fetchall()
-    return [_row_to_dict(row) for row in rows]
+
+    vendors = []
+    for row in rows:
+        if row["vendor_snapshot"] is not None:
+            try:
+                vendor = json.loads(row["vendor_snapshot"])
+            except (json.JSONDecodeError, TypeError):
+                vendor = _build_vendor_from_live(row)
+        else:
+            vendor = _build_vendor_from_live(row)
+        vendors.append(vendor)
+
+    vendors.sort(key=lambda v: v.get("vendor_name", ""))
+    return vendors
 
 
 def _require_non_draft_business_fields(sc: dict) -> None:
