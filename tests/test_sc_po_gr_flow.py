@@ -840,14 +840,25 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
     seed_users(app_config)
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc
+    from sc_gr_app.services.vendor_service import create_vendor
 
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
 
+    create_vendor(
+        app_config,
+        ADMIN,
+        {
+            "vendor_id": "V1",
+            "vendor_name": "Test Vendor",
+            "service_scope": "General Service",
+        },
+    )
+
     # sc_no is NOT required for draft→pending; only approve needs it
     # But other business fields are required
     with pytest.raises(ValidationError, match="request_type"):
-        submit_sc(app_config, USER, sc_id, {"sc_no": "SC-TEST-001"})
+        submit_sc(app_config, USER, sc_id, {"sc_no": "SC-TEST-001", "vendor_ids": ["V1"]})
 
     submitted = submit_sc(
         app_config,
@@ -859,6 +870,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
             "service_period_end": "2026-12-31",
+            "vendor_ids": ["V1"],
         },
     )
 

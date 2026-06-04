@@ -179,7 +179,6 @@ const draftRules = {
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }]
 }
 const submitRules = {
-  sc_no: [{ required: true, message: t('sc.scNoRequired'), trigger: 'change' }],
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }],
   request_type: [{ required: true, message: t('sc.requestTypeRequired'), trigger: 'change' }],
   cost_center: [{ required: true, message: t('sc.costCenterRequired'), trigger: 'change' }],

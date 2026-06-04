@@ -22,10 +22,17 @@
       <div class="section-card">
         <h3 style="margin-bottom:12px">{{ $t('po.poInformation') }}</h3>
         <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('sc.scId')">
+            <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('sc.scNo')">{{ scDetail.sc?.sc_no || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item />
           <el-descriptions-item :label="$t('po.poId')">{{ po.po_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poNo')">{{ po.po_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('po.openPoAmount')"><AmountDisplay :value="po.open_po_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>

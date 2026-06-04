@@ -72,7 +72,11 @@ watch(() => props.config, (val) => {
   }
 }, { immediate: true })
 
+let saveTimer = null
 function emitSave() {
-  emit('save', { ...local })
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    emit('save', { ...local })
+  }, 300)
 }
 </script>

@@ -485,6 +485,15 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.errors import PermissionDenied
+            with connect(self.config) as conn:
+                sc = conn.execute("SELECT requester_id FROM sc_records WHERE sc_id = ?", (sc_id,)).fetchone()
+            if not sc:
+                from sc_gr_app.errors import NotFound
+                raise NotFound("SC not found")
+            if current_user.get("role") != "admin" and current_user.get("user_id") != sc["requester_id"]:
+                raise PermissionDenied("Only the SC owner or admin can modify notification settings")
             notification_service.save_sc_notification_config(self.config, sc_id, data)
             return ok()
         except Exception as exc:
@@ -501,6 +510,8 @@ class ApiBridge:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
             data = _require_payload_field(payload, "data")
             notification_service.save_notification_defaults(self.config, data)
             return ok()

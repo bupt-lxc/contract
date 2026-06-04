@@ -102,9 +102,9 @@ const allUsers = computed(() => props.users)
 const local = reactive({
   admin_recipients: [],
   transitions: {
-    sc: { submit: { to: [], cc: [] }, approve: { to: [], cc: [] }, deny: { to: [], cc: [] }, close: { to: [], cc: [] } },
-    po: { create: { to: [], cc: [] }, approve: { to: [], cc: [] }, finish: { to: [], cc: [] } },
-    gr: { create: { to: [], cc: [] }, approve: { to: [], cc: [] }, cancel: { to: [], cc: [] } }
+    sc: { submit: { to: [], cc: [] }, confirm: { to: [], cc: [] }, approve: { to: [], cc: [] }, deny: { to: [], cc: [] }, close: { to: [], cc: [] }, revoke: { to: [], cc: [] } },
+    po: { create: { to: [], cc: [] }, submit: { to: [], cc: [] }, finish: { to: [], cc: [] }, revoke: { to: [], cc: [] } },
+    gr: { create: { to: [], cc: [] }, submit: { to: [], cc: [] }, confirm: { to: [], cc: [] }, approve: { to: [], cc: [] }, cancel: { to: [], cc: [] }, revoke: { to: [], cc: [] } }
   },
   default_cc: [],
   date_thresholds: [],
@@ -129,13 +129,17 @@ function transitionRows(entityType) {
   }))
 }
 
+let saveTimer = null
 function emitSave() {
-  emit('save', {
-    admin_recipients: local.admin_recipients,
-    transitions: local.transitions,
-    default_cc: local.default_cc,
-    date_thresholds: local.date_thresholds,
-    amount_thresholds: local.amount_thresholds
-  })
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    emit('save', {
+      admin_recipients: local.admin_recipients,
+      transitions: local.transitions,
+      default_cc: local.default_cc,
+      date_thresholds: local.date_thresholds,
+      amount_thresholds: local.amount_thresholds
+    })
+  }, 300)
 }
 </script>
