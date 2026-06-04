@@ -90,18 +90,6 @@
       <el-form-item v-if="form.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">
         <el-input v-model="form.internal_system_number" />
       </el-form-item>
-      <el-row v-if="mode === 'edit'" :gutter="16">
-        <el-col :span="12">
-          <el-form-item :label="$t('sc.pendingDate')">
-            <el-date-picker v-model="form.pending_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item :label="$t('sc.approvedDate')">
-            <el-date-picker v-model="form.approved_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
-          </el-form-item>
-        </el-col>
-      </el-row>
       <el-form-item :label="$t('attachment.attachments')">
         <div>
           <el-button size="small" @click="handlePickFiles">
@@ -168,9 +156,7 @@ const emptyForm = () => ({
   vendor_ids: [],
   asset: 'N',
   asset_nums: '',
-  internal_system_number: '',
-  pending_date: null,
-  approved_date: null
+  internal_system_number: ''
 })
 
 const form = reactive(emptyForm())
