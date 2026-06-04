@@ -324,12 +324,9 @@ async function handlePoSave(data) {
 
 async function handleAddVendor(vendorId) {
   try {
-    const result = await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
-    // Update detail.vendors in place so the section reactively updates
-    if (state.detail && result) {
-      state.detail = { ...state.detail, vendors: result }
-    }
+    await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
     ElMessage.success(t('sc.vendorAdded'))
+    await fetchDetail(scId.value)
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -342,11 +339,9 @@ async function handleRemoveVendor(vendorId) {
       t('common.confirm'),
       { type: 'warning' }
     )
-    const result = await callApi('remove_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
-    if (state.detail && result) {
-      state.detail = { ...state.detail, vendors: result }
-    }
+    await callApi('remove_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
     ElMessage.success(t('sc.vendorRemoved'))
+    await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
