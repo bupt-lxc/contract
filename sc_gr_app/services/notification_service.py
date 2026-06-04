@@ -208,9 +208,22 @@ def save_notification_defaults(config: AppConfig, data: dict) -> None:
                 for entity_type in ("sc", "po", "gr"):
                     key = f"notify.transitions.{entity_type}"
                     if entity_type in transitions:
+                        # Merge with existing to preserve transitions the UI
+                        # may not know about (e.g. added by a later migration).
+                        existing_row = conn.execute(
+                            "SELECT setting_value FROM app_settings WHERE setting_key = ?",
+                            (key,),
+                        ).fetchone()
+                        if existing_row:
+                            existing = json.loads(existing_row["setting_value"])
+                            # incoming takes precedence for keys it provides;
+                            # existing keys not in incoming are preserved
+                            merged = {**existing, **transitions[entity_type]}
+                        else:
+                            merged = transitions[entity_type]
                         conn.execute(
                             "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
-                            (key, json.dumps(transitions[entity_type]), timestamp),
+                            (key, json.dumps(merged), timestamp),
                         )
             conn.commit()
         except Exception:
