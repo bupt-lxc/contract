@@ -71,7 +71,9 @@ export default {
     min: ' 最小',
     max: ' 最大',
     browse: '浏览',
-    vendor: '供应商'
+    vendor: '供应商',
+    yes: '是',
+    no: '否'
   },
 
   status: {
@@ -266,6 +268,7 @@ home: {
     estimatedAmount: '预估金额',
     conValue: '确认金额',
     estAmount: '预估金额',
+    taxRate: '增值税率(%)',
     remark: '备注',
     created: '创建时间',
     actions: '操作',
@@ -284,7 +287,7 @@ home: {
     grApproved: '收货记录已批准',
     grCancelled: '收货记录已取消',
     approveGr: '批准收货记录',
-    enterConValue: '请输入此收货记录的合同金额 (con_value)：',
+    enterConValue: '请输入确认金额（留空则根据预估金额和增值税率自动计算）：',
     enterValidNumber: '请输入有效的正数',
     createdBy: '创建者',
     invalidNumber: '请输入有效的正数',
@@ -302,7 +305,12 @@ home: {
     deleteGr: '删除收货记录',
     confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
     grDeleted: '收货记录已删除',
-    activingDate: '生效日期'
+    activingDate: '生效日期',
+    goodsServiceDescription: '货物/服务描述',
+    confirmationName: '确认名称',
+    deliveryFrom: '交付从',
+    deliveryTo: '交付至',
+    lastDelivery: '最后交付'
   },
 
   vendor: {
@@ -320,6 +328,7 @@ home: {
     email: '邮箱',
     description: '描述',
     inquiryHistory: '询价历史',
+    companyNameCn: '公司中文名',
     disableConfirm: '确认禁用此供应商？',
     noRecords: '暂无供应商信息。',
     vendorDisabled: '供应商已禁用',

@@ -341,9 +341,10 @@ def test_bridge_write_methods_require_payload_fields(monkeypatch, app_config):
         lambda config, machine_id: {"user_id": "U1"},
     )
 
-    assert bridge.ApiBridge(app_config).approve_gr({"gr_id": "GR1", "con_value": ""}) == {
+    # con_value is now optional — auto-calculated from tax_rate if omitted
+    assert bridge.ApiBridge(app_config).approve_gr({"gr_id": "GR1"}) == {
         "ok": False,
-        "error": {"code": "VALIDATION_ERROR", "message": "con_value is required"},
+        "error": {"code": "PERMISSION_DENIED", "message": "Admin permission required"},
     }
 
 

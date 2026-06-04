@@ -11,6 +11,9 @@
     <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
       <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
     </el-table-column>
+    <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center">
+      <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
+    </el-table-column>
     <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
       <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
     </el-table-column>

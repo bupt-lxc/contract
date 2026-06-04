@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 21
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -894,6 +894,58 @@ def _migrate_v16(conn) -> None:
     _record(conn, 16)
 
 
+def _migrate_v17(conn) -> None:
+    """Add vendor_snapshot column to sc_vendors for SC vendor history preservation."""
+    if _table_exists(conn, "sc_vendors"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_vendors)")}
+        if "vendor_snapshot" not in existing:
+            conn.execute("ALTER TABLE sc_vendors ADD COLUMN vendor_snapshot TEXT")
+    _record(conn, 17)
+
+
+def _migrate_v18(conn) -> None:
+    """Add company_name_cn column to vendors table."""
+    if _table_exists(conn, "vendors"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(vendors)")}
+        if "company_name_cn" not in existing:
+            conn.execute("ALTER TABLE vendors ADD COLUMN company_name_cn TEXT")
+    _record(conn, 18)
+
+
+def _migrate_v19(conn) -> None:
+    """Add tax_rate column to gr_requests."""
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "tax_rate" not in existing:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN tax_rate REAL")
+    _record(conn, 19)
+
+
+def _migrate_v20(conn) -> None:
+    """Add goods_service_description, confirmation_name, delivery_from, delivery_to, last_delivery to gr_requests."""
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        for col in ("goods_service_description", "confirmation_name", "delivery_from", "delivery_to", "last_delivery"):
+            if col not in existing:
+                conn.execute(f"ALTER TABLE gr_requests ADD COLUMN {col} TEXT")
+    _record(conn, 20)
+
+
+def _migrate_v21(conn) -> None:
+    """Add PO revoke transition to default notification rules."""
+    if _table_exists(conn, "app_settings"):
+        timestamp = utc_now()
+        po_transitions = (
+            '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"revoke":{"to":["requester","notify.admin_recipients"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.po", po_transitions, timestamp),
+        )
+    _record(conn, 21)
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -980,6 +1032,26 @@ def migrate(config: AppConfig) -> None:
                 conn.commit()
                 conn.execute("PRAGMA legacy_alter_table = OFF")
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 17 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v17(conn)
+                conn.commit()
+            if 18 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v18(conn)
+                conn.commit()
+            if 19 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v19(conn)
+                conn.commit()
+            if 20 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v20(conn)
+                conn.commit()
+            if 21 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v21(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

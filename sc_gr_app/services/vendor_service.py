@@ -28,6 +28,7 @@ SUPPORTED_SERVICE_SCOPES = {
 }
 OPTIONAL_FIELDS = (
     "ksrm_vendor_code",
+    "company_name_cn",
     "contact_person",
     "phone",
     "email",
@@ -78,6 +79,7 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
                       vendor_id,
                       vendor_name,
                       ksrm_vendor_code,
+                      company_name_cn,
                       contact_person,
                       phone,
                       service_scope,
@@ -87,12 +89,13 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
                       created_by,
                       created_at,
                       updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         vendor_id,
                         data["vendor_name"],
                         data.get("ksrm_vendor_code"),
+                        data.get("company_name_cn"),
                         data.get("contact_person"),
                         data.get("phone"),
                         data["service_scope"],
@@ -158,8 +161,9 @@ def update_vendor(config: AppConfig, current_user: dict, vendor_id: str, data: d
 
                 timestamp = utc_now()
                 fields = [
-                    "vendor_name", "ksrm_vendor_code", "contact_person", "phone",
-                    "service_scope", "email", "description", "inquiry_history"
+                    "vendor_name", "ksrm_vendor_code", "company_name_cn",
+                    "contact_person", "phone", "service_scope", "email",
+                    "description", "inquiry_history"
                 ]
                 if "service_scope" in data and data["service_scope"] not in SUPPORTED_SERVICE_SCOPES:
                     raise ValidationError("service_scope is invalid")

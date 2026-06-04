@@ -6,7 +6,7 @@
         <p><StatusBadge v-if="gr.status" :status="gr.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_gr && (gr.status === 'pending' || gr.status === 'manager_confirm')" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && ['draft','pending','manager_confirm','approved'].includes(gr.status)" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
@@ -35,7 +35,13 @@
           </el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.taxRate')">{{ gr.tax_rate != null ? gr.tax_rate + '%' : '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.conValue')"><AmountDisplay :value="gr.con_value" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.goodsServiceDescription')" :span="2">{{ gr.goods_service_description || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.confirmationName')">{{ gr.confirmation_name || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.lastDelivery')">{{ gr.last_delivery === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.deliveryFrom')">{{ (gr.delivery_from || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.deliveryTo')">{{ (gr.delivery_to || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmedAt')">{{ (gr.confirmed_at || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
@@ -157,17 +163,25 @@ async function handleConfirm() {
 
 async function handleApprove() {
   try {
+    // Pre-fill with auto-calculated tax-included amount if tax_rate is set
+    const grData = gr.value || {}
+    let defaultVal = ''
+    if (grData.estimated_amount && grData.tax_rate != null) {
+      defaultVal = String(Math.round((Number(grData.estimated_amount) * (1 + Number(grData.tax_rate) / 100)) * 100) / 100)
+    }
     const { value } = await ElMessageBox.prompt(
       t('gr.enterConValue'),
       t('gr.approveGr'),
       {
         confirmButtonText: t('common.approve'),
         type: 'warning',
-        inputPattern: /^\d+(\.\d{1,2})?$/,
+        inputValue: defaultVal,
+        inputPattern: /^(\d+(\.\d{1,2})?)?$/,
         inputErrorMessage: t('gr.invalidNumber')
       }
     )
-    await approveGr(grId.value, parseFloat(value))
+    const conValue = value ? parseFloat(value) : null
+    await approveGr(grId.value, conValue)
     ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
   } catch (e) {

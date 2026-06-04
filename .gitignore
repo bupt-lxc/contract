@@ -13,3 +13,4 @@ data/
 .github/workflows/
 CLAUDE.md
 .claude/
+docs/notification-system-review-*.md

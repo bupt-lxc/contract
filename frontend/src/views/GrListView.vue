@@ -36,6 +36,9 @@
       <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
         <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
       </el-table-column>
+      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center">
+        <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
+      </el-table-column>
       <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
       </el-table-column>
@@ -177,9 +180,15 @@ const grFilterConfig = [
   { name: 'requester_id', label: t('gr.requester'), type: 'input' },
   { name: 'vendor_id', label: t('gr.vendorId'), type: 'input' },
   { name: 'estimated_amount', label: t('gr.estAmount'), type: 'amount-range' },
+  { name: 'tax_rate', label: t('gr.taxRate'), type: 'input' },
   { name: 'con_value', label: t('gr.conValue'), type: 'amount-range' },
   { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
   { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'goods_service_description', label: t('gr.goodsServiceDescription'), type: 'input' },
+  { name: 'confirmation_name', label: t('gr.confirmationName'), type: 'input' },
+  { name: 'delivery_from', label: t('gr.deliveryFrom'), type: 'date-range' },
+  { name: 'delivery_to', label: t('gr.deliveryTo'), type: 'date-range' },
+  { name: 'last_delivery', label: t('gr.lastDelivery'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
@@ -263,7 +272,7 @@ function confirmGrSelection() {
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
-    const payload = { ...formData, po_id: grSelectedPoId.value }
+    const payload = { ...formData, po_id: grSelectedPoId.value, status: 'manager_confirm' }
     const result = await callApi('create_gr', { data: payload })
     const created = result
     if (_attachments?.length && created?.gr_id) {
@@ -338,7 +347,13 @@ async function handleExport() {
       { key: 'sc_no', label: t('gr.scNo') },
       { key: 'vendor_name', label: t('gr.vendor') },
       { key: 'estimated_amount', label: t('gr.estimated') },
+      { key: 'tax_rate', label: t('gr.taxRate') },
       { key: 'con_value', label: t('gr.conValue') },
+      { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
+      { key: 'confirmation_name', label: t('gr.confirmationName') },
+      { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
+      { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
+      { key: 'last_delivery', label: t('gr.lastDelivery') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
     ]
