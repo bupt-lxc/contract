@@ -114,6 +114,54 @@ class TestBridgeNotificationEndpoints:
         assert result["ok"] is True
         assert "notify.admin_recipients" in result["data"]
 
+    def test_get_notification_defaults_denied_for_requester(self, monkeypatch, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "1234567", "requester")
+            conn.commit()
+
+        monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+        monkeypatch.setattr(bridge, "get_user_by_machine_id",
+                            lambda config, machine_id: {"user_id": "U1", "role": "requester", "machine_id": "1234567"})
+
+        api = bridge.ApiBridge(app_config)
+        result = api.get_notification_defaults()
+        assert result["ok"] is False
+        assert result["error"]["code"] == "PERMISSION_DENIED"
+
+    def test_save_notification_defaults_admin(self, monkeypatch, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "1234567", "admin")
+            conn.commit()
+
+        monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+        monkeypatch.setattr(bridge, "get_user_by_machine_id",
+                            lambda config, machine_id: {"user_id": "U1", "role": "admin", "machine_id": "1234567"})
+
+        api = bridge.ApiBridge(app_config)
+        result = api.save_notification_defaults({
+            "data": {"admin_recipients": ["U1"]}
+        })
+        assert result["ok"] is True
+
+    def test_save_notification_defaults_denied_for_requester(self, monkeypatch, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "1234567", "requester")
+            conn.commit()
+
+        monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+        monkeypatch.setattr(bridge, "get_user_by_machine_id",
+                            lambda config, machine_id: {"user_id": "U1", "role": "requester", "machine_id": "1234567"})
+
+        api = bridge.ApiBridge(app_config)
+        result = api.save_notification_defaults({
+            "data": {"admin_recipients": ["U1"]}
+        })
+        assert result["ok"] is False
+        assert result["error"]["code"] == "PERMISSION_DENIED"
+
     def test_list_notification_queue(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
