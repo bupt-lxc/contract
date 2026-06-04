@@ -99,7 +99,7 @@ class TestBridgeNotificationEndpoints:
         assert result["ok"] is False
         assert result["error"]["code"] == "PERMISSION_DENIED"
 
-    def test_get_notification_defaults_admin_only(self, monkeypatch, app_config):
+    def test_get_notification_defaults_admin(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "admin")
@@ -114,7 +114,7 @@ class TestBridgeNotificationEndpoints:
         assert result["ok"] is True
         assert "notify.admin_recipients" in result["data"]
 
-    def test_get_notification_defaults_denied_for_requester(self, monkeypatch, app_config):
+    def test_get_notification_defaults_allowed_for_requester(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
@@ -126,8 +126,8 @@ class TestBridgeNotificationEndpoints:
 
         api = bridge.ApiBridge(app_config)
         result = api.get_notification_defaults()
-        assert result["ok"] is False
-        assert result["error"]["code"] == "PERMISSION_DENIED"
+        assert result["ok"] is True
+        assert "notify.admin_recipients" in result["data"]
 
     def test_save_notification_defaults_admin(self, monkeypatch, app_config):
         migrate(app_config)

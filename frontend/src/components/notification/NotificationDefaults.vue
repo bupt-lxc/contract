@@ -147,7 +147,6 @@ const local = reactive({
 })
 
 watch(() => props.defaults, (val) => {
-  console.log('[NotifDefaults] watch fired, val:', JSON.stringify(val))
   if (val) {
     // Update arrays in-place to preserve reactivity references
     const ar = val['notify.admin_recipients']
@@ -179,9 +178,8 @@ watch(() => props.defaults, (val) => {
     const at = val['notify.default_amount_thresholds']
     local.amount_thresholds.splice(0, local.amount_thresholds.length, ...(Array.isArray(at) ? at : []))
 
-    console.log('[NotifDefaults] local.transitions.sc after watch:', JSON.stringify(local.transitions.sc))
   } else {
-    console.log('[NotifDefaults] watch: val is falsy, keeping hardcoded defaults')
+    // val is falsy, keeping hardcoded defaults
   }
 }, { immediate: true })
 

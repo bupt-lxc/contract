@@ -38,10 +38,8 @@ export function useNotification() {
     state.defaultsError = null
     try {
       const result = await callApi('get_notification_defaults', {})
-      console.log('[useNotification] fetchDefaults result:', JSON.stringify(result))
       state.defaults = result
     } catch (e) {
-      console.error('[useNotification] fetchDefaults error:', e.message)
       state.defaultsError = e.message
       state.defaults = null
     } finally {
