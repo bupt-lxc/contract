@@ -84,11 +84,22 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
     to_ids = resolve_recipients(conn, to_rule, entity, current_user)
     cc_ids = resolve_recipients(conn, cc_rule, entity, current_user)
 
-    # Merge per-SC CC list
-    if entity_type == "sc":
+    # Merge per-PO CC list
+    po_id = None
+    if entity_type == "po":
+        po_id = entity_id
+    elif entity_type == "gr":
+        gr_row = conn.execute(
+            "SELECT po_id FROM gr_requests WHERE gr_id = ?", (entity_id,)
+        ).fetchone()
+        if gr_row:
+            po_id = gr_row["po_id"]
+    # SC events no longer have per-entity notification config
+
+    if po_id:
         config_row = conn.execute(
-            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'sc' AND entity_id = ? AND enabled = 1",
-            (entity_id,),
+            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+            (po_id,),
         ).fetchone()
         if config_row:
             extra_cc = json.loads(config_row["cc_user_ids"])
@@ -110,41 +121,68 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
         return
 
     timestamp = _utc_now()
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO notification_queue
-            (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
-        VALUES (?, ?, 'status_change', ?, ?, ?, ?)
-        """,
-        (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
-    )
+    # If a pending entry already exists for the same event, refresh its
+    # timestamp and recipients rather than silently dropping the duplicate.
+    # This is important when an entity is revoked and re-submitted before
+    # the notification script processes the first submit.
+    existing = conn.execute(
+        """SELECT id FROM notification_queue
+           WHERE entity_type = ? AND entity_id = ? AND event_key = ? AND status = 'pending'""",
+        (entity_type, entity_id, transition),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE notification_queue
+               SET to_recipients = ?, cc_recipients = ?, created_at = ?
+               WHERE id = ?""",
+            (json.dumps(to_ids), json.dumps(cc_ids), timestamp, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO notification_queue
+                (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
+            VALUES (?, ?, 'status_change', ?, ?, ?, ?)
+            """,
+            (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+        )
 
 
-def get_sc_notification_config(config: AppConfig, sc_id: str) -> dict | None:
+def get_po_notification_config(config: AppConfig, po_id: str) -> dict | None:
     with connect(config) as conn:
         row = conn.execute(
             "SELECT enabled, cc_user_ids, date_thresholds, amount_thresholds "
-            "FROM notification_config WHERE entity_type = 'sc' AND entity_id = ?",
-            (sc_id,),
+            "FROM notification_config WHERE entity_type = 'po' AND entity_id = ?",
+            (po_id,),
         ).fetchone()
-        if row is None:
-            return None
+        if row is not None:
+            return {
+                "enabled": bool(row["enabled"]),
+                "cc_user_ids": json.loads(row["cc_user_ids"]),
+                "date_thresholds": json.loads(row["date_thresholds"]),
+                "amount_thresholds": json.loads(row["amount_thresholds"]),
+            }
+        # No PO-specific config — return global defaults so new POs
+        # inherit the system-wide notification settings automatically.
+        default_cc = _read_app_setting(conn, "notify.default_cc") or []
+        default_date = _read_app_setting(conn, "notify.default_date_thresholds") or [6, 3, 1, 0.5]
+        default_amount = _read_app_setting(conn, "notify.default_amount_thresholds") or [50, 30, 10]
         return {
-            "enabled": bool(row["enabled"]),
-            "cc_user_ids": json.loads(row["cc_user_ids"]),
-            "date_thresholds": json.loads(row["date_thresholds"]),
-            "amount_thresholds": json.loads(row["amount_thresholds"]),
+            "enabled": True,
+            "cc_user_ids": default_cc,
+            "date_thresholds": default_date,
+            "amount_thresholds": default_amount,
         }
 
 
-def save_sc_notification_config(config: AppConfig, sc_id: str, data: dict) -> None:
+def save_po_notification_config(config: AppConfig, po_id: str, data: dict) -> None:
     with connect(config) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
                 """
                 INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids, date_thresholds, amount_thresholds)
-                VALUES ('sc', ?, ?, ?, ?, ?)
+                VALUES ('po', ?, ?, ?, ?, ?)
                 ON CONFLICT(entity_type, entity_id) DO UPDATE SET
                     enabled = excluded.enabled,
                     cc_user_ids = excluded.cc_user_ids,
@@ -152,7 +190,7 @@ def save_sc_notification_config(config: AppConfig, sc_id: str, data: dict) -> No
                     amount_thresholds = excluded.amount_thresholds
                 """,
                 (
-                    sc_id,
+                    po_id,
                     1 if data.get("enabled", True) else 0,
                     json.dumps(data.get("cc_user_ids", [])),
                     json.dumps(data.get("date_thresholds", [])),
@@ -208,9 +246,22 @@ def save_notification_defaults(config: AppConfig, data: dict) -> None:
                 for entity_type in ("sc", "po", "gr"):
                     key = f"notify.transitions.{entity_type}"
                     if entity_type in transitions:
+                        # Merge with existing to preserve transitions the UI
+                        # may not know about (e.g. added by a later migration).
+                        existing_row = conn.execute(
+                            "SELECT setting_value FROM app_settings WHERE setting_key = ?",
+                            (key,),
+                        ).fetchone()
+                        if existing_row:
+                            existing = json.loads(existing_row["setting_value"])
+                            # incoming takes precedence for keys it provides;
+                            # existing keys not in incoming are preserved
+                            merged = {**existing, **transitions[entity_type]}
+                        else:
+                            merged = transitions[entity_type]
                         conn.execute(
                             "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
-                            (key, json.dumps(transitions[entity_type]), timestamp),
+                            (key, json.dumps(merged), timestamp),
                         )
             conn.commit()
         except Exception:

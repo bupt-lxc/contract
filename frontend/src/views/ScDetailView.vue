@@ -89,13 +89,6 @@
         </el-table>
       </div>
 
-      <ScNotificationCard
-        v-if="detail.sc"
-        :sc-id="detail.sc.sc_id"
-        :config="notificationConfig"
-        :users="activeUsers"
-        @save="handleNotificationSave"
-      />
     </template>
 
     <ScFormDialog
@@ -133,8 +126,6 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
-import ScNotificationCard from '@/components/notification/ScNotificationCard.vue'
-import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -143,11 +134,9 @@ const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
 const { createPo, updatePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
-const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
 const { exportRows } = useExport()
 
 const scId = computed(() => route.params.id)
-const notificationConfig = computed(() => notifState.scConfig)
 const detail = computed(() => state.detail || {})
 const permissions = computed(() => detail.value.permissions || {})
 const vendors = computed(() => vendorState.rows)
@@ -350,18 +339,9 @@ async function handleExportAudit() {
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 
-async function handleNotificationSave(data) {
-  try {
-    await saveScConfig(scId.value, data)
-    ElMessage.success(t('notification.settingsSaved'))
-  } catch (e) {
-    ElMessage.error(t('notification.saveFailed'))
-  }
-}
-
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  await Promise.all([fetchDetail(scId.value), searchVendors(), fetchScConfig(scId.value)])
+  await Promise.all([fetchDetail(scId.value), searchVendors()])
 })
 
 watch(() => route.params.id, async (newId) => {

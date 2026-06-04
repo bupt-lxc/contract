@@ -40,7 +40,7 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
                 if last_threshold_check_date != today:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
-                        date_count, amount_count = thresholds.check_all_active_scs(conn)
+                        date_count, amount_count = thresholds.check_all_active_pos(conn)
                         conn.commit()
                         if date_count or amount_count:
                             logger.info("Daily threshold check: %s date events, %s amount events",
@@ -69,7 +69,7 @@ def run_once(config: AppConfig) -> None:
 
         conn.execute("BEGIN IMMEDIATE")
         try:
-            date_count, amount_count = thresholds.check_all_active_scs(conn)
+            date_count, amount_count = thresholds.check_all_active_pos(conn)
             conn.commit()
             logger.info("Thresholds: %s date, %s amount", date_count, amount_count)
         except Exception:
@@ -84,7 +84,7 @@ def run_thresholds_only(config: AppConfig) -> None:
     with connect(config) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            date_count, amount_count = thresholds.check_all_active_scs(conn)
+            date_count, amount_count = thresholds.check_all_active_pos(conn)
             conn.commit()
             logger.info("Thresholds: %s date, %s amount", date_count, amount_count)
         except Exception:

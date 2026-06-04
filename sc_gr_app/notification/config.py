@@ -11,11 +11,11 @@ def get_admin_recipients(conn: sqlite3.Connection) -> list[str]:
     return json.loads(row["setting_value"]) if row else []
 
 
-def get_entity_config(conn: sqlite3.Connection, sc_id: str) -> dict | None:
+def get_entity_config(conn: sqlite3.Connection, po_id: str) -> dict | None:
     row = conn.execute(
         "SELECT enabled, cc_user_ids, date_thresholds, amount_thresholds "
-        "FROM notification_config WHERE entity_type = 'sc' AND entity_id = ?",
-        (sc_id,),
+        "FROM notification_config WHERE entity_type = 'po' AND entity_id = ?",
+        (po_id,),
     ).fetchone()
     if row is None:
         return None

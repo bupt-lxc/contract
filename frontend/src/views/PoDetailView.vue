@@ -81,6 +81,14 @@
           @changed="fetchDetail(scId)"
         />
       </div>
+
+      <PoNotificationCard
+        v-if="po.po_id"
+        :po-id="po.po_id"
+        :config="notificationConfig"
+        :users="activeUsers"
+        @save="handleNotificationSave"
+      />
     </template>
 
     <AttachmentDialog
@@ -128,6 +136,8 @@ import GrTable from '@/components/po/GrTable.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import AttachmentDialog from '@/components/common/AttachmentDialog.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
+import PoNotificationCard from '@/components/notification/PoNotificationCard.vue'
+import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -137,6 +147,7 @@ const { state: scState, fetchDetail } = useSc()
 const { updatePo, finishPo, submitPo } = usePo()
 const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
+const { state: notifState, fetchPoConfig, savePoConfig } = useNotification()
 const { exportRows } = useExport()
 
 const scId = computed(() => route.params.scId)
@@ -151,6 +162,7 @@ const grs = computed(() => {
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
 })
 const vendors = computed(() => vendorState.rows)
+const notificationConfig = computed(() => notifState.poConfig)
 
 const editDialogVisible = ref(false)
 const grDialogVisible = ref(false)
@@ -293,7 +305,6 @@ async function handleGrSave(data) {
     let grId
     if (grDialogMode.value === 'create') {
       const payload = { ...formData, po_id: poId.value }
-      // 非 draft PO 下新建 GR 进入 manager_confirm 状态
       if (po.value?.status !== 'draft') {
         payload.status = 'manager_confirm'
       }
@@ -313,8 +324,21 @@ async function handleGrSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
+async function handleNotificationSave(data) {
+  try {
+    await savePoConfig(poId.value, data)
+    ElMessage.success(t('notification.settingsSaved'))
+  } catch (e) {
+    ElMessage.error(t('notification.saveFailed'))
+  }
+}
+
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
   await Promise.all([fetchDetail(scId.value), searchVendors()])
+  // Fetch PO notification config once PO ID is available
+  if (poId.value) {
+    try { await fetchPoConfig(poId.value) } catch {}
+  }
 })
 </script>

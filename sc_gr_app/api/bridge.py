@@ -470,31 +470,33 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def get_sc_notification_config(self, payload) -> dict:
+    def get_po_notification_config(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
-            sc_id = _require_payload_field(payload, "sc_id")
-            return ok(notification_service.get_sc_notification_config(self.config, sc_id))
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(notification_service.get_po_notification_config(self.config, po_id))
         except Exception as exc:
             return fail(exc)
 
-    def save_sc_notification_config(self, payload) -> dict:
+    def save_po_notification_config(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
-            sc_id = _require_payload_field(payload, "sc_id")
+            po_id = _require_payload_field(payload, "po_id")
             data = _require_payload_field(payload, "data")
             from sc_gr_app.db.connection import connect
-            from sc_gr_app.errors import PermissionDenied
+            from sc_gr_app.errors import PermissionDenied, NotFound
             with connect(self.config) as conn:
-                sc = conn.execute("SELECT requester_id FROM sc_records WHERE sc_id = ?", (sc_id,)).fetchone()
-            if not sc:
-                from sc_gr_app.errors import NotFound
-                raise NotFound("SC not found")
-            if current_user.get("role") != "admin" and current_user.get("user_id") != sc["requester_id"]:
+                po = conn.execute(
+                    "SELECT sc.requester_id FROM pos po JOIN sc_records sc ON sc.sc_id = po.sc_id WHERE po.po_id = ?",
+                    (po_id,),
+                ).fetchone()
+            if not po:
+                raise NotFound("PO not found")
+            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
                 raise PermissionDenied("Only the SC owner or admin can modify notification settings")
-            notification_service.save_sc_notification_config(self.config, sc_id, data)
+            notification_service.save_po_notification_config(self.config, po_id, data)
             return ok()
         except Exception as exc:
             return fail(exc)
