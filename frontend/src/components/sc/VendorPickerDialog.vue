@@ -16,10 +16,11 @@
     </el-input>
 
     <el-table
+      ref="tableRef"
       :data="filteredVendors"
       height="400"
       highlight-current-row
-      @row-click="selected = row.vendor_id"
+      @current-change="onCurrentChange"
       @row-dblclick="confirmPick"
     >
       <el-table-column prop="vendor_name" :label="$t('vendor.vendorName')" width="180" />
@@ -51,6 +52,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'pick'])
 
+const tableRef = ref(null)
 const searchText = ref('')
 const selected = ref(null)
 
@@ -67,6 +69,10 @@ const filteredVendors = computed(() => {
   }
   return list
 })
+
+function onCurrentChange(row) {
+  selected.value = row ? row.vendor_id : null
+}
 
 function confirmPick() {
   if (selected.value) {
