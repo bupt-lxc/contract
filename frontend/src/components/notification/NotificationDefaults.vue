@@ -26,13 +26,13 @@
       </div>
 
       <!-- Transition Rules -->
-      <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.scTransitionRules') }}</label>
-        <el-table :data="transitionRows('sc')" border size="small">
+      <div v-for="et in ['sc','po','gr']" :key="et" style="margin-bottom:16px">
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t(`notification.${et}TransitionRules`) }}</label>
+        <el-table :data="transitionRows(et)" border size="small">
           <el-table-column prop="transition" :label="$t('notification.transition')" width="100" />
           <el-table-column :label="$t('notification.to')" width="200">
             <template #default="{ row }">
-              <el-select v-model="local.transitions.sc[row.transition].to" multiple filterable
+              <el-select v-model="local.transitions[et][row.transition].to" multiple filterable
                 :teleported="false" style="width:100%" @change="emitSave">
                 <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
                 <el-option :label="$t('notification.requester')" value="requester" />
@@ -42,7 +42,7 @@
           </el-table-column>
           <el-table-column :label="$t('notification.cc')" width="200">
             <template #default="{ row }">
-              <el-select v-model="local.transitions.sc[row.transition].cc" multiple filterable
+              <el-select v-model="local.transitions[et][row.transition].cc" multiple filterable
                 :teleported="false" style="width:100%" @change="emitSave">
                 <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
                 <el-option :label="$t('notification.requester')" value="requester" />

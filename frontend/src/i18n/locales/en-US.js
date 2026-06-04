@@ -402,6 +402,8 @@ home: {
     selectUsersPlaceholder: 'Select users',
     adminRecipients: 'Admin Recipients',
     scTransitionRules: 'SC Transition Rules',
+    poTransitionRules: 'PO Transition Rules',
+    grTransitionRules: 'GR Transition Rules',
     defaultCcList: 'Default CC List',
     defaultDateThresholds: 'Default Date Thresholds',
     defaultAmountThresholds: 'Default Amount Thresholds',
