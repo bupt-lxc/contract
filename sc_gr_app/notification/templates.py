@@ -34,9 +34,17 @@ def build_subject(entry: dict, entity_info: dict) -> str:
     return f"[Contract] {type_label} {entity_id} — {event_key}"
 
 
+# Transitions that happen before the entity reaches "pending" status.
+# In these stages the formal number (SC No / PO No / GR No) may not
+# have been assigned yet — skip it in the email body.
+_EARLY_STAGE_TRANSITIONS = {"create", "submit", "confirm"}
+
+
 def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
     entity_type = entry["entity_type"]
     entity_id = entry["entity_id"]
+    event_key = entry.get("event_key", "")
+    show_formal_number = event_key not in _EARLY_STAGE_TRANSITIONS
 
     type_label = {"sc": "SC", "po": "PO", "gr": "GR"}.get(entity_type, entity_type)
 
@@ -52,7 +60,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         sc_no = entity_info.get("sc_no", "") or ""
         sc_amount = entity_info.get("sc_amount", "") or ""
         description = entity_info.get("description", "") or ""
-        if sc_no:
+        if sc_no and show_formal_number:
             lines.append(f"<tr><td><b>SC No</b></td><td>{sc_no}</td></tr>")
         if sc_amount:
             lines.append(f"<tr><td><b>Amount</b></td><td>{sc_amount}</td></tr>")
@@ -61,7 +69,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
     elif entity_type == "po":
         po_no = entity_info.get("po_no", "") or ""
         po_amount = entity_info.get("po_amount", "") or ""
-        if po_no:
+        if po_no and show_formal_number:
             lines.append(f"<tr><td><b>PO No</b></td><td>{po_no}</td></tr>")
         if po_amount:
             lines.append(f"<tr><td><b>Amount</b></td><td>{po_amount}</td></tr>")
@@ -69,7 +77,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         gr_no = entity_info.get("gr_no", "") or ""
         con_value = entity_info.get("con_value", "") or ""
         estimated_amount = entity_info.get("estimated_amount", "") or ""
-        if gr_no:
+        if gr_no and show_formal_number:
             lines.append(f"<tr><td><b>GR No</b></td><td>{gr_no}</td></tr>")
         if con_value:
             lines.append(f"<tr><td><b>Contract Value</b></td><td>{con_value}</td></tr>")
