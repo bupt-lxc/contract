@@ -48,7 +48,9 @@ export function useNotification() {
 
   async function saveDefaults(data) {
     await callApi('save_notification_defaults', { data })
-    state.defaults = data
+    // Re-fetch defaults from the server so state.defaults always
+    // has the same shape (notify.* keys) that NotificationDefaults expects.
+    await fetchDefaults()
   }
 
   async function fetchQueue({ scId, status, entity_type, entity_id, limit = 50, offset = 0 } = {}) {
