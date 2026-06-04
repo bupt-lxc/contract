@@ -71,7 +71,9 @@ export default {
     min: ' min',
     max: ' max',
     browse: 'Browse',
-    vendor: 'Vendor'
+    vendor: 'Vendor',
+    yes: 'Yes',
+    no: 'No'
   },
 
   status: {
@@ -303,7 +305,12 @@ home: {
     deleteGr: 'Delete GR',
     confirmDeleteGr: 'Delete this GR? This cannot be undone.',
     grDeleted: 'GR deleted',
-    activingDate: 'Activing Date'
+    activingDate: 'Activing Date',
+    goodsServiceDescription: 'Goods/Service Description',
+    confirmationName: 'Confirmation Name',
+    deliveryFrom: 'Delivery From',
+    deliveryTo: 'Delivery To',
+    lastDelivery: 'Last Delivery'
   },
 
   vendor: {

@@ -265,6 +265,11 @@ async function handleExportGrs() {
     { key: 'estimated_amount', label: t('gr.estimated') },
     { key: 'tax_rate', label: t('gr.taxRate') },
     { key: 'con_value', label: t('gr.conValue') },
+    { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
+    { key: 'confirmation_name', label: t('gr.confirmationName') },
+    { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
+    { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
+    { key: 'last_delivery', label: t('gr.lastDelivery') },
     { key: 'remark', label: t('common.remark') }
   ]
   const poNo = po.value?.po_no || po.value?.po_id || 'PO'
@@ -277,7 +282,12 @@ async function handleGrSave(data) {
     const { _attachments, ...formData } = data
     let grId
     if (grDialogMode.value === 'create') {
-      const created = await createGr({ ...formData, po_id: poId.value })
+      const payload = { ...formData, po_id: poId.value }
+      // 非 draft PO 下新建 GR 进入 manager_confirm 状态
+      if (po.value?.status !== 'draft') {
+        payload.status = 'manager_confirm'
+      }
+      const created = await createGr(payload)
       grId = created.gr_id
     } else {
       grId = formData.gr_id
