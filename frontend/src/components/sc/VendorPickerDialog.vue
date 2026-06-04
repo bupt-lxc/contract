@@ -19,10 +19,9 @@
       ref="tableRef"
       :data="filteredVendors"
       height="400"
-      highlight-current-row
-      @current-change="onCurrentChange"
-      @row-dblclick="confirmPick"
+      @selection-change="onSelectionChange"
     >
+      <el-table-column type="selection" width="40" />
       <el-table-column prop="vendor_name" :label="$t('vendor.vendorName')" width="180" />
       <el-table-column prop="vendor_id" :label="$t('vendor.vendorId')" width="120" />
       <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140" />
@@ -33,7 +32,7 @@
 
     <template #footer>
       <el-button @click="$emit('update:visible', false)">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" :disabled="!selected" @click="confirmPick">
+      <el-button type="primary" :disabled="!selectedIds.length" @click="confirmPick">
         {{ $t('common.confirm') }}
       </el-button>
     </template>
@@ -54,7 +53,7 @@ const emit = defineEmits(['update:visible', 'pick'])
 
 const tableRef = ref(null)
 const searchText = ref('')
-const selected = ref(null)
+const selectedIds = ref([])
 
 const filteredVendors = computed(() => {
   const exclude = new Set(props.excludeVendorIds)
@@ -70,19 +69,19 @@ const filteredVendors = computed(() => {
   return list
 })
 
-function onCurrentChange(row) {
-  selected.value = row ? row.vendor_id : null
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(r => r.vendor_id)
 }
 
 function confirmPick() {
-  if (selected.value) {
-    emit('pick', selected.value)
+  if (selectedIds.value.length) {
+    emit('pick', selectedIds.value)
     emit('update:visible', false)
   }
 }
 
 function onClosed() {
   searchText.value = ''
-  selected.value = null
+  selectedIds.value = []
 }
 </script>

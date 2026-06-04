@@ -68,7 +68,7 @@
       v-model:visible="pickerVisible"
       :vendors="allVendors"
       :exclude-vendor-ids="existingVendorIds"
-      @pick="vendorId => $emit('add', vendorId)"
+      @pick="vendorIds => $emit('add', vendorIds)"
     />
   </div>
 </template>

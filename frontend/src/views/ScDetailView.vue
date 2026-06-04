@@ -322,9 +322,12 @@ async function handlePoSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
-async function handleAddVendor(vendorId) {
+async function handleAddVendor(vendorIds) {
+  const ids = Array.isArray(vendorIds) ? vendorIds : [vendorIds]
   try {
-    await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    for (const vendorId of ids) {
+      await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    }
     ElMessage.success(t('sc.vendorAdded'))
     await fetchDetail(scId.value)
   } catch (e) {
