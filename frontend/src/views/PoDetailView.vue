@@ -20,7 +20,12 @@
 
     <template v-if="po.po_id">
       <div class="section-card">
-        <h3 style="margin-bottom:12px">{{ $t('po.poInformation') }}</h3>
+        <div class="section-header">
+          <h3>{{ $t('po.poInformation') }}</h3>
+          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+            <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
+          </el-button>
+        </div>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('sc.scId')">
             <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
@@ -48,9 +53,6 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('gr.grRecords') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
-            <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
-          </el-button>
           <el-button size="small" @click="handleExportGrs">
             <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
