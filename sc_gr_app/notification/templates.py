@@ -39,10 +39,6 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
     entity_id = entry["entity_id"]
 
     type_label = {"sc": "SC", "po": "PO", "gr": "GR"}.get(entity_type, entity_type)
-    sc_no = entity_info.get("sc_no", "") or ""
-    sc_amount = entity_info.get("sc_amount", "") or ""
-    description = entity_info.get("description", "") or ""
-    status = entity_info.get("status", "") or ""
 
     lines = [
         f"<p>This is an automated notification from the Contract Management System.</p>",
@@ -50,14 +46,39 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         f"<tr><td><b>Type</b></td><td>{type_label}</td></tr>",
         f"<tr><td><b>ID</b></td><td>{entity_id}</td></tr>",
     ]
-    if sc_no:
-        lines.append(f"<tr><td><b>SC No</b></td><td>{sc_no}</td></tr>")
-    if sc_amount:
-        lines.append(f"<tr><td><b>Amount</b></td><td>{sc_amount}</td></tr>")
+
+    # Entity-specific fields
+    if entity_type == "sc":
+        sc_no = entity_info.get("sc_no", "") or ""
+        sc_amount = entity_info.get("sc_amount", "") or ""
+        description = entity_info.get("description", "") or ""
+        if sc_no:
+            lines.append(f"<tr><td><b>SC No</b></td><td>{sc_no}</td></tr>")
+        if sc_amount:
+            lines.append(f"<tr><td><b>Amount</b></td><td>{sc_amount}</td></tr>")
+        if description:
+            lines.append(f"<tr><td><b>Description</b></td><td>{description}</td></tr>")
+    elif entity_type == "po":
+        po_no = entity_info.get("po_no", "") or ""
+        po_amount = entity_info.get("po_amount", "") or ""
+        if po_no:
+            lines.append(f"<tr><td><b>PO No</b></td><td>{po_no}</td></tr>")
+        if po_amount:
+            lines.append(f"<tr><td><b>Amount</b></td><td>{po_amount}</td></tr>")
+    elif entity_type == "gr":
+        gr_no = entity_info.get("gr_no", "") or ""
+        con_value = entity_info.get("con_value", "") or ""
+        estimated_amount = entity_info.get("estimated_amount", "") or ""
+        if gr_no:
+            lines.append(f"<tr><td><b>GR No</b></td><td>{gr_no}</td></tr>")
+        if con_value:
+            lines.append(f"<tr><td><b>Contract Value</b></td><td>{con_value}</td></tr>")
+        elif estimated_amount:
+            lines.append(f"<tr><td><b>Estimated Amount</b></td><td>{estimated_amount}</td></tr>")
+
+    status = entity_info.get("status", "") or ""
     if status:
         lines.append(f"<tr><td><b>Status</b></td><td>{status}</td></tr>")
-    if description:
-        lines.append(f"<tr><td><b>Description</b></td><td>{description}</td></tr>")
 
     lines.append(f"<tr><td><b>Event</b></td><td>{entry['event_key']}</td></tr>")
     lines.append(f"<tr><td><b>Time</b></td><td>{entry['created_at']}</td></tr>")
