@@ -150,6 +150,87 @@ class TestQueueStatusChange:
             cc_ids = json.loads(row["cc_recipients"])
             assert "U3" in cc_ids
 
+    def test_duplicate_event_refreshes_existing_pending(self, app_config):
+        """A second submit while the first is still pending should refresh the
+        existing entry rather than being silently dropped (INSERT OR IGNORE)."""
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "M1", "requester")
+            _seed_user(conn, "U2", "M2", "admin")
+            conn.execute(
+                "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                ("notify.admin_recipients", json.dumps(["U2"]), "2025-01-01T00:00:00Z"),
+            )
+            conn.commit()
+
+        entity = {"requester_id": "U1"}
+        current_user = {"user_id": "U1", "role": "requester", "machine_id": "M1"}
+
+        # First submit
+        with connect(app_config) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            notification_service.queue_status_change(conn, "sc", "SC1", "submit", entity, current_user)
+            conn.commit()
+
+        with connect(app_config) as conn:
+            rows = conn.execute("SELECT * FROM notification_queue").fetchall()
+            assert len(rows) == 1
+            first_ts = rows[0]["created_at"]
+
+        # Second submit — same event, still pending
+        with connect(app_config) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            notification_service.queue_status_change(conn, "sc", "SC1", "submit", entity, current_user)
+            conn.commit()
+
+        with connect(app_config) as conn:
+            rows = conn.execute("SELECT * FROM notification_queue").fetchall()
+            assert len(rows) == 1  # still one entry, not silently duplicated
+            second_ts = rows[0]["created_at"]
+            assert second_ts >= first_ts  # timestamp was refreshed
+
+    def test_duplicate_event_inserts_when_previous_is_done(self, app_config):
+        """When the previous entry is already processed (done/failed), a
+        new submit should create a fresh entry."""
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "M1", "requester")
+            _seed_user(conn, "U2", "M2", "admin")
+            conn.execute(
+                "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                ("notify.admin_recipients", json.dumps(["U2"]), "2025-01-01T00:00:00Z"),
+            )
+            conn.commit()
+
+        entity = {"requester_id": "U1"}
+        current_user = {"user_id": "U1", "role": "requester", "machine_id": "M1"}
+
+        # First submit
+        with connect(app_config) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            notification_service.queue_status_change(conn, "sc", "SC1", "submit", entity, current_user)
+            conn.commit()
+
+        # Mark as done (simulating notification script processed it)
+        with connect(app_config) as conn:
+            conn.execute(
+                "UPDATE notification_queue SET status = 'done' WHERE entity_id = 'SC1'"
+            )
+            conn.commit()
+
+        # Second submit after first was already processed
+        with connect(app_config) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            notification_service.queue_status_change(conn, "sc", "SC1", "submit", entity, current_user)
+            conn.commit()
+
+        with connect(app_config) as conn:
+            rows = conn.execute(
+                "SELECT * FROM notification_queue WHERE status = 'pending'"
+            ).fetchall()
+            assert len(rows) == 1  # new pending entry created
+
+
 
 class TestScNotificationConfig:
     def test_save_and_get(self, app_config):

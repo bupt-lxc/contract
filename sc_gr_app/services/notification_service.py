@@ -110,14 +110,31 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
         return
 
     timestamp = _utc_now()
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO notification_queue
-            (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
-        VALUES (?, ?, 'status_change', ?, ?, ?, ?)
-        """,
-        (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
-    )
+    # If a pending entry already exists for the same event, refresh its
+    # timestamp and recipients rather than silently dropping the duplicate.
+    # This is important when an entity is revoked and re-submitted before
+    # the notification script processes the first submit.
+    existing = conn.execute(
+        """SELECT id FROM notification_queue
+           WHERE entity_type = ? AND entity_id = ? AND event_key = ? AND status = 'pending'""",
+        (entity_type, entity_id, transition),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE notification_queue
+               SET to_recipients = ?, cc_recipients = ?, created_at = ?
+               WHERE id = ?""",
+            (json.dumps(to_ids), json.dumps(cc_ids), timestamp, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO notification_queue
+                (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
+            VALUES (?, ?, 'status_change', ?, ?, ?, ?)
+            """,
+            (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+        )
 
 
 def get_sc_notification_config(config: AppConfig, sc_id: str) -> dict | None:
