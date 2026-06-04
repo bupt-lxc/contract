@@ -112,14 +112,41 @@ const local = reactive({
 })
 
 watch(() => props.defaults, (val) => {
+  console.log('[NotifDefaults] watch fired, val:', JSON.stringify(val))
   if (val) {
-    local.admin_recipients = val['notify.admin_recipients'] || []
-    local.transitions.sc = val['notify.transitions.sc'] || local.transitions.sc
-    local.transitions.po = val['notify.transitions.po'] || local.transitions.po
-    local.transitions.gr = val['notify.transitions.gr'] || local.transitions.gr
-    local.default_cc = val['notify.default_cc'] || []
-    local.date_thresholds = val['notify.default_date_thresholds'] || []
-    local.amount_thresholds = val['notify.default_amount_thresholds'] || []
+    // Update arrays in-place to preserve reactivity references
+    const ar = val['notify.admin_recipients']
+    local.admin_recipients.splice(0, local.admin_recipients.length, ...(Array.isArray(ar) ? ar : []))
+
+    // Deep-assign transitions to keep existing reactive objects alive.
+    // Replacing the whole object can cause el-select inside el-table to lose
+    // its v-model binding during re-render cycles.
+    for (const et of ['sc', 'po', 'gr']) {
+      const src = val[`notify.transitions.${et}`]
+      if (src) {
+        for (const tKey of Object.keys(src)) {
+          if (local.transitions[et][tKey]) {
+            local.transitions[et][tKey].to = src[tKey].to || []
+            local.transitions[et][tKey].cc = src[tKey].cc || []
+          } else {
+            local.transitions[et][tKey] = { to: src[tKey].to || [], cc: src[tKey].cc || [] }
+          }
+        }
+      }
+    }
+
+    const dcc = val['notify.default_cc']
+    local.default_cc.splice(0, local.default_cc.length, ...(Array.isArray(dcc) ? dcc : []))
+
+    const dt = val['notify.default_date_thresholds']
+    local.date_thresholds.splice(0, local.date_thresholds.length, ...(Array.isArray(dt) ? dt : []))
+
+    const at = val['notify.default_amount_thresholds']
+    local.amount_thresholds.splice(0, local.amount_thresholds.length, ...(Array.isArray(at) ? at : []))
+
+    console.log('[NotifDefaults] local.transitions.sc after watch:', JSON.stringify(local.transitions.sc))
+  } else {
+    console.log('[NotifDefaults] watch: val is falsy, keeping hardcoded defaults')
   }
 }, { immediate: true })
 
