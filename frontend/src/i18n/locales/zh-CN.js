@@ -197,7 +197,15 @@ home: {
     assetNums: '资产编号',
     internalSystemNumber: '内部系统编号',
     activingDate: '生效日期',
-    vendors: '供应商'
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
+    vendors: '供应商',
+    addVendor: '添加供应商',
+    selectVendor: '选择供应商',
+    noVendors: '暂无关联供应商',
+    confirmRemoveVendor: '确认移除供应商「{name}」？',
+    vendorAdded: '供应商已添加',
+    vendorRemoved: '供应商已移除'
   },
 
   po: {

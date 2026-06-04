@@ -395,6 +395,28 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def add_sc_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            vendor_id = _require_payload_field(payload, "vendor_id")
+            from sc_gr_app.services import sc_service
+            return ok(sc_service.add_sc_vendor(self.config, current_user, sc_id, vendor_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def remove_sc_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            vendor_id = _require_payload_field(payload, "vendor_id")
+            from sc_gr_app.services import sc_service
+            return ok(sc_service.remove_sc_vendor(self.config, current_user, sc_id, vendor_id))
+        except Exception as exc:
+            return fail(exc)
+
     def list_users(self, payload=None) -> dict:
         try:
             self._require_current_user()

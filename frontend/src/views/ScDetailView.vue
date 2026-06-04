@@ -38,7 +38,17 @@
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
           </el-button>
         </div>
-        <ScDetailCard :sc="detail.sc" :vendors="detail.vendors || []" />
+        <ScDetailCard :sc="detail.sc" />
+      </div>
+
+      <div class="section-card">
+        <ScVendorSection
+          :vendors="detail.vendors || []"
+          :all-vendors="vendors"
+          :can-manage="permissions.can_edit_sc"
+          @add="handleAddVendor"
+          @remove="handleRemoveVendor"
+        />
       </div>
 
       <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
@@ -126,6 +136,7 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
+import ScVendorSection from '@/components/sc/ScVendorSection.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -309,6 +320,36 @@ async function handlePoSave(data) {
     await fetchDetail(scId.value)
     poDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+async function handleAddVendor(vendorId) {
+  try {
+    const result = await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    // Update detail.vendors in place so the section reactively updates
+    if (state.detail && result) {
+      state.detail = { ...state.detail, vendors: result }
+    }
+    ElMessage.success(t('sc.vendorAdded'))
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function handleRemoveVendor(vendorId) {
+  try {
+    await ElMessageBox.confirm(
+      t('sc.confirmRemoveVendor', { name: vendorId }),
+      t('common.confirm'),
+      { type: 'warning' }
+    )
+    const result = await callApi('remove_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    if (state.detail && result) {
+      state.detail = { ...state.detail, vendors: result }
+    }
+    ElMessage.success(t('sc.vendorRemoved'))
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleExportPos() {
