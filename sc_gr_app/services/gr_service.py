@@ -223,6 +223,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       requester_id,
                       estimated_amount,
                       con_value,
+                      tax_rate,
                       status,
                       remark,
                       created_by,
@@ -233,7 +234,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       cancelled_at,
                       pending_date,
                       approved_date
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
@@ -242,6 +243,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         requester_id,
                         float(estimated_amount),
                         None,
+                        data.get("tax_rate"),
                         gr_status,
                         data.get("remark"),
                         current_user["user_id"],
@@ -491,14 +493,21 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
+def _compute_incl_tax(estimated_amount: Decimal, tax_rate) -> Decimal:
+    """Calculate tax-included amount: amount_ex_tax × (1 + tax_rate/100)."""
+    if tax_rate is None:
+        return None
+    rate = Decimal(str(tax_rate))
+    return estimated_amount * (1 + rate / Decimal("100"))
+
+
 def approve_gr(
     config: AppConfig,
     current_user: dict,
     gr_id: str,
-    con_value,
+    con_value=None,
 ) -> dict:
     require_admin(current_user)
-    con_value_amount = _non_negative_number(con_value, "con_value")
 
     with connect(config) as lookup_conn:
         lookup = lookup_conn.execute(
@@ -522,6 +531,20 @@ def approve_gr(
                 before = _get_gr(conn, gr_id)
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
+
+                # Resolve con_value: explicit value → auto-calculate from tax_rate → error
+                if con_value is not None:
+                    con_value_amount = _non_negative_number(con_value, "con_value")
+                else:
+                    computed = _compute_incl_tax(
+                        Decimal(str(before["estimated_amount"])),
+                        before["tax_rate"],
+                    )
+                    if computed is None:
+                        raise ValidationError(
+                            "con_value is required (no tax_rate set for auto-calculation)"
+                        )
+                    con_value_amount = computed
 
                 extra_amount = con_value_amount - Decimal(
                     str(before["estimated_amount"])
@@ -621,6 +644,7 @@ def update_gr(
                             "po_id",
                             "requester_id",
                             "estimated_amount",
+                            "tax_rate",
                             "remark",
                             "gr_no",
                             "pending_date",
@@ -680,6 +704,7 @@ def update_gr(
                         set po_id = ?,
                             requester_id = ?,
                             estimated_amount = ?,
+                            tax_rate = ?,
                             remark = ?,
                             gr_no = ?,
                             pending_date = ?,
@@ -690,6 +715,7 @@ def update_gr(
                             merged["po_id"],
                             merged["requester_id"],
                             float(amount),
+                            merged.get("tax_rate"),
                             merged.get("remark"),
                             merged.get("gr_no"),
                             merged.get("pending_date"),
@@ -700,7 +726,7 @@ def update_gr(
                 else:
                     allowed = {
                         key: updates[key]
-                        for key in ("con_value", "remark", "gr_no")
+                        for key in ("con_value", "tax_rate", "remark", "gr_no")
                         if key in updates
                     }
                     if not allowed:
@@ -728,11 +754,12 @@ def update_gr(
                         """
                         update gr_requests
                         set con_value = ?,
+                            tax_rate = ?,
                             remark = ?,
                             gr_no = ?
                         where gr_id = ?
                         """,
-                        (float(con_value), merged.get("remark"), merged.get("gr_no"), gr_id),
+                        (float(con_value), merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"), gr_id),
                     )
 
                 after = _get_gr(conn, gr_id)

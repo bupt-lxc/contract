@@ -310,6 +310,7 @@ def search_vendors(
         text_columns=(
             "vendor_name",
             "ksrm_vendor_code",
+            "company_name_cn",
             "contact_person",
             "service_scope",
             "email",
@@ -322,6 +323,7 @@ def search_vendors(
             "vendor_id": "vendor_id",
             "vendor_name": "vendor_name",
             "ksrm_vendor_code": "ksrm_vendor_code",
+            "company_name_cn": "company_name_cn",
             "service_scope": "service_scope",
             "status": "status",
             "created_by": "created_by",
@@ -337,6 +339,7 @@ def search_vendors(
             "vendor_id": "vendor_id",
             "vendor_name": "vendor_name",
             "ksrm_vendor_code": "ksrm_vendor_code",
+            "company_name_cn": "company_name_cn",
             "service_scope": "service_scope",
             "created_at": "created_at",
             "updated_at": "updated_at",
@@ -346,7 +349,7 @@ def search_vendors(
         offset=offset,
         base_clauses=["(status IS NULL OR status != 'disabled')"],
         base_params=[],
-        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "service_scope", "contact_person", "email"},
+        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "company_name_cn", "service_scope", "contact_person", "email"},
     )
 
 
@@ -494,6 +497,7 @@ def search_grs(
             "vendor.vendor_name",
             "cast(gr.estimated_amount as text)",
             "cast(gr.con_value as text)",
+            "cast(gr.tax_rate as text)",
             "gr.created_at",
             "gr.created_by",
             "gr.approved_by",
@@ -516,6 +520,7 @@ def search_grs(
             "con_value": "gr.con_value",
             "con_value_min": "gr.con_value",
             "con_value_max": "gr.con_value",
+            "tax_rate": "gr.tax_rate",
             "remark": "gr.remark",
             "created_by": "gr.created_by",
             "created_at": "gr.created_at",
@@ -547,6 +552,7 @@ def search_grs(
             "vendor_name": "vendor.vendor_name",
             "estimated_amount": "gr.estimated_amount",
             "con_value": "gr.con_value",
+            "tax_rate": "gr.tax_rate",
             "status": "gr.status",
             "created_at": "gr.created_at",
             "approved_at": "gr.approved_at",

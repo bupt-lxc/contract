@@ -25,12 +25,19 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('gr.estimatedAmount')">
-            <el-input-number v-model="form.estimated_amount" :precision="2" :min="0" controls-position="right" style="width:100%" />
+            <el-input-number v-model="form.estimated_amount" :precision="2" :min="0" controls-position="right" style="width:100%" @change="calcInclTax" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
+          <el-form-item :label="$t('gr.taxRate')">
+            <el-input-number v-model="form.tax_rate" :precision="2" :min="0" :max="100" controls-position="right" style="width:100%" @change="calcInclTax" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
           <el-form-item :label="$t('gr.conValue')">
-            <el-input-number v-model="form.con_value" :precision="2" :min="0" controls-position="right" style="width:100%" />
+            <el-input-number :model-value="computedInclTax" :precision="2" :min="0" controls-position="right" style="width:100%" disabled />
           </el-form-item>
         </el-col>
       </el-row>
@@ -108,11 +115,26 @@ const submitting = ref(false)
 const pickedFiles = ref([])
 
 const emptyForm = () => ({
-  gr_no: null, requester_id: '', estimated_amount: null, con_value: null, remark: '',
+  gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, remark: '',
   pending_date: null, approved_date: null
 })
 
 const form = reactive(emptyForm())
+
+// Auto-calculate tax-included amount: amount_excl_tax × (1 + tax_rate / 100)
+const computedInclTax = computed(() => {
+  const amount = form.estimated_amount
+  const rate = form.tax_rate
+  if (amount == null || amount === '' || rate == null || rate === '') return null
+  const a = Number(amount)
+  const r = Number(rate)
+  if (isNaN(a) || isNaN(r)) return null
+  return Math.round((a * (1 + r / 100)) * 100) / 100
+})
+
+function calcInclTax() {
+  form.con_value = computedInclTax.value
+}
 
 const rules = {
   requester_id: [{ required: true, message: t('gr.requesterRequired'), trigger: 'blur' }],

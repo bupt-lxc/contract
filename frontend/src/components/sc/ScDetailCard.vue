@@ -13,9 +13,47 @@
     <el-descriptions-item v-if="sc.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">{{ sc.internal_system_number || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.vendors')" :span="2">
       <template v-if="vendors && vendors.length">
-        <el-tag v-for="v in vendors" :key="v.vendor_id" size="small" style="margin-right:4px;margin-bottom:2px">
-          {{ v.vendor_name }}
-        </el-tag>
+        <el-collapse class="vendor-collapse">
+          <el-collapse-item
+            v-for="v in vendors"
+            :key="v.vendor_id"
+          >
+            <template #title>
+              <span class="vendor-title">{{ v.vendor_name }}</span>
+              <el-tag size="small" type="info" style="margin-left:8px">{{ v.vendor_id }}</el-tag>
+            </template>
+            <div class="vendor-detail-grid">
+              <div class="vendor-field" v-if="v.company_name_cn">
+                <span class="vendor-label">{{ $t('vendor.companyNameCn') }}</span>
+                <span>{{ v.company_name_cn }}</span>
+              </div>
+              <div class="vendor-field">
+                <span class="vendor-label">{{ $t('vendor.serviceScope') }}</span>
+                <span>{{ v.service_scope || '-' }}</span>
+              </div>
+              <div class="vendor-field">
+                <span class="vendor-label">{{ $t('vendor.contactPerson') }}</span>
+                <span>{{ v.contact_person || '-' }}</span>
+              </div>
+              <div class="vendor-field">
+                <span class="vendor-label">{{ $t('vendor.phone') }}</span>
+                <span>{{ v.phone || '-' }}</span>
+              </div>
+              <div class="vendor-field">
+                <span class="vendor-label">{{ $t('vendor.email') }}</span>
+                <span>{{ v.email || '-' }}</span>
+              </div>
+              <div class="vendor-field" v-if="v.ksrm_vendor_code">
+                <span class="vendor-label">{{ $t('vendor.ksrmCode') }}</span>
+                <span>{{ v.ksrm_vendor_code }}</span>
+              </div>
+              <div class="vendor-field" v-if="v.description" style="grid-column:1/-1">
+                <span class="vendor-label">{{ $t('vendor.description') }}</span>
+                <span>{{ v.description }}</span>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </template>
       <span v-else>-</span>
     </el-descriptions-item>
@@ -41,3 +79,40 @@ function formatDate(val) {
   return val.slice(0, 10)
 }
 </script>
+
+<style scoped>
+.vendor-collapse {
+  width: 100%;
+}
+.vendor-collapse :deep(.el-collapse-item__header) {
+  height: auto;
+  min-height: 36px;
+  padding: 4px 0;
+  border-bottom: none;
+}
+.vendor-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+}
+.vendor-collapse :deep(.el-collapse-item__content) {
+  padding-bottom: 12px;
+}
+.vendor-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.vendor-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 20px;
+  padding: 4px 0;
+}
+.vendor-field {
+  display: flex;
+  flex-direction: column;
+}
+.vendor-label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+</style>

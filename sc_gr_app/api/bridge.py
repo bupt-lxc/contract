@@ -288,7 +288,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            con_value = _require_payload_field(payload, "con_value")
+            con_value = payload.get("con_value")  # optional — auto-calculated from tax_rate if omitted
             return ok(gr_service.approve_gr(self.config, current_user, gr_id, con_value))
         except Exception as exc:
             return fail(exc)

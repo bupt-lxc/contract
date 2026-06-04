@@ -212,17 +212,24 @@ async function handleSubmit() {
 
 async function handleGrApprove(row) {
   try {
+    // Pre-fill with auto-calculated tax-included amount if tax_rate is set
+    let defaultVal = ''
+    if (row.estimated_amount && row.tax_rate != null) {
+      defaultVal = String(Math.round((Number(row.estimated_amount) * (1 + Number(row.tax_rate) / 100)) * 100) / 100)
+    }
     const { value } = await ElMessageBox.prompt(
       t('gr.enterConValue'),
       t('gr.approveGr'),
       {
         confirmButtonText: t('common.approve'),
         type: 'warning',
-        inputPattern: /^\d+(\.\d{1,2})?$/,
+        inputValue: defaultVal,
+        inputPattern: /^(\d+(\.\d{1,2})?)?$/,
         inputErrorMessage: t('gr.invalidNumber')
       }
     )
-    await approveGr(row.gr_id, parseFloat(value))
+    const conValue = value ? parseFloat(value) : null
+    await approveGr(row.gr_id, conValue)
     ElMessage.success(t('gr.grApproved'))
     await fetchDetail(scId.value)
   } catch (e) {
@@ -256,6 +263,7 @@ async function handleExportGrs() {
     { key: 'gr_id', label: t('gr.grId') },
     { key: 'requester_id', label: t('gr.requester') },
     { key: 'estimated_amount', label: t('gr.estimated') },
+    { key: 'tax_rate', label: t('gr.taxRate') },
     { key: 'con_value', label: t('gr.conValue') },
     { key: 'remark', label: t('common.remark') }
   ]

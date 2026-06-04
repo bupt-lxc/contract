@@ -17,6 +17,11 @@
       </template>
     </el-table-column>
     <el-table-column prop="sc_no" :label="$t('sc.scNo')" sortable="custom" width="130" />
+    <el-table-column prop="sc_id" :label="$t('sc.scId')" sortable="custom" width="180">
+      <template #default="{ row }">
+        <span style="font-family:monospace;font-size:12px">{{ row.sc_id }}</span>
+      </template>
+    </el-table-column>
     <el-table-column prop="requester_name" :label="$t('sc.requester')" sortable="custom" width="130" />
     <el-table-column prop="request_type" :label="$t('sc.type')" sortable="custom" width="110" />
     <el-table-column prop="cost_center" :label="$t('sc.costCenter')" sortable="custom" width="110" />
