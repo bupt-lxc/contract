@@ -10,7 +10,8 @@ from sc_gr_app.services import notification_service
 
 def _seed_user(conn, user_id, machine_id, role="requester", email=None):
     conn.execute(
-        "INSERT OR IGNORE INTO users (user_id, machine_id, user_name, role, email, status) VALUES (?, ?, ?, ?, ?, 'active')",
+        "INSERT OR IGNORE INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, 'active', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')",
         (user_id, machine_id, f"User {user_id}", role, email or f"{user_id}@test.com"),
     )
 
@@ -54,6 +55,10 @@ class TestBridgeNotificationEndpoints:
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
+            conn.execute(
+                "INSERT OR IGNORE INTO sc_records (sc_id, requester_id, status, created_by, created_at, updated_at, asset) "
+                "VALUES ('SC1', 'U1', 'draft', 'U1', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')"
+            )
             conn.commit()
 
         monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
@@ -70,6 +75,29 @@ class TestBridgeNotificationEndpoints:
         # Verify it was saved
         verify = api.get_sc_notification_config({"sc_id": "SC1"})
         assert verify["data"]["date_thresholds"] == [6]
+
+    def test_save_sc_notification_config_denied_for_non_owner(self, monkeypatch, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn, "U1", "1234567", "requester")
+            _seed_user(conn, "U2", "2222222", "requester")
+            conn.execute(
+                "INSERT OR IGNORE INTO sc_records (sc_id, requester_id, status, created_by, created_at, updated_at, asset) "
+                "VALUES ('SC1', 'U1', 'draft', 'U1', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')"
+            )
+            conn.commit()
+
+        monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "2222222")
+        monkeypatch.setattr(bridge, "get_user_by_machine_id",
+                            lambda config, machine_id: {"user_id": "U2", "role": "requester", "machine_id": "2222222"})
+
+        api = bridge.ApiBridge(app_config)
+        result = api.save_sc_notification_config({
+            "sc_id": "SC1",
+            "data": {"enabled": True, "cc_user_ids": ["U2"]}
+        })
+        assert result["ok"] is False
+        assert result["error"]["code"] == "PERMISSION_DENIED"
 
     def test_get_notification_defaults_admin_only(self, monkeypatch, app_config):
         migrate(app_config)

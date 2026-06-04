@@ -441,13 +441,12 @@ def test_workbench_data_scopes_requester_to_own_scs(app_config):
 
     # USER1 sees own approved SCs
     assert owner_data["sc"]["approved"]["count"] >= 1
-    # Admin sees own approved SCs only (none in this test since admin didn't create any)
-    # In old system admin saw all; now admin sees only own for Approved
-    assert admin_data["sc"]["approved"]["count"] == 0
+    # Admin sees all approved SCs
+    assert admin_data["sc"]["approved"]["count"] >= 1
 
 
 def test_workbench_data_admin_pending_shows_all(app_config):
-    """Admin Pending column shows all users; Approved/Draft show own only."""
+    """Admin Pending and Approved columns show all users; Draft shows own only."""
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)

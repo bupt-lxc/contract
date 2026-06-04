@@ -18,7 +18,7 @@
     <PoTable
       :rows="state.rows"
       :loading="state.loading"
-      @row-click="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+      @detail="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
       @submit="row => handleSubmitPo(row)"
       @finish="row => handleFinishPo(row)"

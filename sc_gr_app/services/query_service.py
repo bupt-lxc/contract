@@ -371,12 +371,14 @@ def search_pos(
         select
           po.*,
           sc.sc_no,
+          u.user_name as requester_name,
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
           po.po_amount - coalesce(gr_totals.pending_total, 0)
             - coalesce(gr_totals.con_value_total, 0) as open_po_amount
         from pos po
         join sc_records sc on sc.sc_id = po.sc_id
+        join users u on u.user_id = po.requester_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
         left join (
           select
@@ -396,6 +398,7 @@ def search_pos(
             "sc.sc_no",
             "vendor.vendor_name",
             "vendor.ksrm_vendor_code",
+            "u.user_name",
             "cast(po.po_amount as text)",
             "po.contract_from",
             "po.contract_to",
@@ -413,6 +416,7 @@ def search_pos(
             "vendor_id": "po.vendor_id",
             "status": "po.status",
             "vendor_name": "vendor.vendor_name",
+            "requester_name": "u.user_name",
             "po_amount": "po.po_amount",
             "po_amount_min": "po.po_amount",
             "po_amount_max": "po.po_amount",
@@ -443,6 +447,7 @@ def search_pos(
             "po_no": "po.po_no",
             "sc_no": "sc.sc_no",
             "vendor_name": "vendor.vendor_name",
+            "requester_name": "u.user_name",
             "po_amount": "po.po_amount",
             "status": "po.status",
             "contract_to": "po.contract_to",
@@ -498,6 +503,11 @@ def search_grs(
             "cast(gr.estimated_amount as text)",
             "cast(gr.con_value as text)",
             "cast(gr.tax_rate as text)",
+            "gr.goods_service_description",
+            "gr.confirmation_name",
+            "gr.delivery_from",
+            "gr.delivery_to",
+            "gr.last_delivery",
             "gr.created_at",
             "gr.created_by",
             "gr.approved_by",
@@ -521,6 +531,15 @@ def search_grs(
             "con_value_min": "gr.con_value",
             "con_value_max": "gr.con_value",
             "tax_rate": "gr.tax_rate",
+            "goods_service_description": "gr.goods_service_description",
+            "confirmation_name": "gr.confirmation_name",
+            "delivery_from": "gr.delivery_from",
+            "delivery_from_from": "gr.delivery_from",
+            "delivery_from_to": "gr.delivery_from",
+            "delivery_to": "gr.delivery_to",
+            "delivery_to_from": "gr.delivery_to",
+            "delivery_to_to": "gr.delivery_to",
+            "last_delivery": "gr.last_delivery",
             "remark": "gr.remark",
             "created_by": "gr.created_by",
             "created_at": "gr.created_at",
@@ -553,6 +572,11 @@ def search_grs(
             "estimated_amount": "gr.estimated_amount",
             "con_value": "gr.con_value",
             "tax_rate": "gr.tax_rate",
+            "goods_service_description": "gr.goods_service_description",
+            "confirmation_name": "gr.confirmation_name",
+            "delivery_from": "gr.delivery_from",
+            "delivery_to": "gr.delivery_to",
+            "last_delivery": "gr.last_delivery",
             "status": "gr.status",
             "created_at": "gr.created_at",
             "approved_at": "gr.approved_at",
@@ -592,7 +616,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "activing", "manager_confirm")
+            return status not in ("pending", "activing", "manager_confirm", "approved")
         return False
 
     user_id = current_user["user_id"] if current_user else None

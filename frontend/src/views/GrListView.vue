@@ -21,7 +21,7 @@
       <el-button v-if="selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border @row-click="handleRowClick" @selection-change="val => selectedRows = val">
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val">
       <el-table-column type="selection" width="50" />
       <el-table-column :label="$t('common.status')" width="100">
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -47,6 +47,11 @@
       </el-table-column>
       <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
         <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="70" fixed="right">
+        <template #default="{ row }">
+          <el-button type="primary" link size="small" @click.stop="goToDetail(row)">{{ $t('common.detail') }}</el-button>
+        </template>
       </el-table-column>
       <template #empty><el-empty :description="$t('gr.noRecords')" /></template>
     </el-table>
@@ -179,6 +184,11 @@ const grFilterConfig = [
   { name: 'con_value', label: t('gr.conValue'), type: 'amount-range' },
   { name: 'pending_date', label: t('filter.pendingDate'), type: 'date-range' },
   { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
+  { name: 'goods_service_description', label: t('gr.goodsServiceDescription'), type: 'input' },
+  { name: 'confirmation_name', label: t('gr.confirmationName'), type: 'input' },
+  { name: 'delivery_from', label: t('gr.deliveryFrom'), type: 'date-range' },
+  { name: 'delivery_to', label: t('gr.deliveryTo'), type: 'date-range' },
+  { name: 'last_delivery', label: t('gr.lastDelivery'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
@@ -200,10 +210,8 @@ function handleReset() {
   searchGrs()
 }
 
-function handleRowClick(row) {
-  if (row.sc_id && row.po_id) {
-    router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
-  }
+function goToDetail(row) {
+  router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
 }
 
 function handlePageChange(page) { onPageChange(page); searchGrs() }
@@ -264,7 +272,7 @@ function confirmGrSelection() {
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
-    const payload = { ...formData, po_id: grSelectedPoId.value }
+    const payload = { ...formData, po_id: grSelectedPoId.value, status: 'manager_confirm' }
     const result = await callApi('create_gr', { data: payload })
     const created = result
     if (_attachments?.length && created?.gr_id) {
@@ -341,6 +349,11 @@ async function handleExport() {
       { key: 'estimated_amount', label: t('gr.estimated') },
       { key: 'tax_rate', label: t('gr.taxRate') },
       { key: 'con_value', label: t('gr.conValue') },
+      { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
+      { key: 'confirmation_name', label: t('gr.confirmationName') },
+      { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
+      { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
+      { key: 'last_delivery', label: t('gr.lastDelivery') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
     ]

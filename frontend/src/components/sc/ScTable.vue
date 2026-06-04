@@ -5,10 +5,8 @@
     stripe
     border
     @sort-change="$emit('sort-change', $event)"
-    @row-click="$emit('row-click', $event)"
     @selection-change="$emit('selection-change', $event)"
     :row-class-name="rowClass"
-    style="cursor:pointer"
   >
     <el-table-column v-if="selectable" type="selection" width="50" />
     <el-table-column :label="$t('sc.status')" width="100">
@@ -42,8 +40,8 @@
     </el-table-column>
     <el-table-column prop="description" :label="$t('sc.description')" min-width="150" show-overflow-tooltip />
     <el-table-column :label="$t('common.actions')" width="70" fixed="right">
-      <template #default>
-        <el-button type="primary" link size="small">{{ $t('common.detail') }}</el-button>
+      <template #default="{ row }">
+        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
       </template>
     </el-table-column>
     <template #empty>
@@ -63,7 +61,7 @@ const props = defineProps({
   selectable: { type: Boolean, default: false }
 })
 
-defineEmits(['sort-change', 'row-click', 'selection-change'])
+defineEmits(['sort-change', 'detail', 'selection-change'])
 
 function rowClass({ row }) {
   return `status-row-${row.status || ''}`

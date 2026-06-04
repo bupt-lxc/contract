@@ -4,9 +4,7 @@
     v-loading="loading"
     stripe
     border
-    @row-click="$emit('row-click', $event)"
     :row-class-name="rowClass"
-    style="cursor:pointer"
   >
     <el-table-column :label="$t('po.status')" width="100">
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -14,6 +12,9 @@
     <el-table-column prop="po_no" :label="$t('po.poNo')" width="130">
       <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
     </el-table-column>
+    <el-table-column prop="sc_id" :label="$t('filter.scId')" width="130" />
+    <el-table-column prop="sc_no" :label="$t('filter.scNo')" width="130" />
+    <el-table-column prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip />
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" />
     <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" />
@@ -32,8 +33,9 @@
     <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120">
       <template #default="{ row }">{{ formatDate(row.activing_date) }}</template>
     </el-table-column>
-    <el-table-column :label="$t('po.actions')" width="140" fixed="right">
+    <el-table-column :label="$t('po.actions')" width="200" fixed="right">
       <template #default="{ row }">
+        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
         <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
         <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
         <el-button v-if="row.status === 'activing'" type="info" link size="small" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
@@ -52,7 +54,7 @@ defineProps({
   loading: { type: Boolean, default: false }
 })
 
-defineEmits(['row-click', 'edit', 'finish', 'submit'])
+defineEmits(['detail', 'edit', 'finish', 'submit'])
 
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }

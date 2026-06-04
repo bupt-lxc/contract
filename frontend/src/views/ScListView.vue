@@ -28,7 +28,7 @@
       :empty-text="state.error || $t('sc.noRecords')"
       selectable
       @sort-change="handleSortChange"
-      @row-click="row => $router.push(`/sc/${row.sc_id}`)"
+      @detail="row => $router.push(`/sc/${row.sc_id}`)"
       @selection-change="val => selectedRows = val"
     />
 
