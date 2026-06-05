@@ -417,6 +417,46 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def preview_vendor_import(self, _payload=None) -> dict:
+        """Open file dialog for Excel/CSV, parse and return preview with validation."""
+        try:
+            import tkinter.filedialog as fd
+            import tkinter as tk
+
+            self._require_current_user()
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            file_path = fd.askopenfilename(
+                title="Select vendor file to import",
+                filetypes=[
+                    ("Excel & CSV files", "*.xlsx *.xls *.csv"),
+                    ("Excel files", "*.xlsx *.xls"),
+                    ("CSV files", "*.csv"),
+                    ("All files", "*.*"),
+                ],
+            )
+            root.destroy()
+
+            if not file_path:
+                return ok(None)
+
+            preview = vendor_service.preview_import(self.config, file_path)
+            return ok({"file_path": file_path, "rows": preview})
+        except Exception as exc:
+            return fail(exc)
+
+    def confirm_vendor_import(self, payload) -> dict:
+        """Import validated vendor rows into the database."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            rows = _require_payload_field(payload, "rows")
+            result = vendor_service.execute_import(self.config, current_user, rows)
+            return ok(result)
+        except Exception as exc:
+            return fail(exc)
+
     def list_users(self, payload=None) -> dict:
         try:
             self._require_current_user()

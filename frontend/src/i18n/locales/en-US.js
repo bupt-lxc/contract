@@ -343,7 +343,21 @@ home: {
     vendorDisabled: 'Vendor disabled',
     vendorIdRequired: 'Vendor ID is required',
     vendorNameRequired: 'Vendor Name is required',
-    serviceScopeRequired: 'Service Scope is required'
+    serviceScopeRequired: 'Service Scope is required',
+    import: 'Import',
+    importVendors: 'Import Vendors',
+    importHint: 'Select an Excel (.xlsx/.xls) or CSV file to batch import vendors.',
+    importFormatHint: 'Headers should include: vendor_id, vendor_name, service_scope, etc.',
+    selectFile: 'Select File',
+    fileLabel: 'File',
+    validRows: '{n} valid',
+    invalidRows: '{n} invalid',
+    valid: 'Valid',
+    validation: 'Validation',
+    reselect: 'Reselect',
+    importResult: 'Import Result',
+    imported: '{n} imported successfully',
+    skippedRows: '{n} skipped'
   },
 
   user: {

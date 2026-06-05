@@ -1,4 +1,7 @@
+import csv
+import io
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
@@ -225,3 +228,230 @@ def disable_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dic
                 conn.rollback()
                 raise
     return after
+
+
+# ── Vendor import ──
+
+VENDOR_COLUMN_MAP = {
+    "vendor_id": "供应商ID",
+    "vendor_name": "供应商名称",
+    "ksrm_vendor_code": "KSRM代码",
+    "company_name_cn": "公司中文名",
+    "contact_person": "联系人",
+    "phone": "电话",
+    "service_scope": "服务范围",
+    "email": "邮箱",
+    "description": "描述",
+    "inquiry_history": "询价历史",
+}
+
+VENDOR_IMPORT_FIELDS = list(VENDOR_COLUMN_MAP.keys())
+
+
+def parse_vendor_file(file_path: str) -> list[dict]:
+    """Parse an Excel (.xlsx/.xls) or CSV file and return a list of vendor dicts."""
+    ext = Path(file_path).suffix.lower()
+
+    if ext in (".xlsx", ".xls"):
+        return _parse_excel(file_path)
+    elif ext == ".csv":
+        return _parse_csv(file_path)
+    else:
+        raise ValidationError(f"Unsupported file type: {ext}. Please use .xlsx, .xls, or .csv")
+
+
+def _parse_excel(file_path: str) -> list[dict]:
+    """Parse Excel file, using header row to map columns to vendor fields."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    ws = wb.active
+
+    rows_iter = ws.iter_rows(min_row=1, values_only=True)
+    try:
+        header = [str(c).strip() if c else "" for c in next(rows_iter)]
+    except StopIteration:
+        wb.close()
+        raise ValidationError("File is empty")
+
+    col_map = {}
+    for idx, col_name in enumerate(header):
+        col_lower = col_name.lower().replace(" ", "_")
+        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
+            if col_lower == field_key.lower() or col_name.strip() == cn_label:
+                col_map[idx] = field_key
+                break
+
+    if not col_map:
+        wb.close()
+        raise ValidationError(
+            "No recognized columns found. Expected headers: "
+            + ", ".join(VENDOR_COLUMN_MAP.keys())
+        )
+
+    rows = []
+    for row in rows_iter:
+        record = {}
+        for idx, field_key in col_map.items():
+            value = row[idx] if idx < len(row) else None
+            record[field_key] = str(value).strip() if value is not None else ""
+        rows.append(record)
+
+    wb.close()
+    return rows
+
+
+def _parse_csv(file_path: str) -> list[dict]:
+    """Parse CSV file, using header row to map columns to vendor fields."""
+    with open(file_path, "r", encoding="utf-8-sig") as f:
+        reader = csv.reader(f)
+        try:
+            header = [c.strip() for c in next(reader)]
+        except StopIteration:
+            raise ValidationError("File is empty")
+
+    col_map = {}
+    for idx, col_name in enumerate(header):
+        col_lower = col_name.lower().replace(" ", "_")
+        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
+            if col_lower == field_key.lower() or col_name.strip() == cn_label:
+                col_map[idx] = field_key
+                break
+
+    if not col_map:
+        raise ValidationError(
+            "No recognized columns found. Expected headers: "
+            + ", ".join(VENDOR_COLUMN_MAP.keys())
+        )
+
+    rows = []
+    for row in reader:
+        record = {}
+        for idx, field_key in col_map.items():
+            value = row[idx] if idx < len(row) else ""
+            record[field_key] = value.strip() if value else ""
+        rows.append(record)
+
+    return rows
+
+
+def preview_import(config: AppConfig, file_path: str) -> list[dict]:
+    """Parse file and return preview with validation errors for each row."""
+    records = parse_vendor_file(file_path)
+    if not records:
+        raise ValidationError("No data rows found in file")
+
+    with connect(config) as conn:
+        existing_ids = set(
+            r[0] for r in conn.execute("select vendor_id from vendors").fetchall()
+        )
+
+    preview = []
+    for rec in records:
+        errors_list = []
+        # Required fields
+        if not rec.get("vendor_id", "").strip():
+            errors_list.append("vendor_id is required")
+        if not rec.get("vendor_name", "").strip():
+            errors_list.append("vendor_name is required")
+        if not rec.get("service_scope", "").strip():
+            errors_list.append("service_scope is required")
+        elif rec.get("service_scope", "").strip() not in SUPPORTED_SERVICE_SCOPES:
+            errors_list.append(f"Invalid service_scope: {rec.get('service_scope')}")
+
+        # Check duplicate
+        vid = rec.get("vendor_id", "").strip()
+        if vid and vid in existing_ids:
+            errors_list.append(f"vendor_id '{vid}' already exists")
+
+        rec["_errors"] = errors_list
+        rec["_valid"] = len(errors_list) == 0
+        preview.append(rec)
+
+    return preview
+
+
+def execute_import(
+    config: AppConfig, current_user: dict, rows: list[dict]
+) -> dict:
+    """Import a list of validated vendor rows into the database."""
+    require_requester_or_admin(current_user)
+
+    timestamp = utc_now()
+    imported = 0
+    skipped = 0
+    errors = []
+
+    with connect(config) as conn:
+        existing_ids = set(
+            r[0] for r in conn.execute("select vendor_id from vendors").fetchall()
+        )
+
+        for i, rec in enumerate(rows):
+            vid = rec.get("vendor_id", "").strip()
+            if not vid:
+                skipped += 1
+                errors.append(f"Row {i + 1}: vendor_id is empty, skipped")
+                continue
+            if vid in existing_ids:
+                skipped += 1
+                errors.append(f"Row {i + 1}: vendor_id '{vid}' already exists, skipped")
+                continue
+
+            vname = rec.get("vendor_name", "").strip()
+            scope = rec.get("service_scope", "").strip()
+            if not vname or not scope:
+                skipped += 1
+                errors.append(f"Row {i + 1}: missing required fields, skipped")
+                continue
+            if scope not in SUPPORTED_SERVICE_SCOPES:
+                skipped += 1
+                errors.append(f"Row {i + 1}: invalid service_scope '{scope}', skipped")
+                continue
+
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    """
+                    insert into vendors (
+                      vendor_id, vendor_name, ksrm_vendor_code, company_name_cn,
+                      contact_person, phone, service_scope, email,
+                      description, inquiry_history, created_by, created_at, updated_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        vid,
+                        vname,
+                        rec.get("ksrm_vendor_code", "").strip() or None,
+                        rec.get("company_name_cn", "").strip() or None,
+                        rec.get("contact_person", "").strip() or None,
+                        rec.get("phone", "").strip() or None,
+                        scope,
+                        rec.get("email", "").strip() or None,
+                        rec.get("description", "").strip() or None,
+                        rec.get("inquiry_history", "").strip() or None,
+                        current_user["user_id"],
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                write_audit_log(
+                    conn,
+                    action_type="import_vendor",
+                    object_type="vendor",
+                    object_id=vid,
+                    sc_id=None,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=None,
+                    after={"vendor_id": vid, "vendor_name": vname, "service_scope": scope},
+                )
+                conn.commit()
+                existing_ids.add(vid)
+                imported += 1
+            except Exception:
+                conn.rollback()
+                skipped += 1
+                errors.append(f"Row {i + 1} ({vid}): insert failed, skipped")
+
+    return {"imported": imported, "skipped": skipped, "errors": errors}
