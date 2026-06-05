@@ -57,9 +57,7 @@ const routes = [
   },
   {
     path: '/logs',
-    name: 'logs',
-    component: () => import('@/views/LogsView.vue'),
-    meta: { layout: 'default', title: 'Audit Logs' }
+    redirect: '/system'
   },
   {
     path: '/emails',

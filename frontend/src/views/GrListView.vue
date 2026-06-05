@@ -21,31 +21,31 @@
       <el-button v-if="selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val">
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val" @sort-change="onSortChange" :default-sort="{ prop: 'created_at', order: 'descending' }">
       <el-table-column type="selection" width="50" />
-      <el-table-column :label="$t('common.status')" width="100">
+      <el-table-column :label="$t('common.status')" width="100" prop="status" sortable>
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
-      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="120" />
-      <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120">
+      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="120" sortable />
+      <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
         <template #default="{ row }">{{ row.gr_no || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="po_no" :label="$t('gr.poNo')" width="130" />
-      <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="130" />
-      <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
+      <el-table-column prop="po_no" :label="$t('gr.poNo')" width="130" sortable />
+      <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="130" sortable />
+      <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="150" show-overflow-tooltip sortable />
+      <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
       </el-table-column>
-      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center">
+      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center" sortable>
         <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
       </el-table-column>
-      <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
+      <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
       </el-table-column>
-      <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110">
+      <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
+      <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="70" fixed="right">
