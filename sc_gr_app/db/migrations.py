@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -946,6 +946,29 @@ def _migrate_v21(conn) -> None:
             ("notify.transitions.po", po_transitions, timestamp),
         )
     _record(conn, 21)
+def _migrate_v22(conn) -> None:
+    """Create notification_custom_schedule table for PO custom reminder schedules."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notification_custom_schedule (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL DEFAULT 'po',
+            entity_id TEXT NOT NULL,
+            schedule_type TEXT NOT NULL CHECK (schedule_type IN ('monthly_day', 'monthly_weekday', 'weekly_day')),
+            day_of_month INTEGER,
+            weekday INTEGER,
+            occurrence TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_custom_schedule_entity "
+        "ON notification_custom_schedule(entity_type, entity_id)"
+    )
+    _record(conn, 22)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -1051,6 +1074,10 @@ def migrate(config: AppConfig) -> None:
             if 21 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v21(conn)
+                conn.commit()
+            if 22 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v22(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

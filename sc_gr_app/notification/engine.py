@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.notification import sender, thresholds, monthly
+from sc_gr_app.notification import sender, thresholds, monthly, schedules
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,11 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
                             logger.info("Daily threshold check: %s date events, %s amount events",
                                         date_count, amount_count)
 
+                        # Custom schedules (same daily cadence as thresholds)
+                        schedule_count = schedules.check_custom_schedules(conn)
+                        if schedule_count:
+                            logger.info("Custom schedule check: %s events queued", schedule_count)
+
                         # Monthly summary on the 1st
                         summary_count = monthly.check_monthly_summary(conn)
                         if summary_count:
@@ -82,6 +87,10 @@ def run_once(config: AppConfig) -> None:
         except Exception:
             conn.rollback()
             raise
+
+        schedule_count = schedules.check_custom_schedules(conn)
+        if schedule_count:
+            logger.info("Custom schedule check: %s events queued", schedule_count)
 
         summary_count = monthly.check_monthly_summary(conn)
         if summary_count:

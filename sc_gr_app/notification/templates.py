@@ -31,6 +31,10 @@ def build_subject(entry: dict, entity_info: dict) -> str:
         pct = event_key.replace("threshold_amount:", "").replace("%", "")
         return f"[Contract] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
 
+    if entry["event_type"] == "custom_schedule":
+        po_no = entity_info.get("po_no") or entity_id
+        return f"[Contract] PO {po_no} 定期提醒"
+
     return f"[Contract] {type_label} {entity_id} — {event_key}"
 
 
@@ -135,15 +139,39 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         if remark:
             lines.append(f"<tr><td><b>Remark</b></td><td>{remark}</td></tr>")
 
+    # Custom schedule: show schedule type description
+    if entry.get("event_type") == "custom_schedule":
+        schedule_desc = _describe_schedule(entry.get("event_key", ""))
+        if schedule_desc:
+            lines.append(f"<tr><td><b>Schedule</b></td><td>{schedule_desc}</td></tr>")
+
     status = entity_info.get("status", "") or ""
     if status:
         lines.append(f"<tr><td><b>Status</b></td><td>{status}</td></tr>")
 
-    lines.append(f"<tr><td><b>Event</b></td><td>{entry['event_key']}</td></tr>")
+    if entry.get("event_type") == "custom_schedule":
+        lines.append("<tr><td><b>Event</b></td><td>Custom Schedule Reminder</td></tr>")
+    else:
+        lines.append(f"<tr><td><b>Event</b></td><td>{entry['event_key']}</td></tr>")
     lines.append(f"<tr><td><b>Time</b></td><td>{entry['created_at']}</td></tr>")
     lines.append(f"</table>")
 
     return "\n".join(lines)
+
+
+def _describe_schedule(event_key: str) -> str:
+    """Parse a schedule event_key into a human-readable Chinese description."""
+    # event_key format: schedule:<id>:<type>:<date>
+    parts = event_key.split(":")
+    if len(parts) < 4 or parts[0] != "schedule":
+        return ""
+    stype = parts[2]
+    type_labels = {
+        "monthly_day": "每月定期提醒",
+        "monthly_weekday": "月度定期提醒",
+        "weekly_day": "每周定期提醒",
+    }
+    return type_labels.get(stype, "定期提醒")
 
 
 def build_monthly_summary_subject(year: int, month: int) -> str:

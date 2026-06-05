@@ -322,3 +322,75 @@ def list_notification_queue(
             "items": [dict(r) for r in rows],
             "total": count_row["cnt"],
         }
+
+
+def get_po_custom_schedules(config: AppConfig, po_id: str) -> list[dict]:
+    """Return all custom schedules for a PO."""
+    with connect(config) as conn:
+        rows = conn.execute(
+            """SELECT * FROM notification_custom_schedule
+               WHERE entity_type = 'po' AND entity_id = ? ORDER BY id""",
+            (po_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_po_custom_schedules(config: AppConfig, po_id: str, schedules: list[dict]) -> None:
+    """Replace all custom schedules for a PO with the given list."""
+    timestamp = _utc_now()
+    with connect(config) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                "DELETE FROM notification_custom_schedule WHERE entity_type = 'po' AND entity_id = ?",
+                (po_id,),
+            )
+            for s in schedules:
+                _validate_schedule_data(s)
+                conn.execute(
+                    """INSERT INTO notification_custom_schedule
+                       (entity_type, entity_id, schedule_type,
+                        day_of_month, weekday, occurrence,
+                        enabled, created_at, updated_at)
+                       VALUES ('po', ?, ?, ?, ?, ?, 1, ?, ?)""",
+                    (
+                        po_id,
+                        s["schedule_type"],
+                        s.get("day_of_month"),
+                        s.get("weekday"),
+                        s.get("occurrence"),
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def _validate_schedule_data(s: dict) -> None:
+    """Validate required fields per schedule_type. Raises ValidationError on invalid input."""
+    from sc_gr_app.errors import ValidationError
+
+    stype = s.get("schedule_type")
+    if stype not in ("monthly_day", "monthly_weekday", "weekly_day"):
+        raise ValidationError(f"Invalid schedule_type: {stype}")
+
+    if stype == "monthly_day":
+        day = s.get("day_of_month")
+        if day is None or not isinstance(day, int) or day < 1 or day > 31:
+            raise ValidationError("monthly_day requires day_of_month between 1 and 31")
+
+    elif stype == "monthly_weekday":
+        wd = s.get("weekday")
+        if wd is None or not isinstance(wd, int) or wd < 0 or wd > 6:
+            raise ValidationError("monthly_weekday requires weekday between 0 and 6")
+        occ = s.get("occurrence")
+        if occ not in ("first", "second", "third", "fourth", "last"):
+            raise ValidationError("monthly_weekday requires occurrence: first/second/third/fourth/last")
+
+    elif stype == "weekly_day":
+        wd = s.get("weekday")
+        if wd is None or not isinstance(wd, int) or wd < 0 or wd > 6:
+            raise ValidationError("weekly_day requires weekday between 0 and 6")

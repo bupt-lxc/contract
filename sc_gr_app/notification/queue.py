@@ -65,3 +65,23 @@ def mark_threshold_sent(conn: sqlite3.Connection, entity_type: str, entity_id: s
         "INSERT OR IGNORE INTO notification_sent_threshold (entity_type, entity_id, event_key, sent_at) VALUES (?, ?, ?, ?)",
         (entity_type, entity_id, event_key, timestamp),
     )
+
+
+def queue_custom_schedule(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_id: str,
+    event_key: str,
+    to_ids: list[str],
+    cc_ids: list[str],
+    timestamp: str,
+) -> None:
+    """Insert a custom_schedule notification queue entry (idempotent)."""
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO notification_queue
+            (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
+        VALUES (?, ?, 'custom_schedule', ?, ?, ?, ?)
+        """,
+        (entity_type, entity_id, event_key, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+    )
