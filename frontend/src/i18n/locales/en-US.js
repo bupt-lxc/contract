@@ -197,7 +197,15 @@ home: {
     assetNums: 'Asset Numbers',
     internalSystemNumber: 'Internal System Number',
     activingDate: 'Activing Date',
-    vendors: 'Vendors'
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
+    vendors: 'Vendors',
+    addVendor: 'Add Vendor',
+    selectVendor: 'Select Vendor',
+    noVendors: 'No vendors associated',
+    confirmRemoveVendor: 'Remove vendor "{name}" from this SC?',
+    vendorAdded: 'Vendor added',
+    vendorRemoved: 'Vendor removed'
   },
 
   po: {

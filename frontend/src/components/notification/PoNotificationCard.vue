@@ -49,7 +49,7 @@
 import { reactive, watch } from 'vue'
 
 const props = defineProps({
-  scId: { type: String, required: true },
+  poId: { type: String, required: true },
   config: { type: Object, default: null },
   users: { type: Array, default: () => [] }
 })

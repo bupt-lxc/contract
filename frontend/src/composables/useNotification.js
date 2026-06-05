@@ -3,9 +3,9 @@ import { callApi } from '@/api/bridge.js'
 
 export function useNotification() {
   const state = reactive({
-    scConfig: null,
-    scConfigLoading: false,
-    scConfigError: null,
+    poConfig: null,
+    poConfigLoading: false,
+    poConfigError: null,
     defaults: null,
     defaultsLoading: false,
     defaultsError: null,
@@ -15,22 +15,22 @@ export function useNotification() {
     queueError: null
   })
 
-  async function fetchScConfig(scId) {
-    state.scConfigLoading = true
-    state.scConfigError = null
+  async function fetchPoConfig(poId) {
+    state.poConfigLoading = true
+    state.poConfigError = null
     try {
-      state.scConfig = await callApi('get_sc_notification_config', { sc_id: scId })
+      state.poConfig = await callApi('get_po_notification_config', { po_id: poId })
     } catch (e) {
-      state.scConfigError = e.message
-      state.scConfig = null
+      state.poConfigError = e.message
+      state.poConfig = null
     } finally {
-      state.scConfigLoading = false
+      state.poConfigLoading = false
     }
   }
 
-  async function saveScConfig(scId, data) {
-    await callApi('save_sc_notification_config', { sc_id: scId, data })
-    state.scConfig = data
+  async function savePoConfig(poId, data) {
+    await callApi('save_po_notification_config', { po_id: poId, data })
+    state.poConfig = data
   }
 
   async function fetchDefaults() {
@@ -72,8 +72,8 @@ export function useNotification() {
 
   return {
     state: readonly(state),
-    fetchScConfig,
-    saveScConfig,
+    fetchPoConfig,
+    savePoConfig,
     fetchDefaults,
     saveDefaults,
     fetchQueue

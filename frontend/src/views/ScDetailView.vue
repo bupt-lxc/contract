@@ -38,7 +38,17 @@
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
           </el-button>
         </div>
-        <ScDetailCard :sc="detail.sc" :vendors="detail.vendors || []" />
+        <ScDetailCard :sc="detail.sc" />
+      </div>
+
+      <div class="section-card">
+        <ScVendorSection
+          :vendors="detail.vendors || []"
+          :all-vendors="vendors"
+          :can-manage="permissions.can_edit_sc"
+          @add="handleAddVendor"
+          @remove="handleRemoveVendor"
+        />
       </div>
 
       <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
@@ -50,6 +60,7 @@
         </div>
         <PoTable
           :rows="detail.pos || []"
+          hide-sc-info
           @row-click="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @finish="row => handlePoFinish(row)"
@@ -89,13 +100,6 @@
         </el-table>
       </div>
 
-      <ScNotificationCard
-        v-if="detail.sc"
-        :sc-id="detail.sc.sc_id"
-        :config="notificationConfig"
-        :users="activeUsers"
-        @save="handleNotificationSave"
-      />
     </template>
 
     <ScFormDialog
@@ -133,8 +137,7 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
-import ScNotificationCard from '@/components/notification/ScNotificationCard.vue'
-import { useNotification } from '@/composables/useNotification.js'
+import ScVendorSection from '@/components/sc/ScVendorSection.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -143,11 +146,9 @@ const { t } = useI18n()
 const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
 const { createPo, updatePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
-const { state: notifState, fetchScConfig, saveScConfig } = useNotification()
 const { exportRows } = useExport()
 
 const scId = computed(() => route.params.id)
-const notificationConfig = computed(() => notifState.scConfig)
 const detail = computed(() => state.detail || {})
 const permissions = computed(() => detail.value.permissions || {})
 const vendors = computed(() => vendorState.rows)
@@ -322,6 +323,34 @@ async function handlePoSave(data) {
   } catch (e) { ElMessage.error(e.message); throw e }
 }
 
+async function handleAddVendor(vendorIds) {
+  const ids = Array.isArray(vendorIds) ? vendorIds : [vendorIds]
+  try {
+    for (const vendorId of ids) {
+      await callApi('add_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    }
+    ElMessage.success(t('sc.vendorAdded'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function handleRemoveVendor(vendorId) {
+  try {
+    await ElMessageBox.confirm(
+      t('sc.confirmRemoveVendor', { name: vendorId }),
+      t('common.confirm'),
+      { type: 'warning' }
+    )
+    await callApi('remove_sc_vendor', { sc_id: scId.value, vendor_id: vendorId })
+    ElMessage.success(t('sc.vendorRemoved'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleExportPos() {
   const columns = [
     { key: 'status', label: t('po.status') },
@@ -350,18 +379,9 @@ async function handleExportAudit() {
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 
-async function handleNotificationSave(data) {
-  try {
-    await saveScConfig(scId.value, data)
-    ElMessage.success(t('notification.settingsSaved'))
-  } catch (e) {
-    ElMessage.error(t('notification.saveFailed'))
-  }
-}
-
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  await Promise.all([fetchDetail(scId.value), searchVendors(), fetchScConfig(scId.value)])
+  await Promise.all([fetchDetail(scId.value), searchVendors()])
 })
 
 watch(() => route.params.id, async (newId) => {

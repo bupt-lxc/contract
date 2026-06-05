@@ -37,8 +37,6 @@ OPTIONAL_UPDATE_FIELDS = (
     "description",
     "asset",
     "asset_nums",
-    "pending_date",
-    "approved_date",
     "internal_system_number",
     "vendor_ids",
 )
@@ -253,6 +251,112 @@ def _fetch_sc_vendors(conn, sc_id: str) -> list[dict]:
 
     vendors.sort(key=lambda v: v.get("vendor_name", ""))
     return vendors
+
+
+def add_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_id: str) -> list[dict]:
+    """Associate a vendor with an SC (with snapshot). Returns updated vendor list."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                sc = _get_sc(conn, sc_id)
+                if sc is None:
+                    raise NotFound(f"SC {sc_id} not found")
+                _assert_can_edit_sc(current_user, sc)
+
+                # Verify vendor exists
+                vendor_row = conn.execute(
+                    "SELECT * FROM vendors WHERE vendor_id = ?", (vendor_id,)
+                ).fetchone()
+                if vendor_row is None:
+                    raise NotFound(f"Vendor {vendor_id} not found")
+
+                # Prevent duplicate
+                existing = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ? AND vendor_id = ?",
+                    (sc_id, vendor_id),
+                ).fetchone()
+                if existing["cnt"] > 0:
+                    raise ConflictError(f"Vendor {vendor_id} already associated with SC {sc_id}")
+
+                # Build vendor snapshot
+                snapshot_data = {}
+                for field in _VENDOR_SNAPSHOT_FIELDS:
+                    snapshot_data[field] = vendor_row[field]
+                snapshot = json.dumps(snapshot_data, ensure_ascii=False)
+
+                conn.execute(
+                    "INSERT INTO sc_vendors (sc_id, vendor_id, vendor_snapshot) VALUES (?, ?, ?)",
+                    (sc_id, vendor_id, snapshot),
+                )
+
+                updated_vendors = _fetch_sc_vendors(conn, sc_id)
+                write_audit_log(
+                    conn,
+                    action_type="add_sc_vendor",
+                    object_type="sc_vendor",
+                    object_id=f"{sc_id}:{vendor_id}",
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=None,
+                    after={"sc_id": sc_id, "vendor_id": vendor_id},
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return updated_vendors
+
+
+def remove_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_id: str) -> list[dict]:
+    """Remove a vendor association from an SC. Returns updated vendor list."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                sc = _get_sc(conn, sc_id)
+                if sc is None:
+                    raise NotFound(f"SC {sc_id} not found")
+                _assert_can_edit_sc(current_user, sc)
+
+                # Prevent removing the last vendor
+                count_row = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
+                ).fetchone()
+                if count_row["cnt"] <= 1:
+                    raise ConflictError("Cannot remove the last vendor from SC")
+
+                cursor = conn.execute(
+                    "DELETE FROM sc_vendors WHERE sc_id = ? AND vendor_id = ?",
+                    (sc_id, vendor_id),
+                )
+                if cursor.rowcount == 0:
+                    raise NotFound(f"Vendor {vendor_id} is not associated with SC {sc_id}")
+
+                updated_vendors = _fetch_sc_vendors(conn, sc_id)
+                write_audit_log(
+                    conn,
+                    action_type="remove_sc_vendor",
+                    object_type="sc_vendor",
+                    object_id=f"{sc_id}:{vendor_id}",
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before={"sc_id": sc_id, "vendor_id": vendor_id},
+                    after=None,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return updated_vendors
 
 
 def _require_non_draft_business_fields(sc: dict) -> None:
@@ -656,8 +760,6 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         description = ?,
                         asset = ?,
                         asset_nums = ?,
-                        pending_date = ?,
-                        approved_date = ?,
                         internal_system_number = ?,
                         updated_at = ?
                     where sc_id = ?
@@ -676,8 +778,6 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("description"),
                         merged.get("asset"),
                         merged.get("asset_nums"),
-                        merged.get("pending_date"),
-                        merged.get("approved_date"),
                         merged.get("internal_system_number"),
                         timestamp,
                         sc_id,

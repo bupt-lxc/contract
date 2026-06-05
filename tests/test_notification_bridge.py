@@ -16,13 +16,32 @@ def _seed_user(conn, user_id, machine_id, role="requester", email=None):
     )
 
 
+def _seed_sc_and_po(conn, sc_id="SC1", po_id="PO1", requester_id="U1", sc_status="approved"):
+    conn.execute(
+        """INSERT OR REPLACE INTO sc_records (sc_id, requester_id, status, request_type, cost_center,
+           sc_amount, service_period_start, service_period_end, description, created_by, created_at, updated_at, asset)
+           VALUES (?, ?, ?, 'material', 'CC1', 100000, '2025-01-01', '2026-12-31', '', ?, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')""",
+        (sc_id, requester_id, sc_status, requester_id),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) "
+        "VALUES ('V1', 'Vendor 1', 'General Service', 'U1', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO pos (po_id, sc_id, vendor_id, po_amount, status, created_at, updated_at) "
+        "VALUES (?, ?, 'V1', 100000, 'activing', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')",
+        (po_id, sc_id),
+    )
+
+
 class TestBridgeNotificationEndpoints:
-    def test_get_sc_notification_config(self, monkeypatch, app_config):
+    def test_get_po_notification_config(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
+            _seed_sc_and_po(conn, "SC1", "PO1", "U1")
             conn.execute(
-                "INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids) VALUES ('sc', 'SC1', 1, '[\"U2\"]')"
+                "INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids) VALUES ('po', 'PO1', 1, '[\"U2\"]')"
             )
             conn.commit()
 
@@ -31,12 +50,13 @@ class TestBridgeNotificationEndpoints:
                             lambda config, machine_id: {"user_id": "U1", "role": "requester", "machine_id": "1234567"})
 
         api = bridge.ApiBridge(app_config)
-        result = api.get_sc_notification_config({"sc_id": "SC1"})
+        result = api.get_po_notification_config({"po_id": "PO1"})
         assert result["ok"] is True
         assert result["data"]["enabled"] is True
         assert result["data"]["cc_user_ids"] == ["U2"]
 
-    def test_get_sc_notification_config_returns_none_for_unconfigured(self, monkeypatch, app_config):
+    def test_get_po_notification_config_returns_defaults_for_unconfigured(self, monkeypatch, app_config):
+        """When no PO-specific config exists, the API returns global defaults."""
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
@@ -47,18 +67,20 @@ class TestBridgeNotificationEndpoints:
                             lambda config, machine_id: {"user_id": "U1", "role": "requester", "machine_id": "1234567"})
 
         api = bridge.ApiBridge(app_config)
-        result = api.get_sc_notification_config({"sc_id": "SC_NONE"})
+        result = api.get_po_notification_config({"po_id": "PO_NONE"})
         assert result["ok"] is True
-        assert result["data"] is None
+        # Returns global defaults, not None
+        assert result["data"] is not None
+        assert result["data"]["enabled"] is True
+        assert "cc_user_ids" in result["data"]
+        assert "date_thresholds" in result["data"]
+        assert "amount_thresholds" in result["data"]
 
-    def test_save_sc_notification_config(self, monkeypatch, app_config):
+    def test_save_po_notification_config(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
-            conn.execute(
-                "INSERT OR IGNORE INTO sc_records (sc_id, requester_id, status, created_by, created_at, updated_at, asset) "
-                "VALUES ('SC1', 'U1', 'draft', 'U1', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')"
-            )
+            _seed_sc_and_po(conn, "SC1", "PO1", "U1")
             conn.commit()
 
         monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
@@ -66,25 +88,22 @@ class TestBridgeNotificationEndpoints:
                             lambda config, machine_id: {"user_id": "U1", "role": "requester", "machine_id": "1234567"})
 
         api = bridge.ApiBridge(app_config)
-        result = api.save_sc_notification_config({
-            "sc_id": "SC1",
+        result = api.save_po_notification_config({
+            "po_id": "PO1",
             "data": {"enabled": True, "cc_user_ids": ["U2"], "date_thresholds": [6], "amount_thresholds": [50]}
         })
         assert result["ok"] is True
 
         # Verify it was saved
-        verify = api.get_sc_notification_config({"sc_id": "SC1"})
+        verify = api.get_po_notification_config({"po_id": "PO1"})
         assert verify["data"]["date_thresholds"] == [6]
 
-    def test_save_sc_notification_config_denied_for_non_owner(self, monkeypatch, app_config):
+    def test_save_po_notification_config_denied_for_non_owner(self, monkeypatch, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "1234567", "requester")
             _seed_user(conn, "U2", "2222222", "requester")
-            conn.execute(
-                "INSERT OR IGNORE INTO sc_records (sc_id, requester_id, status, created_by, created_at, updated_at, asset) "
-                "VALUES ('SC1', 'U1', 'draft', 'U1', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')"
-            )
+            _seed_sc_and_po(conn, "SC1", "PO1", "U1")
             conn.commit()
 
         monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "2222222")
@@ -92,8 +111,8 @@ class TestBridgeNotificationEndpoints:
                             lambda config, machine_id: {"user_id": "U2", "role": "requester", "machine_id": "2222222"})
 
         api = bridge.ApiBridge(app_config)
-        result = api.save_sc_notification_config({
-            "sc_id": "SC1",
+        result = api.save_po_notification_config({
+            "po_id": "PO1",
             "data": {"enabled": True, "cc_user_ids": ["U2"]}
         })
         assert result["ok"] is False
