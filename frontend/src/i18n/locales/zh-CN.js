@@ -343,7 +343,21 @@ home: {
     vendorDisabled: '供应商已禁用',
     vendorIdRequired: '供应商ID为必填项',
     vendorNameRequired: '供应商名称为必填项',
-    serviceScopeRequired: '服务范围为必填项'
+    serviceScopeRequired: '服务范围为必填项',
+    import: '导入',
+    importVendors: '导入供应商',
+    importHint: '选择 Excel (.xlsx/.xls) 或 CSV 文件，批量导入供应商数据。',
+    importFormatHint: '表头需包含: vendor_id, vendor_name, service_scope 等字段（支持中英文列名）',
+    selectFile: '选择文件',
+    fileLabel: '文件',
+    validRows: '{n} 条有效',
+    invalidRows: '{n} 条无效',
+    valid: '有效',
+    validation: '验证状态',
+    reselect: '重新选择',
+    importResult: '导入结果',
+    imported: '成功导入 {n} 条',
+    skippedRows: '跳过 {n} 条'
   },
 
   user: {
