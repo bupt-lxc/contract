@@ -62,6 +62,12 @@ const routes = [
   {
     path: '/emails',
     name: 'emails',
+    component: () => import('@/views/MailView.vue'),
+    meta: { layout: 'default', title: 'Email Settings' }
+  },
+  {
+    path: '/emails/logs',
+    name: 'emails-logs',
     component: () => import('@/views/EmailLogsView.vue'),
     meta: { layout: 'default', title: 'Email Logs' }
   },

@@ -70,6 +70,7 @@ const activeRoute = computed(() => {
   if (route.path.startsWith('/sc')) return '/sc'
   if (route.path.startsWith('/po')) return '/po'
   if (route.path.startsWith('/gr')) return '/gr'
+  if (route.path.startsWith('/emails')) return '/emails'
   return route.path
 })
 

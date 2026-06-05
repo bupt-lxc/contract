@@ -3,6 +3,9 @@
     <div class="section-card">
       <div class="section-header">
         <h3>{{ $t('email.emailNotifications') }}</h3>
+        <el-button size="small" @click="$router.push('/emails')">
+          <el-icon><ArrowLeft /></el-icon> {{ $t('email.backToSettings') }}
+        </el-button>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px">
         <el-select v-model="filters.status" :placeholder="$t('email.status')" clearable style="width:140px" @change="onFilterChange">
@@ -85,7 +88,7 @@
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Download } from '@element-plus/icons-vue'
+import { Download, ArrowLeft } from '@element-plus/icons-vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'

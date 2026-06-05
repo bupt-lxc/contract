@@ -14,7 +14,6 @@ export default {
     gr: 'GR',
     vendor: 'Vendor',
     email: 'Email',
-    logs: 'Logs',
     system: 'System'
   },
 
@@ -29,6 +28,7 @@ export default {
     vendorList: 'Vendor List',
     auditLogs: 'Audit Logs',
     emailLogs: 'Email Logs',
+    emailSettings: 'Email Settings',
     system: 'System'
   },
 
@@ -384,7 +384,9 @@ home: {
   },
 
   email: {
-    emailNotifications: 'Email Notifications',
+    emailNotifications: 'Email Notification Settings',
+    viewLogs: 'View Email Logs',
+    backToSettings: 'Back to Email Settings',
     type: 'Type',
     entityId: 'Entity ID',
     eventType: 'Event Type',

@@ -14,7 +14,6 @@ export default {
     gr: '收货记录',
     vendor: '供应商',
     email: '邮件',
-    logs: '日志',
     system: '系统'
   },
 
@@ -29,6 +28,7 @@ export default {
     vendorList: '供应商列表',
     auditLogs: '审计日志',
     emailLogs: '邮件日志',
+    emailSettings: '邮件通知设置',
     system: '系统'
   },
 
@@ -384,7 +384,9 @@ home: {
   },
 
   email: {
-    emailNotifications: '邮件通知',
+    emailNotifications: '邮件通知设置',
+    viewLogs: '查看邮件日志',
+    backToSettings: '返回邮件设置',
     type: '类型',
     entityId: '实体ID',
     eventType: '事件类型',
