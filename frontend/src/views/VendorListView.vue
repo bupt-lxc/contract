@@ -9,6 +9,9 @@
         <el-button type="primary" @click="dialogVisible = true; dialogMode = 'create'">
           <el-icon><Plus /></el-icon> {{ $t('vendor.addVendor') }}
         </el-button>
+        <el-button @click="importVisible = true">
+          <el-icon><Upload /></el-icon> {{ $t('vendor.import') }}
+        </el-button>
         <el-button @click="handleExport" :loading="exporting">
           <el-icon><Download /></el-icon> {{ $t('common.export') }}
         </el-button>
@@ -46,17 +49,23 @@
       :record="dialogRecord"
       @save="handleSave"
     />
+
+    <VendorImportDialog
+      v-model:visible="importVisible"
+      @imported="onImported"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import VendorFormDialog from '@/components/vendor/VendorFormDialog.vue'
+import VendorImportDialog from '@/components/vendor/VendorImportDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
@@ -78,6 +87,7 @@ const vendorFilterConfig = [
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
 const dialogRecord = ref(null)
+const importVisible = ref(false)
 
 function handleFilter({ text, filters }) {
   searchVendors(text, filters)
@@ -125,6 +135,10 @@ async function handleDisable(row) {
     await disableVendor(row.vendor_id)
     ElMessage.success(t('vendor.vendorDisabled'))
   } catch (e) { ElMessage.error(e.message) }
+}
+
+function onImported() {
+  searchVendors()
 }
 
 onMounted(() => searchVendors())
