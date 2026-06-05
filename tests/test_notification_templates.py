@@ -64,7 +64,7 @@ class TestBuildBody:
         assert "GR-2026-001" in body
         assert "GR No" in body
         assert "50000" in body
-        assert "Contract Value" in body
+        assert "Gross Cost" in body
         # Should NOT contain SC-specific labels
         assert "SC No" not in body
         assert "Description" not in body
@@ -84,7 +84,7 @@ class TestBuildBody:
             "status": "draft",
         }
         body = templates.build_body(entry, entity_info, {})
-        assert "Estimated Amount" in body
+        assert "Net Cost" in body
         assert "30000" in body
 
     def test_early_stage_transitions_skip_formal_numbers(self):

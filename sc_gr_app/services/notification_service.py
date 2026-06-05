@@ -166,7 +166,7 @@ def get_po_notification_config(config: AppConfig, po_id: str) -> dict | None:
         # No PO-specific config yet — snapshot current global defaults
         # into a dedicated row so future global changes don't affect this PO.
         default_cc = _read_app_setting(conn, "notify.default_cc") or []
-        default_date = _read_app_setting(conn, "notify.default_date_thresholds") or [6, 3, 1, 0.5]
+        default_date = _read_app_setting(conn, "notify.default_date_thresholds") or [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
         default_amount = _read_app_setting(conn, "notify.default_amount_thresholds") or [50, 30, 10]
 
         conn.execute("BEGIN IMMEDIATE")
