@@ -337,15 +337,16 @@ async function handleNotificationSave(data) {
     await savePoConfig(poId.value, data)
     ElMessage.success(t('notification.settingsSaved'))
   } catch (e) {
-    ElMessage.error(t('notification.saveFailed'))
+    ElMessage.error(e.message || t('notification.saveFailed'))
   }
 }
 
 async function handleCustomSchedulesSave(schedules) {
   try {
     await saveCustomSchedules(poId.value, schedules)
+    ElMessage.success(t('notification.scheduleSaved'))
   } catch (e) {
-    ElMessage.error(t('notification.saveFailed'))
+    ElMessage.error(e.message || t('notification.saveFailed'))
   }
 }
 

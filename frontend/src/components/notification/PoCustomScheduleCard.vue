@@ -151,7 +151,7 @@ function confirmAdd() {
 }
 
 function removeSchedule(schedule) {
-  const updated = props.schedules.filter(s => s !== schedule).map(s => ({ ...s }))
+  const updated = props.schedules.filter(s => s.id !== schedule.id).map(s => ({ ...s }))
   emit('save', updated)
 }
 

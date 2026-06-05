@@ -72,7 +72,7 @@ export function useNotification() {
 
   async function saveCustomSchedules(poId, schedules) {
     await callApi('save_po_custom_schedules', { po_id: poId, schedules })
-    state.customSchedules = schedules
+    await fetchCustomSchedules(poId)
   }
 
   async function fetchQueue({ scId, status, entity_type, entity_id, limit = 50, offset = 0 } = {}) {
