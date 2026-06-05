@@ -37,10 +37,6 @@
         <el-icon><Message /></el-icon>
         <span>{{ $t('nav.email') }}</span>
       </el-menu-item>
-      <el-menu-item index="/logs">
-        <el-icon><Notebook /></el-icon>
-        <span>{{ $t('nav.logs') }}</span>
-      </el-menu-item>
       <el-menu-item v-if="isAdmin" index="/system">
         <el-icon><Setting /></el-icon>
         <span>{{ $t('nav.system') }}</span>
@@ -60,7 +56,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Monitor, Document, ShoppingCart, CircleCheck, OfficeBuilding,
-  Message, Notebook, Setting, DArrowLeft, DArrowRight
+  Message, Setting, DArrowLeft, DArrowRight
 } from '@element-plus/icons-vue'
 
 defineProps({

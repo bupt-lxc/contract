@@ -205,7 +205,8 @@ home: {
     noVendors: 'No vendors associated',
     confirmRemoveVendor: 'Remove vendor "{name}" from this SC?',
     vendorAdded: 'Vendor added',
-    vendorRemoved: 'Vendor removed'
+    vendorRemoved: 'Vendor removed',
+    vendorRequiredForSubmit: 'At least one vendor is required before submitting'
   },
 
   po: {
@@ -376,7 +377,10 @@ home: {
     mode: 'Mode',
     noRecords: 'No audit logs found.',
     noRecordsInSc: 'No audit records.',
-    changes: 'Changes'
+    changes: 'Changes',
+    scId: 'SC ID',
+    exportSuccess: 'Exported successfully',
+    exportFailed: 'Export failed'
   },
 
   email: {

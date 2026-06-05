@@ -78,6 +78,46 @@
       @save="handleNotifDefaultsSave"
     />
 
+    <div v-if="isAdmin" class="section-card">
+      <div class="section-header">
+        <h3>{{ $t('audit.auditLogs') }}</h3>
+        <el-button size="small" @click="handleLogsExport" :loading="logsExporting">
+          <el-icon><Download /></el-icon> {{ $t('common.export') }}
+        </el-button>
+      </div>
+      <el-collapse v-model="logsCollapseActive">
+        <el-collapse-item :title="$t('audit.auditLogs') + ' (' + logsState.total + ')'" name="logs-table">
+          <AdvancedFilterBar
+            :filter-config="logsFilterConfig"
+            @filter="handleLogsFilter"
+            @reset="handleLogsReset"
+          />
+          <el-table :data="logsState.rows" v-loading="logsState.loading" stripe border style="margin-top:12px">
+            <el-table-column prop="created_at" :label="$t('audit.created')" width="160" sortable="custom">
+              <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
+            </el-table-column>
+            <el-table-column prop="action_type" :label="$t('audit.action')" width="150" />
+            <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
+            <el-table-column prop="object_id" :label="$t('audit.objectId')" width="130" />
+            <el-table-column prop="sc_id" :label="$t('audit.scId')" width="130" />
+            <el-table-column prop="operator_id" :label="$t('audit.operator')" width="130" />
+            <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="130" />
+            <template #empty><el-empty :description="logsState.error || $t('audit.noRecords')" /></template>
+          </el-table>
+          <el-pagination
+            v-if="logsState.total > logsState.pageSize"
+            :current-page="logsState.currentPage"
+            :page-size="logsState.pageSize"
+            :total="logsState.total"
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="handleLogsPageChange"
+            @size-change="handleLogsSizeChange"
+            style="margin-top:12px;justify-content:flex-end"
+          />
+        </el-collapse-item>
+      </el-collapse>
+    </div>
+
     <UserFormDialog
       v-model:visible="dialogVisible"
       :mode="dialogMode"
@@ -97,6 +137,8 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import UserFormDialog from '@/components/system/UserFormDialog.vue'
 import NotificationDefaults from '@/components/notification/NotificationDefaults.vue'
 import { useNotification } from '@/composables/useNotification.js'
+import { useLogs } from '@/composables/useLogs.js'
+import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 
@@ -116,6 +158,7 @@ const dialogRecord = ref(null)
 
 const userSearch = ref('')
 const userCollapseActive = ref([])
+const logsCollapseActive = ref([])
 
 const filteredUsers = computed(() => {
   if (!userSearch.value) return state.users
@@ -182,6 +225,57 @@ async function handleNotifDefaultsSave(data) {
   }
 }
 
+const { state: logsState, searchLogs, setFilters: setLogsFilters, resetFilters: resetLogsFilters, onPageChange: onLogsPageChange, onPageSizeChange: onLogsSizeChange } = useLogs()
+const { exportAll } = useExport()
+const logsExporting = ref(false)
+
+const logsFilterConfig = [
+  { name: 'action_type', label: t('audit.action'), type: 'input' },
+  { name: 'object_type', label: t('audit.objectType'), type: 'input' },
+  { name: 'object_id', label: t('audit.objectId'), type: 'input' },
+  { name: 'sc_id', label: t('audit.scId'), type: 'input' },
+  { name: 'operator_id', label: t('audit.operator'), type: 'input' },
+  { name: 'machine_id', label: t('audit.machine'), type: 'input' },
+  { name: 'operation_mode', label: t('audit.mode'), type: 'input' },
+]
+
+function handleLogsFilter({ text, filters }) {
+  searchLogs(text, filters)
+}
+
+function handleLogsReset() {
+  resetLogsFilters()
+  searchLogs()
+}
+
+function handleLogsPageChange(page) { onLogsPageChange(page); searchLogs() }
+function handleLogsSizeChange(size) { onLogsSizeChange(size); searchLogs() }
+
+async function handleLogsExport() {
+  logsExporting.value = true
+  try {
+    const columns = [
+      { key: 'created_at', label: t('audit.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'action_type', label: t('audit.action') },
+      { key: 'object_type', label: t('audit.objectType') },
+      { key: 'object_id', label: t('audit.objectId') },
+      { key: 'sc_id', label: t('audit.scId') },
+      { key: 'operator_id', label: t('audit.operator') },
+      { key: 'machine_id', label: t('audit.machine') }
+    ]
+    await exportAll('search_audit_logs', {
+      filters: logsState.filters,
+      sort: logsState.sort,
+      direction: logsState.direction
+    }, columns, `Audit_Logs_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success(t('audit.exportSuccess'))
+  } catch (e) {
+    ElMessage.error(e.message || t('audit.exportFailed'))
+  } finally {
+    logsExporting.value = false
+  }
+}
+
 // ── Attachments directory ──
 const attachmentsDir = ref('')
 const pendingAttachmentsDir = ref('')
@@ -213,7 +307,7 @@ async function handleSaveAttachmentsDir() {
 }
 
 onMounted(() => {
-  if (isAdmin.value) fetchUsers()
+  if (isAdmin.value) { fetchUsers(); searchLogs() }
   fetchDefaults()
   fetchAttachmentsDir()
 })
