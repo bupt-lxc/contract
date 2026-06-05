@@ -70,14 +70,6 @@
       <p style="color:#94a3b8;font-size:12px;margin-top:8px">{{ $t('settings.attachmentsDirHint') }}</p>
     </div>
 
-    <NotificationDefaults
-      v-if="isAdmin"
-      :defaults="notifState.defaults"
-      :loading="notifState.defaultsLoading"
-      :users="state.users"
-      @save="handleNotifDefaultsSave"
-    />
-
     <div v-if="isAdmin" class="section-card">
       <div class="section-header">
         <h3>{{ $t('audit.auditLogs') }}</h3>
@@ -135,8 +127,6 @@ import { useUser } from '@/composables/useUser.js'
 import { useExport } from '@/composables/useExport.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import UserFormDialog from '@/components/system/UserFormDialog.vue'
-import NotificationDefaults from '@/components/notification/NotificationDefaults.vue'
-import { useNotification } from '@/composables/useNotification.js'
 import { useLogs } from '@/composables/useLogs.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import { ElMessage } from 'element-plus'
@@ -145,7 +135,6 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 const { state, fetchUsers, createUser, updateUser, disableUser, enableUser } = useUser()
-const { state: notifState, fetchDefaults, saveDefaults } = useNotification()
 const { exportRows } = useExport()
 const exporting = ref(false)
 
@@ -213,15 +202,6 @@ async function handleExport() {
     ElMessage.error(e.message || t('common.exportFailed'))
   } finally {
     exporting.value = false
-  }
-}
-
-async function handleNotifDefaultsSave(data) {
-  try {
-    await saveDefaults(data)
-    ElMessage.success(t('notification.defaultsSaved'))
-  } catch (e) {
-    ElMessage.error(t('notification.defaultsSaveFailed'))
   }
 }
 
@@ -308,7 +288,6 @@ async function handleSaveAttachmentsDir() {
 
 onMounted(() => {
   if (isAdmin.value) { fetchUsers(); searchLogs() }
-  fetchDefaults()
   fetchAttachmentsDir()
 })
 </script>

@@ -76,7 +76,11 @@ const breadcrumbs = computed(() => {
       { i18nKey: 'breadcrumb.auditLogs', to: '/logs' }
     ],
     'emails': [
-      { i18nKey: 'breadcrumb.emailLogs', to: '/emails' }
+      { i18nKey: 'breadcrumb.emailSettings', to: '/emails' }
+    ],
+    'emails-logs': [
+      { i18nKey: 'breadcrumb.emailSettings', to: '/emails' },
+      { i18nKey: 'breadcrumb.emailLogs', to: '/emails/logs' }
     ],
     'system': [
       { i18nKey: 'breadcrumb.system', to: '/system' }

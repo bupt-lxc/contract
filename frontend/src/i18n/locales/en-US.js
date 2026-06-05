@@ -14,7 +14,6 @@ export default {
     gr: 'GR',
     vendor: 'Vendor',
     email: 'Email',
-    logs: 'Logs',
     system: 'System'
   },
 
@@ -29,6 +28,7 @@ export default {
     vendorList: 'Vendor List',
     auditLogs: 'Audit Logs',
     emailLogs: 'Email Logs',
+    emailSettings: 'Email Settings',
     system: 'System'
   },
 
@@ -343,7 +343,21 @@ home: {
     vendorDisabled: 'Vendor disabled',
     vendorIdRequired: 'Vendor ID is required',
     vendorNameRequired: 'Vendor Name is required',
-    serviceScopeRequired: 'Service Scope is required'
+    serviceScopeRequired: 'Service Scope is required',
+    import: 'Import',
+    importVendors: 'Import Vendors',
+    importHint: 'Select an Excel (.xlsx/.xls) or CSV file to batch import vendors.',
+    importFormatHint: 'Headers should include: vendor_id, vendor_name, service_scope, etc.',
+    selectFile: 'Select File',
+    fileLabel: 'File',
+    validRows: '{n} valid',
+    invalidRows: '{n} invalid',
+    valid: 'Valid',
+    validation: 'Validation',
+    reselect: 'Reselect',
+    importResult: 'Import Result',
+    imported: '{n} imported successfully',
+    skippedRows: '{n} skipped'
   },
 
   user: {
@@ -384,7 +398,9 @@ home: {
   },
 
   email: {
-    emailNotifications: 'Email Notifications',
+    emailNotifications: 'Email Notification Settings',
+    viewLogs: 'View Email Logs',
+    backToSettings: 'Back to Email Settings',
     type: 'Type',
     entityId: 'Entity ID',
     eventType: 'Event Type',
