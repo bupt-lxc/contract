@@ -24,39 +24,60 @@
         </el-select>
       </div>
 
-      <!-- Transition Rules — plain layout to avoid el-table rendering issues in PyWebView -->
-      <div v-for="et in ['sc','po','gr']" :key="et" style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t(`notification.${et}TransitionRules`) }}</label>
-        <div class="transition-rules-card">
-          <div v-for="tKey in transitionKeys(et)" :key="`${et}-${tKey}`" class="transition-rule-row">
-            <span class="transition-rule-label">{{ tKey }}</span>
-            <div class="transition-rule-selects">
-              <el-select
-                :model-value="local.transitions[et][tKey].to"
-                @update:model-value="(v) => { local.transitions[et][tKey].to = v; emitSave() }"
-                multiple
-                :placeholder="$t('notification.to')"
-                style="flex:1;min-width:180px"
-              >
-                <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
-                <el-option :label="$t('notification.requester')" value="requester" />
-                <el-option :label="$t('notification.actor')" value="actor" />
-              </el-select>
-              <el-select
-                :model-value="local.transitions[et][tKey].cc"
-                @update:model-value="(v) => { local.transitions[et][tKey].cc = v; emitSave() }"
-                multiple
-                :placeholder="$t('notification.cc')"
-                style="flex:1;min-width:180px"
-              >
-                <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
-                <el-option :label="$t('notification.requester')" value="requester" />
-                <el-option :label="$t('notification.actor')" value="actor" />
-              </el-select>
+      <!-- Transition Rules — collapsible per entity type -->
+      <el-collapse v-model="transitionCollapse" style="margin-bottom:16px">
+        <el-collapse-item v-for="et in ['sc','po','gr']" :key="et" :title="$t(`notification.${et}TransitionRules`)" :name="et">
+          <div class="transition-rules-card">
+            <div v-for="tKey in transitionKeys(et)" :key="`${et}-${tKey}`" class="transition-rule-row">
+              <span class="transition-rule-label">{{ tKey }}</span>
+              <div class="transition-rule-selects">
+                <el-select
+                  :model-value="local.transitions[et][tKey].to"
+                  @update:model-value="(v) => { local.transitions[et][tKey].to = v; emitSave() }"
+                  multiple
+                  :placeholder="$t('notification.to')"
+                  style="flex:1;min-width:180px"
+                >
+                  <el-option-group :label="$t('notification.keywords')">
+                    <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
+                    <el-option :label="$t('notification.requester')" value="requester" />
+                    <el-option :label="$t('notification.actor')" value="actor" />
+                  </el-option-group>
+                  <el-option-group :label="$t('notification.specificUsers')">
+                    <el-option
+                      v-for="u in allUsers"
+                      :key="u.user_id"
+                      :label="`${u.user_name} (${u.machine_id})`"
+                      :value="u.user_id"
+                    />
+                  </el-option-group>
+                </el-select>
+                <el-select
+                  :model-value="local.transitions[et][tKey].cc"
+                  @update:model-value="(v) => { local.transitions[et][tKey].cc = v; emitSave() }"
+                  multiple
+                  :placeholder="$t('notification.cc')"
+                  style="flex:1;min-width:180px"
+                >
+                  <el-option-group :label="$t('notification.keywords')">
+                    <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
+                    <el-option :label="$t('notification.requester')" value="requester" />
+                    <el-option :label="$t('notification.actor')" value="actor" />
+                  </el-option-group>
+                  <el-option-group :label="$t('notification.specificUsers')">
+                    <el-option
+                      v-for="u in allUsers"
+                      :key="u.user_id"
+                      :label="`${u.user_name} (${u.machine_id})`"
+                      :value="u.user_id"
+                    />
+                  </el-option-group>
+                </el-select>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- Default CC -->
       <div style="margin-bottom:16px">
@@ -121,7 +142,7 @@
 </style>
 
 <script setup>
-import { reactive, watch, computed } from 'vue'
+import { reactive, ref, watch, computed } from 'vue'
 
 const props = defineProps({
   defaults: { type: Object, default: null },
@@ -145,6 +166,8 @@ const local = reactive({
   date_thresholds: [],
   amount_thresholds: []
 })
+
+const transitionCollapse = ref([])
 
 watch(() => props.defaults, (val) => {
   if (val) {

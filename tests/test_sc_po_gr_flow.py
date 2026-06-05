@@ -883,9 +883,14 @@ def test_owner_can_edit_pending_sc(app_config):
     seed_users(app_config)
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
+    from sc_gr_app.services.vendor_service import create_vendor
 
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
     submit_sc(
         app_config,
         USER,
@@ -897,6 +902,7 @@ def test_owner_can_edit_pending_sc(app_config):
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
             "service_period_end": "2026-12-31",
+            "vendor_ids": ["V1"],
         },
     )
 
@@ -918,9 +924,14 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
         submit_sc,
         update_sc,
     )
+    from sc_gr_app.services.vendor_service import create_vendor
 
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     draft_sc_id = created["sc_id"]
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
     submit_sc(
         app_config,
         USER,
@@ -932,6 +943,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
             "service_period_end": "2026-12-31",
+            "vendor_ids": ["V1"],
         },
     )
     confirm_sc(app_config, ADMIN, draft_sc_id)
@@ -1094,9 +1106,14 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
     seed_users(app_config)
 
     from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, update_sc
+    from sc_gr_app.services.vendor_service import create_vendor
 
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     sc_id = created["sc_id"]
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
 
     with pytest.raises(ValidationError, match="service period is invalid"):
         update_sc(
@@ -1120,6 +1137,7 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
             "service_period_start": "2026-01-01",
             "service_period_end": "2026-12-31",
             "sc_no": "SC001",
+            "vendor_ids": ["V1"],
         },
     )
 
@@ -1674,7 +1692,8 @@ def test_submit_sc_allowed_with_draft_po(app_config):
     # submit_sc should succeed even with draft PO
     sc_data = {"sc_no": "SC-CAS1", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
-               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
+               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+               "vendor_ids": ["V1"]}
     updated = submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
     assert updated["status"] == "manager_confirm"
 
@@ -1702,7 +1721,8 @@ def test_approve_sc_succeeds_with_draft_po(app_config):
     # Submit SC (draft→pending), PO stays draft
     sc_data = {"sc_no": "SC-CAS2", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
-               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
+               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+               "vendor_ids": ["V1"]}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
 
@@ -1742,7 +1762,8 @@ def test_approve_sc_with_cascade_pos(app_config):
     # Submit SC (draft→pending)
     sc_data = {"sc_no": "SC-CAS8", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
-               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
+               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+               "vendor_ids": ["V1"]}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
 
@@ -1777,7 +1798,8 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
     # Submit SC → submit PO → approve SC → approve PO
     sc_data = {"sc_no": "SC-CLOS1", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
-               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}
+               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+               "vendor_ids": ["V1"]}
     submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
     submit_po(app_config, USER, po["po_id"])
@@ -1818,7 +1840,8 @@ def test_manual_submit_po_with_budget_check(app_config):
         app_config, USER, sc["sc_id"],
         {"sc_no": "SC-CAS4", "requester_id": "U1", "request_type": "service",
          "cost_center": 1001, "sc_amount": 400,  # SC amount < PO amount!
-         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+         "vendor_ids": ["V1"]},
     )
     # SC is pending, PO is still draft. Manual submit should fail budget check.
     with pytest.raises(ConflictError, match="PO total would exceed SC amount"):
@@ -1851,7 +1874,8 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
         app_config, USER, sc["sc_id"],
         {"sc_no": "SC-CAS6", "requester_id": "U1", "request_type": "service",
          "cost_center": 1001, "sc_amount": 2000,
-         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+         "vendor_ids": ["V1"]},
     )
     confirm_sc(app_config, ADMIN, sc["sc_id"])
     submit_po(app_config, USER, po["po_id"])

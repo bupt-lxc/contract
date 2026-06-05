@@ -205,7 +205,8 @@ home: {
     noVendors: 'No vendors associated',
     confirmRemoveVendor: 'Remove vendor "{name}" from this SC?',
     vendorAdded: 'Vendor added',
-    vendorRemoved: 'Vendor removed'
+    vendorRemoved: 'Vendor removed',
+    vendorRequiredForSubmit: 'At least one vendor is required before submitting'
   },
 
   po: {
@@ -359,7 +360,9 @@ home: {
     enableConfirm: 'Enable this user?',
     noRecords: 'No users found.',
     userDisabled: 'User disabled',
-    userEnabled: 'User enabled'
+    userEnabled: 'User enabled',
+    searchUsers: 'Search users...',
+    userList: 'User List'
   },
 
   audit: {
@@ -374,7 +377,10 @@ home: {
     mode: 'Mode',
     noRecords: 'No audit logs found.',
     noRecordsInSc: 'No audit records.',
-    changes: 'Changes'
+    changes: 'Changes',
+    scId: 'SC ID',
+    exportSuccess: 'Exported successfully',
+    exportFailed: 'Export failed'
   },
 
   email: {
@@ -430,7 +436,9 @@ home: {
     twoWeeks: '2 weeks',
     fiftyPercent: '50%',
     thirtyPercent: '30%',
-    tenPercent: '10%'
+    tenPercent: '10%',
+    keywords: 'Keywords',
+    specificUsers: 'Specific Users'
   },
 
   export: {

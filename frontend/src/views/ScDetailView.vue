@@ -51,7 +51,7 @@
         />
       </div>
 
-      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed') && detail.pos && detail.pos.length > 0" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button size="small" @click="handleExportPos">
@@ -178,6 +178,10 @@ async function handleEditSave(data) {
 
 async function handleSubmit() {
   try {
+    if (!detail.value.vendors || detail.value.vendors.length === 0) {
+      ElMessage.warning(t('sc.vendorRequiredForSubmit'))
+      return
+    }
     await ElMessageBox.confirm(t('sc.confirmSubmit'), t('common.confirm'), { type: 'warning' })
     await submitSc(scId.value, {})
     ElMessage.success(t('sc.submitted'))

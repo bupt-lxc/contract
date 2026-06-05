@@ -205,7 +205,8 @@ home: {
     noVendors: '暂无关联供应商',
     confirmRemoveVendor: '确认移除供应商「{name}」？',
     vendorAdded: '供应商已添加',
-    vendorRemoved: '供应商已移除'
+    vendorRemoved: '供应商已移除',
+    vendorRequiredForSubmit: '提交前请至少选择一个供应商'
   },
 
   po: {
@@ -359,7 +360,9 @@ home: {
     enableConfirm: '确认启用此用户？',
     noRecords: '暂无用户信息。',
     userDisabled: '用户已禁用',
-    userEnabled: '用户已启用'
+    userEnabled: '用户已启用',
+    searchUsers: '搜索用户...',
+    userList: '用户列表'
   },
 
   audit: {
@@ -374,7 +377,10 @@ home: {
     mode: '模式',
     noRecords: '暂无审计日志。',
     noRecordsInSc: '暂无审计记录。',
-    changes: '变更详情'
+    changes: '变更详情',
+    scId: 'SC ID',
+    exportSuccess: '导出成功',
+    exportFailed: '导出失败'
   },
 
   email: {
@@ -430,7 +436,9 @@ home: {
     twoWeeks: '2 周',
     fiftyPercent: '50%',
     thirtyPercent: '30%',
-    tenPercent: '10%'
+    tenPercent: '10%',
+    keywords: '关键字',
+    specificUsers: '指定用户'
   },
 
   export: {
