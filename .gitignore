@@ -10,6 +10,8 @@ node_modules/
 package-lock.json
 data/
 .worktrees/
+.codegraph/
+.vscode/
 .github/workflows/
 CLAUDE.md
 .claude/
