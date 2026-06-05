@@ -5,32 +5,33 @@
     stripe
     border
     :row-class-name="rowClass"
+    :default-sort="{ prop: 'po_no', order: 'ascending' }"
   >
-    <el-table-column :label="$t('po.status')" width="100">
+    <el-table-column prop="status" :label="$t('po.status')" width="100" sortable>
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
-    <el-table-column prop="po_no" :label="$t('po.poNo')" width="130">
+    <el-table-column prop="po_no" :label="$t('po.poNo')" width="130" sortable>
       <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
     </el-table-column>
-    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" />
-    <el-table-column v-if="!hideScInfo" prop="sc_no" :label="$t('filter.scNo')" width="130" />
-    <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip />
-    <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip />
-    <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" />
-    <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" />
-    <el-table-column prop="po_amount" :label="$t('po.poAmount')" width="120">
+    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" sortable />
+    <el-table-column v-if="!hideScInfo" prop="sc_no" :label="$t('filter.scNo')" width="130" sortable />
+    <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip sortable />
+    <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip sortable />
+    <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" sortable />
+    <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" sortable />
+    <el-table-column prop="po_amount" :label="$t('po.poAmount')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.po_amount" /></template>
     </el-table-column>
-    <el-table-column prop="open_po_amount" :label="$t('po.openCon')" width="120">
+    <el-table-column prop="open_po_amount" :label="$t('po.openCon')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.open_po_amount" /></template>
     </el-table-column>
-    <el-table-column prop="contract_from" :label="$t('po.contractFrom')" width="120">
+    <el-table-column prop="contract_from" :label="$t('po.contractFrom')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_from) }}</template>
     </el-table-column>
-    <el-table-column prop="contract_to" :label="$t('po.contractTo')" width="120">
+    <el-table-column prop="contract_to" :label="$t('po.contractTo')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_to) }}</template>
     </el-table-column>
-    <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120">
+    <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.activing_date) }}</template>
     </el-table-column>
     <el-table-column :label="$t('po.actions')" width="200" fixed="right">

@@ -122,7 +122,7 @@ class TestQueueStatusChange:
             rows = conn.execute("SELECT * FROM notification_queue").fetchall()
             assert len(rows) == 0
 
-    def test_merges_per_po_cc_list(self, app_config):
+    def test_merges_per_sc_cc_list(self, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "M1", "requester")
@@ -133,7 +133,7 @@ class TestQueueStatusChange:
                 ("notify.admin_recipients", json.dumps(["U2"]), "2025-01-01T00:00:00Z"),
             )
             conn.execute(
-                "INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids) VALUES ('po', 'PO1', 1, ?)",
+                "INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids) VALUES ('sc', 'SC1', 1, ?)",
                 (json.dumps(["U3"]),),
             )
             conn.commit()
@@ -142,7 +142,7 @@ class TestQueueStatusChange:
             conn.execute("BEGIN IMMEDIATE")
             entity = {"requester_id": "U1"}
             current_user = {"user_id": "U1", "role": "requester", "machine_id": "M1"}
-            notification_service.queue_status_change(conn, "po", "PO1", "submit", entity, current_user)
+            notification_service.queue_status_change(conn, "sc", "SC1", "submit", entity, current_user)
             conn.commit()
 
         with connect(app_config) as conn:
@@ -232,7 +232,7 @@ class TestQueueStatusChange:
 
 
 
-class TestPoNotificationConfig:
+class TestScNotificationConfig:
     def test_save_and_get(self, app_config):
         migrate(app_config)
         data = {
@@ -241,31 +241,20 @@ class TestPoNotificationConfig:
             "date_thresholds": [6, 3],
             "amount_thresholds": [50, 10],
         }
-        notification_service.save_po_notification_config(app_config, "PO1", data)
-        result = notification_service.get_po_notification_config(app_config, "PO1")
+        notification_service.save_sc_notification_config(app_config, "SC1", data)
+        result = notification_service.get_sc_notification_config(app_config, "SC1")
         assert result == data
 
-    def test_returns_defaults_for_unconfigured_po(self, app_config):
-        """When no PO-specific config exists, global defaults are returned."""
+    def test_returns_none_for_unconfigured_sc(self, app_config):
         migrate(app_config)
-        # Seed global defaults in app_settings
-        notification_service.save_notification_defaults(app_config, {
-            "default_cc": ["U5"],
-            "date_thresholds": [3, 1],
-            "amount_thresholds": [30],
-        })
-        result = notification_service.get_po_notification_config(app_config, "PO_NONE")
-        assert result is not None
-        assert result["enabled"] is True
-        assert result["cc_user_ids"] == ["U5"]
-        assert result["date_thresholds"] == [3, 1]
-        assert result["amount_thresholds"] == [30]
+        result = notification_service.get_sc_notification_config(app_config, "SC_NONE")
+        assert result is None
 
     def test_save_updates_existing(self, app_config):
         migrate(app_config)
-        notification_service.save_po_notification_config(app_config, "PO1", {"enabled": True, "cc_user_ids": [], "date_thresholds": [6], "amount_thresholds": [50]})
-        notification_service.save_po_notification_config(app_config, "PO1", {"enabled": False, "cc_user_ids": ["U1"], "date_thresholds": [3], "amount_thresholds": [30]})
-        result = notification_service.get_po_notification_config(app_config, "PO1")
+        notification_service.save_sc_notification_config(app_config, "SC1", {"enabled": True, "cc_user_ids": [], "date_thresholds": [6], "amount_thresholds": [50]})
+        notification_service.save_sc_notification_config(app_config, "SC1", {"enabled": False, "cc_user_ids": ["U1"], "date_thresholds": [3], "amount_thresholds": [30]})
+        result = notification_service.get_sc_notification_config(app_config, "SC1")
         assert result["enabled"] is False
         assert result["cc_user_ids"] == ["U1"]
 

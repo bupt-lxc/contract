@@ -1,30 +1,30 @@
 <template>
-  <el-table :data="rows" stripe border style="width:100%" @row-click="row => $emit('row-click', row)">
-    <el-table-column :label="$t('gr.status')" width="100">
+  <el-table :data="rows" stripe border style="width:100%" @row-click="row => $emit('row-click', row)" :default-sort="{ prop: 'created_at', order: 'descending' }">
+    <el-table-column prop="status" :label="$t('gr.status')" width="100" sortable>
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
-    <el-table-column prop="gr_id" :label="$t('gr.id')" width="120" />
-    <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120">
+    <el-table-column prop="gr_id" :label="$t('gr.id')" width="120" sortable />
+    <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
       <template #default="{ row }">{{ row.gr_no || '-' }}</template>
     </el-table-column>
-    <el-table-column prop="requester_id" :label="$t('gr.requester')" width="120" />
-    <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120">
+    <el-table-column prop="requester_id" :label="$t('gr.requester')" width="120" sortable />
+    <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
     </el-table-column>
-    <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center">
+    <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center" sortable>
       <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
     </el-table-column>
-    <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120">
+    <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
     </el-table-column>
-    <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip />
-    <el-table-column prop="created_at" :label="$t('gr.created')" width="110">
+    <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip sortable />
+    <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
     </el-table-column>
-    <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110">
+    <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
     </el-table-column>
-    <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110">
+    <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
     </el-table-column>
     <el-table-column :label="$t('gr.actions')" width="220" fixed="right">

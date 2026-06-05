@@ -195,10 +195,8 @@ watch(() => props.visible, (val) => {
       Object.assign(form, props.record)
     } else {
       Object.assign(form, emptyForm())
-      // Auto-set requester for non-admin users
-      if (!isAdmin.value) {
-        form.requester_id = currentUser.value?.user_id || ''
-      }
+      // Auto-set requester to current user (admin can change it)
+      form.requester_id = currentUser.value?.user_id || ''
       formRef.value?.resetFields()
     }
   }
