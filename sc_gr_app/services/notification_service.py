@@ -162,11 +162,32 @@ def get_po_notification_config(config: AppConfig, po_id: str) -> dict | None:
                 "date_thresholds": json.loads(row["date_thresholds"]),
                 "amount_thresholds": json.loads(row["amount_thresholds"]),
             }
-        # No PO-specific config — return global defaults so new POs
-        # inherit the system-wide notification settings automatically.
+
+        # No PO-specific config yet — snapshot current global defaults
+        # into a dedicated row so future global changes don't affect this PO.
         default_cc = _read_app_setting(conn, "notify.default_cc") or []
         default_date = _read_app_setting(conn, "notify.default_date_thresholds") or [6, 3, 1, 0.5]
         default_amount = _read_app_setting(conn, "notify.default_amount_thresholds") or [50, 30, 10]
+
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids, date_thresholds, amount_thresholds)
+                VALUES ('po', ?, 1, ?, ?, ?)
+                """,
+                (
+                    po_id,
+                    json.dumps(default_cc),
+                    json.dumps(default_date),
+                    json.dumps(default_amount),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
         return {
             "enabled": True,
             "cc_user_ids": default_cc,
