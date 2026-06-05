@@ -140,6 +140,7 @@ const scCells = computed(() => [
 const poCells = computed(() => [
   { status: 'draft',    label: t('status.draft') },
   { status: 'activing', label: t('status.activing') },
+  { status: 'finished', label: t('status.finished') },
 ])
 
 const grCells = computed(() => [
@@ -155,6 +156,7 @@ function headStatus(status) {
   if (status.includes('activing')) return 'pending'
   if (status.includes('pending')) return 'pending'
   if (status.includes('approved')) return 'approved'
+  if (status.includes('finished')) return 'approved'
   return 'draft'
 }
 

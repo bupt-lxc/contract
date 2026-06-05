@@ -37,7 +37,8 @@ export function useNotification() {
     state.defaultsLoading = true
     state.defaultsError = null
     try {
-      state.defaults = await callApi('get_notification_defaults', {})
+      const result = await callApi('get_notification_defaults', {})
+      state.defaults = result
     } catch (e) {
       state.defaultsError = e.message
       state.defaults = null
@@ -48,7 +49,9 @@ export function useNotification() {
 
   async function saveDefaults(data) {
     await callApi('save_notification_defaults', { data })
-    state.defaults = data
+    // Re-fetch defaults from the server so state.defaults always
+    // has the same shape (notify.* keys) that NotificationDefaults expects.
+    await fetchDefaults()
   }
 
   async function fetchQueue({ scId, status, entity_type, entity_id, limit = 50, offset = 0 } = {}) {

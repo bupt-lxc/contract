@@ -11,7 +11,6 @@
           v-model="local.admin_recipients"
           multiple
           filterable
-          :teleported="false"
           :placeholder="$t('notification.selectAdminsPlaceholder')"
           style="width:100%"
           @change="emitSave"
@@ -25,39 +24,45 @@
         </el-select>
       </div>
 
-      <!-- Transition Rules -->
-      <div style="margin-bottom:16px">
-        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.scTransitionRules') }}</label>
-        <el-table :data="transitionRows('sc')" border size="small">
-          <el-table-column prop="transition" :label="$t('notification.transition')" width="100" />
-          <el-table-column :label="$t('notification.to')" width="200">
-            <template #default="{ row }">
-              <el-select v-model="local.transitions.sc[row.transition].to" multiple filterable
-                :teleported="false" style="width:100%" @change="emitSave">
+      <!-- Transition Rules — plain layout to avoid el-table rendering issues in PyWebView -->
+      <div v-for="et in ['sc','po','gr']" :key="et" style="margin-bottom:16px">
+        <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t(`notification.${et}TransitionRules`) }}</label>
+        <div class="transition-rules-card">
+          <div v-for="tKey in transitionKeys(et)" :key="`${et}-${tKey}`" class="transition-rule-row">
+            <span class="transition-rule-label">{{ tKey }}</span>
+            <div class="transition-rule-selects">
+              <el-select
+                :model-value="local.transitions[et][tKey].to"
+                @update:model-value="(v) => { local.transitions[et][tKey].to = v; emitSave() }"
+                multiple
+                :placeholder="$t('notification.to')"
+                style="flex:1;min-width:180px"
+              >
                 <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
                 <el-option :label="$t('notification.requester')" value="requester" />
                 <el-option :label="$t('notification.actor')" value="actor" />
               </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column :label="$t('notification.cc')" width="200">
-            <template #default="{ row }">
-              <el-select v-model="local.transitions.sc[row.transition].cc" multiple filterable
-                :teleported="false" style="width:100%" @change="emitSave">
+              <el-select
+                :model-value="local.transitions[et][tKey].cc"
+                @update:model-value="(v) => { local.transitions[et][tKey].cc = v; emitSave() }"
+                multiple
+                :placeholder="$t('notification.cc')"
+                style="flex:1;min-width:180px"
+              >
                 <el-option :label="$t('notification.adminRecipients')" value="notify.admin_recipients" />
                 <el-option :label="$t('notification.requester')" value="requester" />
                 <el-option :label="$t('notification.actor')" value="actor" />
               </el-select>
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Default CC -->
       <div style="margin-bottom:16px">
         <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultCcList') }}</label>
         <el-select v-model="local.default_cc" multiple filterable
-          :teleported="false" :placeholder="$t('notification.selectUsersPlaceholder')" style="width:100%" @change="emitSave">
+          :placeholder="$t('notification.selectUsersPlaceholder')" style="width:100%" @change="emitSave">
           <el-option v-for="u in allUsers" :key="u.user_id"
             :label="`${u.user_name} -- ${u.machine_id}`" :value="u.user_id" />
         </el-select>
@@ -84,6 +89,36 @@
     </template>
   </div>
 </template>
+
+<style scoped>
+.transition-rules-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 4px 0;
+}
+.transition-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #ebeef5;
+}
+.transition-rule-row:last-child {
+  border-bottom: none;
+}
+.transition-rule-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+}
+.transition-rule-selects {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+</style>
 
 <script setup>
 import { reactive, watch, computed } from 'vue'
@@ -113,20 +148,43 @@ const local = reactive({
 
 watch(() => props.defaults, (val) => {
   if (val) {
-    local.admin_recipients = val['notify.admin_recipients'] || []
-    local.transitions.sc = val['notify.transitions.sc'] || local.transitions.sc
-    local.transitions.po = val['notify.transitions.po'] || local.transitions.po
-    local.transitions.gr = val['notify.transitions.gr'] || local.transitions.gr
-    local.default_cc = val['notify.default_cc'] || []
-    local.date_thresholds = val['notify.default_date_thresholds'] || []
-    local.amount_thresholds = val['notify.default_amount_thresholds'] || []
+    // Update arrays in-place to preserve reactivity references
+    const ar = val['notify.admin_recipients']
+    local.admin_recipients.splice(0, local.admin_recipients.length, ...(Array.isArray(ar) ? ar : []))
+
+    // Deep-assign transitions to keep existing reactive objects alive.
+    // Replacing the whole object can cause el-select inside el-table to lose
+    // its v-model binding during re-render cycles.
+    for (const et of ['sc', 'po', 'gr']) {
+      const src = val[`notify.transitions.${et}`]
+      if (src) {
+        for (const tKey of Object.keys(src)) {
+          if (local.transitions[et][tKey]) {
+            local.transitions[et][tKey].to = src[tKey].to || []
+            local.transitions[et][tKey].cc = src[tKey].cc || []
+          } else {
+            local.transitions[et][tKey] = { to: src[tKey].to || [], cc: src[tKey].cc || [] }
+          }
+        }
+      }
+    }
+
+    const dcc = val['notify.default_cc']
+    local.default_cc.splice(0, local.default_cc.length, ...(Array.isArray(dcc) ? dcc : []))
+
+    const dt = val['notify.default_date_thresholds']
+    local.date_thresholds.splice(0, local.date_thresholds.length, ...(Array.isArray(dt) ? dt : []))
+
+    const at = val['notify.default_amount_thresholds']
+    local.amount_thresholds.splice(0, local.amount_thresholds.length, ...(Array.isArray(at) ? at : []))
+
+  } else {
+    // val is falsy, keeping hardcoded defaults
   }
 }, { immediate: true })
 
-function transitionRows(entityType) {
-  return Object.keys(local.transitions[entityType]).map(t => ({
-    transition: t
-  }))
+function transitionKeys(entityType) {
+  return Object.keys(local.transitions[entityType])
 }
 
 let saveTimer = null

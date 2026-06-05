@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -175,6 +175,8 @@ const emptyForm = () => ({
 
 const form = reactive(emptyForm())
 
+const currentUser = computed(() => window.__currentUser || {})
+
 const draftRules = {
   requester_id: [{ required: true, message: t('sc.requesterRequired'), trigger: 'change' }]
 }
@@ -207,6 +209,7 @@ watch(() => props.visible, (val) => {
       }
     } else {
       Object.assign(form, emptyForm())
+      form.requester_id = currentUser.value?.user_id || ''
     }
     _setRules(draftRules)
   }

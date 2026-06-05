@@ -110,14 +110,31 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
         return
 
     timestamp = _utc_now()
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO notification_queue
-            (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
-        VALUES (?, ?, 'status_change', ?, ?, ?, ?)
-        """,
-        (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
-    )
+    # If a pending entry already exists for the same event, refresh its
+    # timestamp and recipients rather than silently dropping the duplicate.
+    # This is important when an entity is revoked and re-submitted before
+    # the notification script processes the first submit.
+    existing = conn.execute(
+        """SELECT id FROM notification_queue
+           WHERE entity_type = ? AND entity_id = ? AND event_key = ? AND status = 'pending'""",
+        (entity_type, entity_id, transition),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE notification_queue
+               SET to_recipients = ?, cc_recipients = ?, created_at = ?
+               WHERE id = ?""",
+            (json.dumps(to_ids), json.dumps(cc_ids), timestamp, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO notification_queue
+                (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
+            VALUES (?, ?, 'status_change', ?, ?, ?, ?)
+            """,
+            (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+        )
 
 
 def get_sc_notification_config(config: AppConfig, sc_id: str) -> dict | None:
@@ -208,9 +225,22 @@ def save_notification_defaults(config: AppConfig, data: dict) -> None:
                 for entity_type in ("sc", "po", "gr"):
                     key = f"notify.transitions.{entity_type}"
                     if entity_type in transitions:
+                        # Merge with existing to preserve transitions the UI
+                        # may not know about (e.g. added by a later migration).
+                        existing_row = conn.execute(
+                            "SELECT setting_value FROM app_settings WHERE setting_key = ?",
+                            (key,),
+                        ).fetchone()
+                        if existing_row:
+                            existing = json.loads(existing_row["setting_value"])
+                            # incoming takes precedence for keys it provides;
+                            # existing keys not in incoming are preserved
+                            merged = {**existing, **transitions[entity_type]}
+                        else:
+                            merged = transitions[entity_type]
                         conn.execute(
                             "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
-                            (key, json.dumps(transitions[entity_type]), timestamp),
+                            (key, json.dumps(merged), timestamp),
                         )
             conn.commit()
         except Exception:

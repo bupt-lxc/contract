@@ -45,7 +45,7 @@ def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decima
         gr_totals = conn.execute(
             """
             select
-              coalesce(sum(case when gr.status in ('pending', 'manager_confirm') then gr.estimated_amount else 0 end), 0)
+              coalesce(sum(case when gr.status in ('pending', 'manager_confirm') then coalesce(gr.con_value, gr.estimated_amount) else 0 end), 0)
                 as pending_total,
               coalesce(sum(case when gr.status = 'approved' then gr.con_value else 0 end), 0)
                 as con_value_total

@@ -606,7 +606,7 @@ def workbench_data(
       - Pending: all records
     """
     sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
-    po_statuses = ["draft", "activing"]
+    po_statuses = ["draft", "activing", "finished"]
     gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
 
     def _is_own_only(status: str) -> bool:
