@@ -51,7 +51,7 @@
         />
       </div>
 
-      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed')" class="section-card">
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed') && detail.pos && detail.pos.length > 0" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button size="small" @click="handleExportPos">
