@@ -359,7 +359,9 @@ home: {
     enableConfirm: '确认启用此用户？',
     noRecords: '暂无用户信息。',
     userDisabled: '用户已禁用',
-    userEnabled: '用户已启用'
+    userEnabled: '用户已启用',
+    searchUsers: '搜索用户...',
+    userList: '用户列表'
   },
 
   audit: {
@@ -430,7 +432,9 @@ home: {
     twoWeeks: '2 周',
     fiftyPercent: '50%',
     thirtyPercent: '30%',
-    tenPercent: '10%'
+    tenPercent: '10%',
+    keywords: '关键字',
+    specificUsers: '指定用户'
   },
 
   export: {

@@ -359,7 +359,9 @@ home: {
     enableConfirm: 'Enable this user?',
     noRecords: 'No users found.',
     userDisabled: 'User disabled',
-    userEnabled: 'User enabled'
+    userEnabled: 'User enabled',
+    searchUsers: 'Search users...',
+    userList: 'User List'
   },
 
   audit: {
@@ -430,7 +432,9 @@ home: {
     twoWeeks: '2 weeks',
     fiftyPercent: '50%',
     thirtyPercent: '30%',
-    tenPercent: '10%'
+    tenPercent: '10%',
+    keywords: 'Keywords',
+    specificUsers: 'Specific Users'
   },
 
   export: {

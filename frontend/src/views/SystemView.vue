@@ -20,27 +20,40 @@
           <el-icon><Download /></el-icon> {{ $t('common.export') }}
         </el-button>
       </div>
-      <el-table :data="state.users" v-loading="state.loading" stripe border>
-        <el-table-column prop="machine_id" :label="$t('user.machineId')" width="120" />
-        <el-table-column prop="user_name" :label="$t('user.name')" width="160" />
-        <el-table-column prop="email" :label="$t('user.email')" min-width="180" />
-        <el-table-column prop="role" :label="$t('user.role')" width="100" />
-        <el-table-column :label="$t('user.status')" width="100">
-          <template #default="{ row }"><StatusBadge :status="row.status" /></template>
-        </el-table-column>
-        <el-table-column :label="$t('common.actions')" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="dialogVisible = true; dialogMode = 'edit'; dialogRecord = row">{{ $t('common.edit') }}</el-button>
-            <el-popconfirm v-if="row.status === 'active'" :title="$t('user.disableConfirm')" @confirm="handleDisable(row)">
-              <template #reference><el-button type="danger" link size="small">{{ $t('common.disable') }}</el-button></template>
-            </el-popconfirm>
-            <el-popconfirm v-else :title="$t('user.enableConfirm')" @confirm="handleEnable(row)">
-              <template #reference><el-button type="success" link size="small">{{ $t('common.enable') }}</el-button></template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-        <template #empty><el-empty :description="$t('common.noData')" /></template>
-      </el-table>
+      <el-collapse v-model="userCollapseActive">
+        <el-collapse-item :title="$t('user.userList') + ' (' + filteredUsers.length + ')'" name="user-table">
+          <el-input
+            v-model="userSearch"
+            :placeholder="$t('user.searchUsers')"
+            clearable
+            style="width:280px;margin-bottom:12px"
+            size="small"
+          >
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+          <el-table :data="filteredUsers" v-loading="state.loading" stripe border>
+            <el-table-column prop="machine_id" :label="$t('user.machineId')" width="120" />
+            <el-table-column prop="user_name" :label="$t('user.name')" width="160" />
+            <el-table-column prop="email" :label="$t('user.email')" min-width="180" />
+            <el-table-column prop="role" :label="$t('user.role')" width="100" />
+            <el-table-column :label="$t('user.status')" width="100">
+              <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+            </el-table-column>
+            <el-table-column :label="$t('common.actions')" width="160" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="dialogVisible = true; dialogMode = 'edit'; dialogRecord = row">{{ $t('common.edit') }}</el-button>
+                <el-popconfirm v-if="row.status === 'active'" :title="$t('user.disableConfirm')" @confirm="handleDisable(row)">
+                  <template #reference><el-button type="danger" link size="small">{{ $t('common.disable') }}</el-button></template>
+                </el-popconfirm>
+                <el-popconfirm v-else :title="$t('user.enableConfirm')" @confirm="handleEnable(row)">
+                  <template #reference><el-button type="success" link size="small">{{ $t('common.enable') }}</el-button></template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+            <template #empty><el-empty :description="$t('common.noData')" /></template>
+          </el-table>
+        </el-collapse-item>
+      </el-collapse>
     </div>
 
     <div v-if="isAdmin" class="section-card">
@@ -76,7 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Search } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { useUser } from '@/composables/useUser.js'
 import { useExport } from '@/composables/useExport.js'
@@ -100,6 +113,20 @@ const isAdmin = computed(() => user.value?.role === 'admin')
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
 const dialogRecord = ref(null)
+
+const userSearch = ref('')
+const userCollapseActive = ref([])
+
+const filteredUsers = computed(() => {
+  if (!userSearch.value) return state.users
+  const q = userSearch.value.toLowerCase()
+  return (state.users || []).filter(u =>
+    (u.machine_id && u.machine_id.toLowerCase().includes(q)) ||
+    (u.user_name && u.user_name.toLowerCase().includes(q)) ||
+    (u.email && u.email.toLowerCase().includes(q)) ||
+    (u.role && u.role.toLowerCase().includes(q))
+  )
+})
 
 async function handleSave(data) {
   try {
