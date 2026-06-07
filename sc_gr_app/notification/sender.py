@@ -24,6 +24,20 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _get_monthly_content(conn, entry) -> tuple[str, str]:
+    """Retrieve pre-rendered monthly summary body and subject from app_settings."""
+    rid = entry["entity_id"]
+    year_month = entry["event_key"].replace("monthly:", "")
+    key = f"notify.monthly_body.{rid}.{year_month}"
+    row = conn.execute(
+        "SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,)
+    ).fetchone()
+    if row:
+        data = json.loads(row["setting_value"])
+        return data.get("body", ""), data.get("subject", "")
+    return "", "[Contract] Monthly PO Summary"
+
+
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
     """Map user IDs to email addresses from the users table."""
     if not user_ids:
@@ -64,7 +78,10 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         ).fetchone()
     elif entity_type == "po":
         row = conn.execute(
-            "SELECT * FROM pos WHERE po_id = ?", (entity_id,)
+            """SELECT p.*, v.vendor_name
+               FROM pos p
+               LEFT JOIN vendors v ON v.vendor_id = p.vendor_id
+               WHERE p.po_id = ?""", (entity_id,)
         ).fetchone()
     elif entity_type == "gr":
         row = conn.execute(
@@ -76,8 +93,12 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     if row:
         entity_info = dict(row)
 
-    subject = templates.build_subject(entry, entity_info)
-    body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map})
+    # Monthly summary: body and subject are pre-rendered and stored in app_settings
+    if entry["event_type"] == "monthly_summary":
+        body, subject = _get_monthly_content(conn, entry)
+    else:
+        subject = templates.build_subject(entry, entity_info)
+        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map})
 
     # Look up attachments for this entity
     attachment_rows = conn.execute(

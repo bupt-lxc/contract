@@ -92,11 +92,8 @@
       <!-- Thresholds -->
       <div style="margin-bottom:16px">
         <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultDateThresholds') }}</label>
-        <el-checkbox-group v-model="local.date_thresholds" @change="emitSave">
-          <el-checkbox :label="6">{{ $t('notification.sixMonths') }}</el-checkbox>
-          <el-checkbox :label="3">{{ $t('notification.threeMonths') }}</el-checkbox>
-          <el-checkbox :label="1">{{ $t('notification.oneMonth') }}</el-checkbox>
-          <el-checkbox :label="0.5">{{ $t('notification.twoWeeks') }}</el-checkbox>
+        <el-checkbox-group v-model="local.date_thresholds" @change="emitSave" class="month-grid">
+          <el-checkbox v-for="m in 12" :key="m" :label="13 - m">{{ 13 - m }} {{ $t('notification.months') }}</el-checkbox>
         </el-checkbox-group>
       </div>
       <div>
@@ -112,6 +109,11 @@
 </template>
 
 <style scoped>
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px 0;
+}
 .transition-rules-card {
   border: 1px solid #e4e7ed;
   border-radius: 4px;

@@ -88,6 +88,13 @@
         :users="activeUsers"
         @save="handleNotificationSave"
       />
+
+      <PoCustomScheduleCard
+        v-if="po.po_id"
+        :po-id="po.po_id"
+        :schedules="customSchedules"
+        @save="handleCustomSchedulesSave"
+      />
     </template>
 
     <AttachmentDialog
@@ -136,6 +143,7 @@ import AttachmentList from '@/components/common/AttachmentList.vue'
 import AttachmentDialog from '@/components/common/AttachmentDialog.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import PoNotificationCard from '@/components/notification/PoNotificationCard.vue'
+import PoCustomScheduleCard from '@/components/notification/PoCustomScheduleCard.vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -146,7 +154,7 @@ const { state: scState, fetchDetail } = useSc()
 const { updatePo, finishPo, submitPo } = usePo()
 const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
 const { state: vendorState, searchVendors } = useVendor()
-const { state: notifState, fetchPoConfig, savePoConfig } = useNotification()
+const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
 const { exportRows } = useExport()
 
 const scId = computed(() => route.params.scId)
@@ -162,6 +170,7 @@ const grs = computed(() => {
 })
 const vendors = computed(() => vendorState.rows)
 const notificationConfig = computed(() => notifState.poConfig)
+const customSchedules = computed(() => notifState.customSchedules || [])
 
 const editDialogVisible = ref(false)
 const grDialogVisible = ref(false)
@@ -328,7 +337,16 @@ async function handleNotificationSave(data) {
     await savePoConfig(poId.value, data)
     ElMessage.success(t('notification.settingsSaved'))
   } catch (e) {
-    ElMessage.error(t('notification.saveFailed'))
+    ElMessage.error(e.message || t('notification.saveFailed'))
+  }
+}
+
+async function handleCustomSchedulesSave(schedules) {
+  try {
+    await saveCustomSchedules(poId.value, schedules)
+    ElMessage.success(t('notification.scheduleSaved'))
+  } catch (e) {
+    ElMessage.error(e.message || t('notification.saveFailed'))
   }
 }
 
@@ -338,6 +356,7 @@ onMounted(async () => {
   // Fetch PO notification config once PO ID is available
   if (poId.value) {
     try { await fetchPoConfig(poId.value) } catch {}
+    try { await fetchCustomSchedules(poId.value) } catch {}
   }
 })
 </script>

@@ -31,7 +31,7 @@ def get_default_date_thresholds(conn: sqlite3.Connection) -> list:
     row = conn.execute(
         "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.default_date_thresholds'"
     ).fetchone()
-    return json.loads(row["setting_value"]) if row else [6, 3, 1, 0.5]
+    return json.loads(row["setting_value"]) if row else [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
 
 
 def get_default_amount_thresholds(conn: sqlite3.Connection) -> list:

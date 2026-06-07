@@ -563,6 +563,38 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_po_custom_schedules(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(notification_service.get_po_custom_schedules(self.config, po_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def save_po_custom_schedules(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            schedules = _require_payload_field(payload, "schedules")
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.errors import PermissionDenied, NotFound
+            with connect(self.config) as conn:
+                po = conn.execute(
+                    """SELECT sc.requester_id FROM pos po
+                       JOIN sc_records sc ON sc.sc_id = po.sc_id
+                       WHERE po.po_id = ?""", (po_id,),
+                ).fetchone()
+            if not po:
+                raise NotFound("PO not found")
+            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
+                raise PermissionDenied("Only the SC owner or admin can modify custom schedules")
+            notification_service.save_po_custom_schedules(self.config, po_id, schedules)
+            return ok()
+        except Exception as exc:
+            return fail(exc)
+
     def get_notification_defaults(self, payload=None) -> dict:
         try:
             current_user = self._require_current_user()

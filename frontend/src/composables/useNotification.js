@@ -6,6 +6,9 @@ export function useNotification() {
     poConfig: null,
     poConfigLoading: false,
     poConfigError: null,
+    customSchedules: [],
+    customSchedulesLoading: false,
+    customSchedulesError: null,
     defaults: null,
     defaultsLoading: false,
     defaultsError: null,
@@ -54,6 +57,24 @@ export function useNotification() {
     await fetchDefaults()
   }
 
+  async function fetchCustomSchedules(poId) {
+    state.customSchedulesLoading = true
+    state.customSchedulesError = null
+    try {
+      state.customSchedules = await callApi('get_po_custom_schedules', { po_id: poId })
+    } catch (e) {
+      state.customSchedulesError = e.message
+      state.customSchedules = []
+    } finally {
+      state.customSchedulesLoading = false
+    }
+  }
+
+  async function saveCustomSchedules(poId, schedules) {
+    await callApi('save_po_custom_schedules', { po_id: poId, schedules })
+    await fetchCustomSchedules(poId)
+  }
+
   async function fetchQueue({ scId, status, entity_type, entity_id, limit = 50, offset = 0 } = {}) {
     state.queueLoading = true
     state.queueError = null
@@ -74,6 +95,8 @@ export function useNotification() {
     state: readonly(state),
     fetchPoConfig,
     savePoConfig,
+    fetchCustomSchedules,
+    saveCustomSchedules,
     fetchDefaults,
     saveDefaults,
     fetchQueue

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
-from sc_gr_app.notification import sender, thresholds
+from sc_gr_app.notification import sender, thresholds, monthly, schedules
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
                 if recovered or still_failed:
                     logger.info("Failed retry: %s recovered, %s still failed", recovered, still_failed)
 
-                # Threshold check once per day
+                # Daily checks (threshold + monthly summary)
                 today = datetime.now(timezone.utc).date()
                 if last_threshold_check_date != today:
                     conn.execute("BEGIN IMMEDIATE")
@@ -45,6 +45,18 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
                         if date_count or amount_count:
                             logger.info("Daily threshold check: %s date events, %s amount events",
                                         date_count, amount_count)
+
+                        # Custom schedules (same daily cadence as thresholds)
+                        schedule_count = schedules.check_custom_schedules(conn)
+                        if schedule_count:
+                            logger.info("Custom schedule check: %s events queued", schedule_count)
+
+                        # Monthly summary on the 1st
+                        summary_count = monthly.check_monthly_summary(conn)
+                        if summary_count:
+                            conn.commit()
+                            logger.info("Monthly summary: %s requester emails queued", summary_count)
+
                         last_threshold_check_date = today
                     except Exception:
                         conn.rollback()
@@ -59,7 +71,7 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
 
 
 def run_once(config: AppConfig) -> None:
-    """Run one cycle: process pending + failed + threshold check. For testing."""
+    """Run one cycle: process pending + failed + threshold check + monthly. For testing."""
     with connect(config) as conn:
         sent, failed = sender.process_pending(conn)
         logger.info("Pending: %s sent, %s failed", sent, failed)
@@ -75,6 +87,14 @@ def run_once(config: AppConfig) -> None:
         except Exception:
             conn.rollback()
             raise
+
+        schedule_count = schedules.check_custom_schedules(conn)
+        if schedule_count:
+            logger.info("Custom schedule check: %s events queued", schedule_count)
+
+        summary_count = monthly.check_monthly_summary(conn)
+        if summary_count:
+            logger.info("Monthly summary: %s requester emails queued", summary_count)
 
         conn.commit()
 

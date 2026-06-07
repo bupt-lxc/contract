@@ -48,7 +48,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     assert rows[0][1]
     assert rows[1][1]
 
@@ -64,7 +64,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
@@ -287,7 +287,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
