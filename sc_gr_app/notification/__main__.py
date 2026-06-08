@@ -63,6 +63,10 @@ def _check_for_update(config):
 
     from sc_gr_app.update import fetch_manifest, is_update_available, verify_manifest, sha256_file
 
+    # Only perform self-update when running as a bundled executable
+    if not getattr(sys, 'frozen', False):
+        return
+
     manifest = fetch_manifest(config)
     if manifest is None or not is_update_available(manifest):
         return
@@ -93,14 +97,31 @@ def _check_for_update(config):
 
     current_exe = Path(sys.executable)
     old_exe = current_exe.with_suffix(".exe.old")
+    new_exe = current_exe.with_suffix(".exe.new")
 
     try:
+        # Step 1: Copy new exe to a temp name first
+        shutil.copy2(package_dst, new_exe)
+        # Step 2: Rename current to .old
         if old_exe.exists():
             old_exe.unlink()
         current_exe.rename(old_exe)
-        shutil.copy2(package_dst, current_exe)
+        # Step 3: Rename new into place
+        new_exe.rename(current_exe)
     except OSError:
         logging.warning("Failed to replace notification exe, skipping")
+        # Clean up temp file if it exists
+        try:
+            if new_exe.exists():
+                new_exe.unlink()
+        except OSError:
+            pass
+        # Rollback: if current was renamed to .old, move it back
+        try:
+            if old_exe.exists() and not current_exe.exists():
+                old_exe.rename(current_exe)
+        except OSError:
+            pass
         return
 
     # Schedule old file deletion on next reboot
