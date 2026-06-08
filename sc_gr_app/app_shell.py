@@ -126,7 +126,13 @@ def _check_update():
     releases_dir = default_config().db_path.parent.parent / "releases"
     installer_src = releases_dir / installer_name
     temp_dir = Path(os.getenv("TEMP")) / "sc-gr-update"
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Failed to create temporary directory for the update. Check disk space.",
+        )
     installer_dst = temp_dir / installer_name
 
     try:
