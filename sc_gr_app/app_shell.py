@@ -91,9 +91,78 @@ def _webview2_storage():
     return base
 
 
-def _check_update(window):
-    """Async check for updates on startup. Fail silently if unreachable."""
-    # Placeholder — replace UPDATE_URL with actual update server when available
+def _check_update():
+    """Check for and apply updates from shared drive. Called before _init_database.
+    Exits the process if an update is found and launched, or on fatal errors."""
+    from sc_gr_app.update import fetch_manifest, is_update_available, verify_manifest, sha256_file
+
+    manifest = fetch_manifest(default_config())
+    if manifest is None:
+        if os.getenv("SC_GR_DEV") == "1":
+            return
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Unable to check for updates.\n\nVerify the shared drive is accessible.",
+        )
+
+    if not is_update_available(manifest):
+        return
+
+    if not verify_manifest(manifest):
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Update manifest is invalid. Contact your administrator.",
+        )
+
+    new_version = manifest["version"]
+    changelog = manifest.get("changelog_cn", "")
+    body = f"Found version {new_version}\n\n{changelog}\n\nClick OK to install the update."
+    rc = _user32.MessageBoxW(0, body, "SC GR Management — Update Available", 0x40 | 0x01)  # MB_ICONINFORMATION | MB_OKCANCEL
+    if rc != 1:  # IDOK
+        sys.exit(0)
+
+    installer_name = manifest["gui"]["installer"]
+    expected_hash = manifest["gui"]["sha256"]
+    releases_dir = default_config().db_path.parent.parent / "releases"
+    installer_src = releases_dir / installer_name
+    temp_dir = Path(os.getenv("TEMP")) / "sc-gr-update"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    installer_dst = temp_dir / installer_name
+
+    try:
+        import shutil
+        shutil.copy2(installer_src, installer_dst)
+    except OSError:
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Failed to copy the update. Verify the shared drive is accessible.",
+        )
+
+    actual_hash = sha256_file(installer_dst)
+    if actual_hash != expected_hash:
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Update file is corrupted. Contact your administrator.",
+        )
+
+    install_dir = Path(sys.executable).parent
+    try:
+        import subprocess
+        subprocess.Popen(
+            [
+                str(installer_dst),
+                "/VERYSILENT",
+                f"/DIR={install_dir}",
+            ],
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+        )
+    except OSError:
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            "Failed to start the installer. Contact your administrator.",
+        )
+
+    sys.exit(0)
 
 
 def _hook_close(hwnd, allow_close):
@@ -195,6 +264,8 @@ def run_app():
     _single_instance_check()
     _patch_webview2()
 
+    _check_update()
+
     config, init_error = _init_database()
     if init_error and not DEV_MODE:
         _show_error_and_exit("SC GR Management — Database Error", init_error)
@@ -218,7 +289,6 @@ def run_app():
         text_select=True,
     )
 
-    _check_update(window)
     _setup_tray(window)
 
     webview.start(debug=DEV_MODE)
