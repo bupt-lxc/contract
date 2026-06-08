@@ -42,12 +42,97 @@ def main():
     config = default_config()
     logging.info("Using database: %s", config.db_path)
 
+    # Update check for run-once and thresholds-only modes
+    if args.run_once or args.thresholds_only:
+        _check_for_update(config)
+
     if args.thresholds_only:
         engine.run_thresholds_only(config)
     elif args.run_once:
         engine.run_once(config)
     else:
         engine.run_poll_loop(config, poll_interval=args.poll_interval)
+
+
+def _check_for_update(config):
+    """Check for notification update. On success, replaces current exe and exits.
+    On any failure, logs and returns silently (email delivery takes priority)."""
+    import os
+    import shutil
+    from pathlib import Path
+
+    from sc_gr_app.update import fetch_manifest, is_update_available, verify_manifest, sha256_file
+
+    # Only perform self-update when running as a bundled executable
+    if not getattr(sys, 'frozen', False):
+        return
+
+    manifest = fetch_manifest(config)
+    if manifest is None or not is_update_available(manifest):
+        return
+
+    if not verify_manifest(manifest):
+        logging.warning("Update manifest invalid, skipping update")
+        return
+
+    new_version = manifest["version"]
+    package_name = manifest["notification"]["package"]
+    expected_hash = manifest["notification"]["sha256"]
+    releases_dir = config.db_path.parent.parent / "releases"
+    package_src = releases_dir / package_name
+    temp_dir = Path(os.getenv("TEMP")) / "sc-gr-update"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    package_dst = temp_dir / package_name
+
+    try:
+        shutil.copy2(package_src, package_dst)
+    except OSError:
+        logging.warning("Failed to copy notification update from shared drive, skipping")
+        return
+
+    actual_hash = sha256_file(package_dst)
+    if actual_hash != expected_hash:
+        logging.warning("Notification update SHA256 mismatch, skipping")
+        return
+
+    current_exe = Path(sys.executable)
+    old_exe = current_exe.with_suffix(".exe.old")
+    new_exe = current_exe.with_suffix(".exe.new")
+
+    try:
+        # Step 1: Copy new exe to a temp name first
+        shutil.copy2(package_dst, new_exe)
+        # Step 2: Rename current to .old
+        if old_exe.exists():
+            old_exe.unlink()
+        current_exe.rename(old_exe)
+        # Step 3: Rename new into place
+        new_exe.rename(current_exe)
+    except OSError:
+        logging.warning("Failed to replace notification exe, skipping")
+        # Clean up temp file if it exists
+        try:
+            if new_exe.exists():
+                new_exe.unlink()
+        except OSError:
+            pass
+        # Rollback: if current was renamed to .old, move it back
+        try:
+            if old_exe.exists() and not current_exe.exists():
+                old_exe.rename(current_exe)
+        except OSError:
+            pass
+        return
+
+    # Schedule old file deletion on next reboot
+    import ctypes
+    try:
+        ctypes.windll.kernel32.MoveFileExW(str(old_exe), None, 4)  # MOVEFILE_DELAY_UNTIL_REBOOT = 4
+    except Exception:
+        pass
+
+    logging.info("Notification updated to v%s, exiting for restart by scheduler", new_version)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

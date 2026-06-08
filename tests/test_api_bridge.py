@@ -399,7 +399,7 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
 
     # Also patch _setup_tray to skip PIL/pystray calls
     monkeypatch.setattr(app_shell, "_setup_tray", lambda w: None)
-    monkeypatch.setattr(app_shell, "_check_update", lambda w: None)
+    monkeypatch.setattr(app_shell, "_check_update", lambda: None)
 
     app_shell.run_app()
 

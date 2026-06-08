@@ -2,6 +2,9 @@ $ErrorActionPreference = "Stop"
 
 Push-Location (Join-Path $PSScriptRoot "..")
 
+$sharedDrive = "\\ap.vwg\fileshare\AUDI CHINA\Audi_China_RnD\R&D\EG\10_EG-V\80000_EG_W\DMAS\01 Daily working files\contract"
+Write-Host "Shared drive: $sharedDrive" -ForegroundColor Cyan
+
 # 1. Build Vue frontend
 Write-Host "=== Building Vue frontend ===" -ForegroundColor Cyan
 Push-Location frontend
@@ -40,6 +43,55 @@ if (Test-Path $iscc) {
 } else {
     Write-Host "=== Skipping Inno Setup (not found) ===" -ForegroundColor Yellow
 }
+
+# 7. Build notification executable
+Write-Host "=== Building notification executable ===" -ForegroundColor Cyan
+uv run pyinstaller packaging/notification.spec --distpath $distDir --workpath (Join-Path $distDir "build-notification") --noconfirm
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+
+# Rename notification output to include version
+$version = (uv run python -c "from sc_gr_app import __version__; print(__version__)").Trim()
+# One-file mode outputs directly to dist/
+$notifySrcExe = Join-Path $distDir "SC-GR-Notification.exe"
+$notifyDstExe = Join-Path $distDir "SC-GR-Notification-$version.exe"
+Copy-Item $notifySrcExe $notifyDstExe
+Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
+
+# 8. Push to shared drive (only if shared drive is accessible)
+$sharedReleases = Join-Path $sharedDrive "releases"
+$guiInstaller = "SC-GR-Management-$version-Setup.exe"
+$notifyExe = "SC-GR-Notification-$version.exe"
+
+Write-Host "=== Pushing to shared drive ===" -ForegroundColor Cyan
+if (-not (Test-Path $sharedReleases)) {
+    New-Item -ItemType Directory -Path $sharedReleases -Force | Out-Null
+}
+
+# Copy files
+Copy-Item -Path (Join-Path $distDir "installer" $guiInstaller) -Destination $sharedReleases -Force
+Copy-Item -Path (Join-Path $distDir $notifyExe) -Destination $sharedReleases -Force
+
+# Compute SHA256
+$guiHash = (Get-FileHash -Path (Join-Path $sharedReleases $guiInstaller) -Algorithm SHA256).Hash.ToLower()
+$notifyHash = (Get-FileHash -Path (Join-Path $sharedReleases $notifyExe) -Algorithm SHA256).Hash.ToLower()
+
+# Generate manifest.json
+$manifest = @{
+    version = $version
+    published_at = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+    changelog_cn = ""
+    gui = @{
+        installer = $guiInstaller
+        sha256 = $guiHash
+    }
+    notification = @{
+        package = $notifyExe
+        sha256 = $notifyHash
+    }
+}
+$manifest | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $sharedReleases "manifest.json") -Encoding UTF8
+
+Write-Host "Pushed version $version to $sharedReleases" -ForegroundColor Green
 
 $installerDir = Join-Path $distDir "installer"
 Write-Host "=== Done ===" -ForegroundColor Green
