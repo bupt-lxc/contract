@@ -51,8 +51,8 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
 # Rename notification output to include version
 $version = (uv run python -c "from sc_gr_app import __version__; print(__version__)").Trim()
-$notifySrcDir = Join-Path $distDir "SC-GR-Notification"
-$notifySrcExe = Join-Path $notifySrcDir "SC-GR-Notification.exe"
+# One-file mode outputs directly to dist/
+$notifySrcExe = Join-Path $distDir "SC-GR-Notification.exe"
 $notifyDstExe = Join-Path $distDir "SC-GR-Notification-$version.exe"
 Copy-Item $notifySrcExe $notifyDstExe
 Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
