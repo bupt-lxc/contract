@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from sc_gr_app import __version__
-from sc_gr_app.config import AppConfig
 from sc_gr_app.update import (
     fetch_manifest,
     verify_manifest,
@@ -15,48 +14,45 @@ from sc_gr_app.update import (
 )
 
 
-def make_config(tmp_path: Path) -> AppConfig:
-    """Create an AppConfig with db_path at tmp_path/data/sc_gr.sqlite3."""
-    return AppConfig(
-        db_path=tmp_path / "data" / "sc_gr.sqlite3",
-        lock_dir=tmp_path / "data" / "locks",
+@pytest.fixture
+def patch_shared_drive(monkeypatch, tmp_path):
+    """Redirect base-dir resolution to a temp path for isolated testing."""
+    monkeypatch.setattr(
+        "sc_gr_app.update._resolve_base_dir",
+        lambda: tmp_path,
     )
 
 
 class TestFetchManifest:
-    def test_returns_none_in_dev_mode(self, tmp_path, monkeypatch):
+    def test_returns_none_in_dev_mode(self, monkeypatch):
         monkeypatch.setenv("SC_GR_DEV", "1")
-        config = make_config(tmp_path)
-        assert fetch_manifest(config) is None
+        assert fetch_manifest() is None
 
-    def test_returns_none_when_file_missing(self, tmp_path, monkeypatch):
+    def test_returns_none_when_file_missing(self, patch_shared_drive, monkeypatch):
         monkeypatch.delenv("SC_GR_DEV", raising=False)
-        config = make_config(tmp_path)
-        assert fetch_manifest(config) is None
+        assert fetch_manifest() is None
 
-    def test_returns_dict_when_manifest_exists(self, tmp_path, monkeypatch):
+    def test_returns_dict_when_manifest_exists(self, patch_shared_drive, tmp_path, monkeypatch):
         monkeypatch.delenv("SC_GR_DEV", raising=False)
-        config = make_config(tmp_path)
         releases_dir = tmp_path / "releases"
-        releases_dir.mkdir(parents=True)
+        releases_dir.mkdir()
         manifest = {
             "version": "2.0.0",
             "published_at": "2026-06-08T15:30:00Z",
-            "changelog_cn": "测试",
+            "changelog_cn": "test",
             "gui": {"installer": "test-setup.exe", "sha256": "abc"},
             "notification": {"package": "test-notify.exe", "sha256": "def"},
         }
         (releases_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-        result = fetch_manifest(config)
+        result = fetch_manifest()
         assert result == manifest
 
-    def test_returns_none_on_parse_error(self, tmp_path, monkeypatch):
+    def test_returns_none_on_parse_error(self, patch_shared_drive, tmp_path, monkeypatch):
         monkeypatch.delenv("SC_GR_DEV", raising=False)
-        config = make_config(tmp_path)
         releases_dir = tmp_path / "releases"
-        releases_dir.mkdir(parents=True)
+        releases_dir.mkdir()
         (releases_dir / "manifest.json").write_text("not json", encoding="utf-8")
-        assert fetch_manifest(config) is None
+        assert fetch_manifest() is None
 
 
 class TestVerifyManifest:

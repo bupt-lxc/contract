@@ -368,6 +368,7 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
     )
     calls = []
 
+    monkeypatch.setattr(app_shell, "DEV_MODE", False)
     monkeypatch.setattr(app_shell, "default_config", lambda: config)
     monkeypatch.setattr(app_shell, "migrate", lambda actual: calls.append(("migrate", actual)))
     monkeypatch.setattr(

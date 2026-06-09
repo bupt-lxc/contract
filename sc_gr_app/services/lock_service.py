@@ -90,7 +90,18 @@ class LeaseLock:
             return
 
         if payload.get("token") == self.token:
-            self.path.unlink(missing_ok=True)
+            try:
+                self.path.unlink(missing_ok=True)
+            except PermissionError:
+                # On Windows, newly created files may briefly be held by
+                # anti-virus or the filesystem. Retry once after a short wait
+                # before giving up so we don't leave a stale lock behind.
+                import time
+                time.sleep(0.05)
+                try:
+                    self.path.unlink(missing_ok=True)
+                except PermissionError:
+                    pass
 
     def _is_stale(self) -> bool:
         return self._stale_payload() is not None
