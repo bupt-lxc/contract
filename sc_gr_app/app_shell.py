@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import os
 import sys
 import threading
@@ -16,6 +17,29 @@ from sc_gr_app.services.user_service import seed_users
 MUTEX_NAME = "Local\\SC_GR_MANAGEMENT_INSTANCE"
 WINDOW_TITLE = "SC GR Management"
 DEV_MODE = os.getenv("SC_GR_DEV") == "1"
+MIN_WIDTH, MIN_HEIGHT = 1100, 700
+DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
+
+
+def _setup_logging():
+    """Write app logs to the install directory in append mode.
+
+    Log file lives next to the exe so it survives version upgrades.
+    Old logs are never pruned — the file grows indefinitely."""
+    log_dir = Path(sys.executable).parent
+    log_path = log_dir / "sc-gr-app.log"
+    try:
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        fh = logging.FileHandler(str(log_path), mode="a", encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        root.addHandler(fh)
+    except OSError:
+        pass  # can't log — nothing we can do at this early stage
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 
@@ -94,15 +118,37 @@ def _webview2_storage():
 def _check_update():
     """Check for and apply updates from shared drive. Called before _init_database.
     Exits the process if an update is found and launched, or on fatal errors."""
-    from sc_gr_app.update import fetch_manifest, is_update_available, verify_manifest, sha256_file
+    from sc_gr_app.update import (
+        _releases_dir,
+        fetch_manifest,
+        is_update_available,
+        verify_manifest,
+        sha256_file,
+    )
 
-    manifest = fetch_manifest(default_config())
+    try:
+        default_config()
+    except OSError as exc:
+        _show_error_and_exit(
+            "SC GR Management — Update Error",
+            f"Unable to access shared drive.\n\nError: {exc}\n\nVerify the shared drive is accessible.",
+        )
+
+    manifest = fetch_manifest()
     if manifest is None:
         if os.getenv("SC_GR_DEV") == "1":
             return
+        releases_dir = _releases_dir()
+        manifest_path = releases_dir / "manifest.json"
+        if not releases_dir.exists():
+            detail = f"Releases folder not found:\n{releases_dir}"
+        elif not manifest_path.exists():
+            detail = f"Update manifest not found:\n{manifest_path}"
+        else:
+            detail = f"Failed to read update manifest:\n{manifest_path}"
         _show_error_and_exit(
             "SC GR Management — Update Error",
-            "Unable to check for updates.\n\nVerify the shared drive is accessible.",
+            f"{detail}\n\nVerify the shared drive is accessible.",
         )
 
     if not is_update_available(manifest):
@@ -123,7 +169,7 @@ def _check_update():
 
     installer_name = manifest["gui"]["installer"]
     expected_hash = manifest["gui"]["sha256"]
-    releases_dir = default_config().db_path.parent.parent / "releases"
+    releases_dir = _releases_dir()
     installer_src = releases_dir / installer_name
     temp_dir = Path(os.getenv("TEMP")) / "sc-gr-update"
     try:
@@ -269,6 +315,7 @@ def _init_database():
 def run_app():
     _single_instance_check()
     _patch_webview2()
+    _setup_logging()
 
     _check_update()
 

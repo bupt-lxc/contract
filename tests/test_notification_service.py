@@ -245,10 +245,14 @@ class TestScNotificationConfig:
         result = notification_service.get_sc_notification_config(app_config, "SC1")
         assert result == data
 
-    def test_returns_none_for_unconfigured_sc(self, app_config):
+    def test_returns_defaults_for_unconfigured_sc(self, app_config):
         migrate(app_config)
         result = notification_service.get_sc_notification_config(app_config, "SC_NONE")
-        assert result is None
+        assert result is not None
+        assert result["enabled"] is True
+        assert isinstance(result["cc_user_ids"], list)
+        assert isinstance(result["date_thresholds"], list)
+        assert isinstance(result["amount_thresholds"], list)
 
     def test_save_updates_existing(self, app_config):
         migrate(app_config)

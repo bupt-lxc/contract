@@ -84,28 +84,33 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
     to_ids = resolve_recipients(conn, to_rule, entity, current_user)
     cc_ids = resolve_recipients(conn, cc_rule, entity, current_user)
 
-    # Merge per-PO CC list
-    po_id = None
-    if entity_type == "po":
-        po_id = entity_id
+    # Merge per-entity CC list
+    entity_config_row = None
+    if entity_type == "sc":
+        entity_config_row = conn.execute(
+            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'sc' AND entity_id = ? AND enabled = 1",
+            (entity_id,),
+        ).fetchone()
+    elif entity_type == "po":
+        entity_config_row = conn.execute(
+            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+            (entity_id,),
+        ).fetchone()
     elif entity_type == "gr":
         gr_row = conn.execute(
             "SELECT po_id FROM gr_requests WHERE gr_id = ?", (entity_id,)
         ).fetchone()
         if gr_row:
-            po_id = gr_row["po_id"]
-    # SC events no longer have per-entity notification config
+            entity_config_row = conn.execute(
+                "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+                (gr_row["po_id"],),
+            ).fetchone()
 
-    if po_id:
-        config_row = conn.execute(
-            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
-            (po_id,),
-        ).fetchone()
-        if config_row:
-            extra_cc = json.loads(config_row["cc_user_ids"])
-            for uid in extra_cc:
-                if uid and uid not in cc_ids:
-                    cc_ids.append(uid)
+    if entity_config_row:
+        extra_cc = json.loads(entity_config_row["cc_user_ids"])
+        for uid in extra_cc:
+            if uid and uid not in cc_ids:
+                cc_ids.append(uid)
 
     # Merge default CC list
     default_cc = _read_app_setting(conn, "notify.default_cc")
@@ -146,6 +151,80 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
             """,
             (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
         )
+
+
+def get_sc_notification_config(config: AppConfig, sc_id: str) -> dict | None:
+    with connect(config) as conn:
+        row = conn.execute(
+            "SELECT enabled, cc_user_ids, date_thresholds, amount_thresholds "
+            "FROM notification_config WHERE entity_type = 'sc' AND entity_id = ?",
+            (sc_id,),
+        ).fetchone()
+        if row is not None:
+            return {
+                "enabled": bool(row["enabled"]),
+                "cc_user_ids": json.loads(row["cc_user_ids"]),
+                "date_thresholds": json.loads(row["date_thresholds"]),
+                "amount_thresholds": json.loads(row["amount_thresholds"]),
+            }
+
+        default_cc = _read_app_setting(conn, "notify.default_cc") or []
+        default_date = _read_app_setting(conn, "notify.default_date_thresholds") or [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+        default_amount = _read_app_setting(conn, "notify.default_amount_thresholds") or [50, 30, 10]
+
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids, date_thresholds, amount_thresholds)
+                VALUES ('sc', ?, 1, ?, ?, ?)
+                """,
+                (
+                    sc_id,
+                    json.dumps(default_cc),
+                    json.dumps(default_date),
+                    json.dumps(default_amount),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        return {
+            "enabled": True,
+            "cc_user_ids": default_cc,
+            "date_thresholds": default_date,
+            "amount_thresholds": default_amount,
+        }
+
+
+def save_sc_notification_config(config: AppConfig, sc_id: str, data: dict) -> None:
+    with connect(config) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO notification_config (entity_type, entity_id, enabled, cc_user_ids, date_thresholds, amount_thresholds)
+                VALUES ('sc', ?, ?, ?, ?, ?)
+                ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    cc_user_ids = excluded.cc_user_ids,
+                    date_thresholds = excluded.date_thresholds,
+                    amount_thresholds = excluded.amount_thresholds
+                """,
+                (
+                    sc_id,
+                    1 if data.get("enabled", True) else 0,
+                    json.dumps(data.get("cc_user_ids", [])),
+                    json.dumps(data.get("date_thresholds", [])),
+                    json.dumps(data.get("amount_thresholds", [])),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def get_po_notification_config(config: AppConfig, po_id: str) -> dict | None:
