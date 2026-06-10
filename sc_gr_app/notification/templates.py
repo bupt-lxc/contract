@@ -220,6 +220,10 @@ def _sc_fields(info: dict, show_formal_number: bool) -> list[str]:
     rows.append(row("申请类型", info.get("request_type") or ""))
     rows.append(row("成本中心", info.get("cost_center") or ""))
     rows.append(row("SC 金额", _fmt_amount(info.get("sc_amount"))))
+    if "consumed_amount" in info:
+        rows.append(row("已消费金额", _fmt_amount(info.get("consumed_amount"))))
+    if "sc_available_amount" in info:
+        rows.append(row("剩余可用金额", _fmt_amount(info.get("sc_available_amount"))))
     rows.append(row("服务期间", _fmt_period(
         info.get("service_period_start"), info.get("service_period_end")
     )))
@@ -256,6 +260,10 @@ def _po_fields(info: dict, show_formal_number: bool) -> list[str]:
 
     # Financial
     rows.append(row("PO 金额", _fmt_amount(info.get("po_amount"))))
+    if "consumed_amount" in info:
+        rows.append(row("已消费金额", _fmt_amount(info.get("consumed_amount"))))
+    if "open_po_amount" in info:
+        rows.append(row("剩余可用金额", _fmt_amount(info.get("open_po_amount"))))
     rows.append(row("成本中心", info.get("cost_center") or ""))
 
     # Contract

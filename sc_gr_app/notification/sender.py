@@ -38,6 +38,56 @@ def _get_monthly_content(conn, entry) -> tuple[str, str]:
     return "", "[Contract] Monthly PO Summary"
 
 
+def _attach_budget_info(
+    conn: sqlite3.Connection,
+    entity_type: str,
+    entity_id: str,
+    entity_info: dict,
+) -> None:
+    """Compute and attach current open/consumed amounts to entity_info in-place.
+
+    Queries GR totals at send time so the email reflects real-time budget state.
+    """
+    if entity_type == "po":
+        gr_totals = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
+                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
+              COALESCE(SUM(CASE WHEN status = 'approved'
+                                 THEN con_value ELSE 0 END), 0) AS con_value_total
+            FROM gr_requests
+            WHERE po_id = ?
+            """,
+            (entity_id,),
+        ).fetchone()
+        po_amount = entity_info.get("po_amount") or 0
+        pending = gr_totals["pending_total"] or 0
+        approved = gr_totals["con_value_total"] or 0
+        entity_info["open_po_amount"] = po_amount - pending - approved
+        entity_info["consumed_amount"] = pending + approved
+
+    elif entity_type == "sc":
+        gr_totals = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
+                                 THEN COALESCE(gr.con_value, gr.estimated_amount) ELSE 0 END), 0) AS pending_total,
+              COALESCE(SUM(CASE WHEN gr.status = 'approved'
+                                 THEN gr.con_value ELSE 0 END), 0) AS con_value_total
+            FROM gr_requests gr
+            JOIN pos po ON po.po_id = gr.po_id
+            WHERE po.sc_id = ?
+            """,
+            (entity_id,),
+        ).fetchone()
+        sc_amount = entity_info.get("sc_amount") or 0
+        pending = gr_totals["pending_total"] or 0
+        approved = gr_totals["con_value_total"] or 0
+        entity_info["sc_available_amount"] = sc_amount - pending - approved
+        entity_info["consumed_amount"] = pending + approved
+
+
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
     """Map user IDs to email addresses from the users table."""
     if not user_ids:
@@ -92,6 +142,9 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
 
     if row:
         entity_info = dict(row)
+
+    # Compute current budget (open amount) at send time for PO and SC emails
+    _attach_budget_info(conn, entity_type, entity_id, entity_info)
 
     # Monthly summary: body and subject are pre-rendered and stored in app_settings
     if entry["event_type"] == "monthly_summary":
