@@ -206,6 +206,17 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def transfer_sc(self, payload) -> dict:
+        """Transfer SC ownership to another user."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            sc_id = _require_payload_field(payload, "sc_id")
+            new_requester_id = _require_payload_field(payload, "new_requester_id")
+            return ok(sc_service.transfer_sc(self.config, current_user, sc_id, new_requester_id))
+        except Exception as exc:
+            return fail(exc)
+
     def create_po(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)

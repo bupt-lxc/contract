@@ -206,7 +206,11 @@ home: {
     confirmRemoveVendor: '确认移除供应商「{name}」？',
     vendorAdded: '供应商已添加',
     vendorRemoved: '供应商已移除',
-    vendorRequiredForSubmit: '提交前请至少选择一个供应商'
+    vendorRequiredForSubmit: '提交前请至少选择一个供应商',
+    transferOwner: '转移所有者',
+    transferOwnerHint: '将 {no} 的所有者从 {old} 转移给：',
+    selectNewOwner: '选择新所有者',
+    ownerTransferred: '所有者已转移',
   },
 
   po: {
