@@ -1,162 +1,155 @@
-"""Email subject and body templates (Chinese)."""
+"""Email subject and body templates (Chinese) — modern HTML design.
 
+All email types (status_change, threshold_date, threshold_amount,
+custom_schedule, monthly_summary) share a unified HTML template with:
+  - Modern card-style layout with inline CSS
+  - Complete entity field display (all DB columns)
+  - Human-readable Chinese event labels (no raw event_key exposure)
+  - Professional color-coded status badges
+"""
 
-def build_subject(entry: dict, entity_info: dict) -> str:
-    entity_type = entry["entity_type"]
-    entity_id = entry["entity_id"]
-    event_key = entry["event_key"]
+from datetime import datetime, timezone, timedelta
 
-    type_label = {"sc": "SC", "po": "PO", "gr": "GR"}.get(entity_type, entity_type)
+# ---------------------------------------------------------------------------
+# CSS constants — inline styles for email client compatibility
+# ---------------------------------------------------------------------------
 
-    if entry["event_type"] == "status_change":
-        transition_labels = {
-            "submit": "已提交",
-            "create": "已创建",
-            "approve": "已批准",
-            "deny": "已拒绝",
-            "close": "已关闭",
-            "finish": "已完成",
-            "cancel": "已取消",
-        }
-        label = transition_labels.get(event_key, event_key)
-        return f"[Contract] {type_label} {entity_id} {label}"
+# Page background + container
+_PAGE_STYLE = (
+    "background-color:#f0f2f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,"
+    "'Segoe UI',Roboto,'Helvetica Neue',Arial,'Microsoft YaHei',sans-serif;"
+    "font-size:14px;color:#333;line-height:1.6"
+)
+_CONTAINER_STYLE = (
+    "max-width:640px;margin:0 auto;background:#fff;border-radius:8px;"
+    "box-shadow:0 2px 8px rgba(0,0,0,0.08);overflow:hidden"
+)
 
-    if entry["event_type"] == "threshold_date":
-        sc_no = entity_info.get("sc_no") or entity_id
-        months = event_key.replace("threshold_date:", "").replace("m", "")
-        return f"[Contract] SC {sc_no} 合同即将到期 — 剩余不足{months}个月"
+# Header
+_HEADER_STYLE = (
+    "background-color:#1a73e8;padding:28px 32px;color:#fff;text-align:center"
+)
+_HEADER_TITLE_STYLE = "font-size:18px;font-weight:700;margin:0;letter-spacing:0.5px"
+_HEADER_SUBTITLE_STYLE = "font-size:13px;margin:6px 0 0 0;opacity:0.85"
 
-    if entry["event_type"] == "threshold_amount":
-        sc_no = entity_info.get("sc_no") or entity_id
-        pct = event_key.replace("threshold_amount:", "").replace("%", "")
-        return f"[Contract] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
+# Body
+_BODY_STYLE = "padding:24px 32px"
 
-    if entry["event_type"] == "custom_schedule":
-        po_no = entity_info.get("po_no") or entity_id
-        return f"[Contract] PO {po_no} 定期提醒"
+# Section card
+_SECTION_STYLE = (
+    "margin-bottom:20px;border:1px solid #e8eaed;border-radius:6px;overflow:hidden"
+)
+_SECTION_HEADER_STYLE = (
+    "background-color:#f8f9fa;padding:10px 16px;font-weight:600;font-size:13px;"
+    "color:#5f6368;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e8eaed"
+)
 
-    return f"[Contract] {type_label} {entity_id} — {event_key}"
+# Table inside section
+_TABLE_STYLE = "width:100%;border-collapse:collapse;font-size:14px"
+_TH_STYLE = (
+    "padding:10px 16px;text-align:left;font-weight:500;color:#5f6368;"
+    "background-color:#fafafa;border-bottom:1px solid #e8eaed;width:140px"
+)
+_TD_STYLE = "padding:10px 16px;border-bottom:1px solid #f0f0f0;color:#333"
+_TR_ALT_STYLE = "background-color:#fafbfc"
 
+# Status badge
+_STATUS_BADGE_BASE = (
+    "display:inline-block;padding:3px 12px;border-radius:12px;font-size:12px;font-weight:600"
+)
+
+# Highlight box (for threshold warnings)
+_HIGHLIGHT_BOX_STYLE = (
+    "background-color:#fef7e0;border-left:4px solid #f9ab00;padding:14px 18px;"
+    "border-radius:0 6px 6px 0;margin-bottom:20px;font-size:14px;color:#5f4b00"
+)
+
+# Footer
+_FOOTER_STYLE = (
+    "padding:16px 32px;background-color:#fafafa;border-top:1px solid #e8eaed;"
+    "font-size:12px;color:#9aa0a6;text-align:center"
+)
+
+# ---------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------
+
+_STATUS_LABELS: dict[str, str] = {
+    "draft": "草稿",
+    "pending": "待审批",
+    "manager_confirm": "待经理确认",
+    "approved": "已批准",
+    "denied": "已拒绝",
+    "closed": "已关闭",
+    "finished": "已完成",
+    "cancelled": "已取消",
+    "activing": "进行中",
+    "po_pending": "待采购审批",
+    "po_approved": "采购已批准",
+}
+
+_STATUS_COLORS: dict[str, str] = {
+    "draft": "#9aa0a6",
+    "pending": "#f9ab00",
+    "manager_confirm": "#f9ab00",
+    "approved": "#0d904f",
+    "denied": "#d93025",
+    "closed": "#5f6368",
+    "finished": "#0d904f",
+    "cancelled": "#d93025",
+    "activing": "#1a73e8",
+    "po_pending": "#f9ab00",
+    "po_approved": "#0d904f",
+}
+
+_TRANSITION_LABELS: dict[str, str] = {
+    "create": "已创建",
+    "submit": "已提交",
+    "confirm": "已确认",
+    "approve": "已批准",
+    "deny": "已拒绝",
+    "close": "已关闭",
+    "finish": "已完成",
+    "cancel": "已取消",
+}
+
+_TYPE_LABELS: dict[str, str] = {"sc": "SC", "po": "PO", "gr": "GR"}
 
 # Transitions that happen before the entity reaches "pending" status.
 # In these stages the formal number (SC No / PO No / GR No) may not
-# have been assigned yet — skip it in the email body.
+# have been assigned yet — show "待分配" instead of hiding the row.
 _EARLY_STAGE_TRANSITIONS = {"create", "submit", "confirm"}
 
 
-def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
-    entity_type = entry["entity_type"]
-    entity_id = entry["entity_id"]
-    event_key = entry.get("event_key", "")
-    show_formal_number = event_key not in _EARLY_STAGE_TRANSITIONS
+def _status_badge(status: str) -> str:
+    """Render a colored status badge."""
+    label = _STATUS_LABELS.get(status, status)
+    color = _STATUS_COLORS.get(status, "#5f6368")
+    return (
+        f'<span style="{_STATUS_BADGE_BASE}background-color:{color}1a;color:{color};'
+        f'border:1px solid {color}40">{label}</span>'
+    )
 
-    type_label = {"sc": "SC", "po": "PO", "gr": "GR"}.get(entity_type, entity_type)
 
-    lines = [
-        f"<p>This is an automated notification from the Contract Management System.</p>",
-        f"<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse'>",
-        f"<tr><td><b>Type</b></td><td>{type_label}</td></tr>",
-        f"<tr><td><b>ID</b></td><td>{entity_id}</td></tr>",
-    ]
+def _describe_event(event_type: str, event_key: str) -> str:
+    """Map internal event_key to a human-readable Chinese label."""
+    if event_type == "status_change":
+        return _TRANSITION_LABELS.get(event_key, event_key)
 
-    # Entity-specific fields
-    if entity_type == "sc":
-        sc_no = entity_info.get("sc_no", "") or ""
-        sc_amount = entity_info.get("sc_amount", "") or ""
-        description = entity_info.get("description", "") or ""
-        request_type = entity_info.get("request_type", "") or ""
-        cost_center = entity_info.get("cost_center", "") or ""
-        service_start = entity_info.get("service_period_start", "") or ""
-        service_end = entity_info.get("service_period_end", "") or ""
-        if sc_no and show_formal_number:
-            lines.append(f"<tr><td><b>SC No</b></td><td>{sc_no}</td></tr>")
-        if request_type:
-            lines.append(f"<tr><td><b>Request Type</b></td><td>{request_type}</td></tr>")
-        if sc_amount:
-            lines.append(f"<tr><td><b>SC Amount</b></td><td>{sc_amount}</td></tr>")
-        if cost_center:
-            lines.append(f"<tr><td><b>Cost Center</b></td><td>{cost_center}</td></tr>")
-        if service_start or service_end:
-            lines.append(f"<tr><td><b>Service Period</b></td><td>{service_start} ~ {service_end}</td></tr>")
-        if description:
-            lines.append(f"<tr><td><b>Description</b></td><td>{description}</td></tr>")
-    elif entity_type == "po":
-        po_no = entity_info.get("po_no", "") or ""
-        po_amount = entity_info.get("po_amount", "") or ""
-        vendor_name = entity_info.get("vendor_name", "") or ""
-        contract_no = entity_info.get("contract_no", "") or ""
-        contract_from = entity_info.get("contract_from", "") or ""
-        contract_to = entity_info.get("contract_to", "") or ""
-        contract_type = entity_info.get("contract_type", "") or ""
-        cost_center = entity_info.get("cost_center", "") or ""
-        payment_freq = entity_info.get("payment_frequency", "") or ""
-        purchaser = entity_info.get("purchaser", "") or ""
-        if po_no and show_formal_number:
-            lines.append(f"<tr><td><b>PO No</b></td><td>{po_no}</td></tr>")
-        if po_amount:
-            lines.append(f"<tr><td><b>PO Amount</b></td><td>{po_amount}</td></tr>")
-        if vendor_name:
-            lines.append(f"<tr><td><b>Vendor</b></td><td>{vendor_name}</td></tr>")
-        if contract_no:
-            lines.append(f"<tr><td><b>Contract No</b></td><td>{contract_no}</td></tr>")
-        if contract_type:
-            lines.append(f"<tr><td><b>Contract Type</b></td><td>{contract_type}</td></tr>")
-        if contract_from or contract_to:
-            lines.append(f"<tr><td><b>Contract Period</b></td><td>{contract_from} ~ {contract_to}</td></tr>")
-        if cost_center:
-            lines.append(f"<tr><td><b>Cost Center</b></td><td>{cost_center}</td></tr>")
-        if payment_freq:
-            lines.append(f"<tr><td><b>Payment Frequency</b></td><td>{payment_freq}</td></tr>")
-        if purchaser:
-            lines.append(f"<tr><td><b>Purchaser</b></td><td>{purchaser}</td></tr>")
-    elif entity_type == "gr":
-        gr_no = entity_info.get("gr_no", "") or ""
-        con_value = entity_info.get("con_value", "") or ""
-        estimated_amount = entity_info.get("estimated_amount", "") or ""
-        tax_rate = entity_info.get("tax_rate", "") or ""
-        goods_desc = entity_info.get("goods_service_description", "") or ""
-        confirmation_name = entity_info.get("confirmation_name", "") or ""
-        delivery_from = entity_info.get("delivery_from", "") or ""
-        delivery_to = entity_info.get("delivery_to", "") or ""
-        last_delivery = entity_info.get("last_delivery", "") or ""
-        remark = entity_info.get("remark", "") or ""
-        if gr_no and show_formal_number:
-            lines.append(f"<tr><td><b>GR No</b></td><td>{gr_no}</td></tr>")
-        if con_value:
-            lines.append(f"<tr><td><b>Gross Cost</b></td><td>{con_value}</td></tr>")
-        elif estimated_amount:
-            lines.append(f"<tr><td><b>Net Cost</b></td><td>{estimated_amount}</td></tr>")
-        if tax_rate:
-            lines.append(f"<tr><td><b>VAT(%)</b></td><td>{tax_rate}</td></tr>")
-        if goods_desc:
-            lines.append(f"<tr><td><b>Goods/Service</b></td><td>{goods_desc}</td></tr>")
-        if confirmation_name:
-            lines.append(f"<tr><td><b>Confirmation Name</b></td><td>{confirmation_name}</td></tr>")
-        if delivery_from or delivery_to:
-            lines.append(f"<tr><td><b>Delivery Period</b></td><td>{delivery_from} ~ {delivery_to}</td></tr>")
-        if last_delivery:
-            lines.append(f"<tr><td><b>Last Delivery</b></td><td>{last_delivery}</td></tr>")
-        if remark:
-            lines.append(f"<tr><td><b>Remark</b></td><td>{remark}</td></tr>")
+    if event_type == "threshold_date":
+        # event_key format: threshold_date:3m / threshold_date:12m
+        months = event_key.replace("threshold_date:", "").replace("m", "")
+        return f"合同到期提醒：剩余不足{months}个月"
 
-    # Custom schedule: show schedule type description
-    if entry.get("event_type") == "custom_schedule":
-        schedule_desc = _describe_schedule(entry.get("event_key", ""))
-        if schedule_desc:
-            lines.append(f"<tr><td><b>Schedule</b></td><td>{schedule_desc}</td></tr>")
+    if event_type == "threshold_amount":
+        # event_key format: threshold_amount:10% / threshold_amount:50%
+        pct = event_key.replace("threshold_amount:", "").replace("%", "")
+        return f"预算耗尽提醒：剩余不足{pct}%"
 
-    status = entity_info.get("status", "") or ""
-    if status:
-        lines.append(f"<tr><td><b>Status</b></td><td>{status}</td></tr>")
+    if event_type == "custom_schedule":
+        return _describe_schedule(event_key)
 
-    if entry.get("event_type") == "custom_schedule":
-        lines.append("<tr><td><b>Event</b></td><td>Custom Schedule Reminder</td></tr>")
-    else:
-        lines.append(f"<tr><td><b>Event</b></td><td>{entry['event_key']}</td></tr>")
-    lines.append(f"<tr><td><b>Time</b></td><td>{entry['created_at']}</td></tr>")
-    lines.append(f"</table>")
-
-    return "\n".join(lines)
+    return event_key
 
 
 def _describe_schedule(event_key: str) -> str:
@@ -164,7 +157,7 @@ def _describe_schedule(event_key: str) -> str:
     # event_key format: schedule:<id>:<type>:<date>
     parts = event_key.split(":")
     if len(parts) < 4 or parts[0] != "schedule":
-        return ""
+        return "定期提醒"
     stype = parts[2]
     type_labels = {
         "monthly_day": "每月定期提醒",
@@ -172,6 +165,330 @@ def _describe_schedule(event_key: str) -> str:
         "weekly_day": "每周定期提醒",
     }
     return type_labels.get(stype, "定期提醒")
+
+
+def _field(label: str, value: str, *, alt: bool = False) -> str:
+    """Render a single key-value row in the info table."""
+    tr_extra = f' style="{_TR_ALT_STYLE}"' if alt else ""
+    display = value if value else "-"
+    return (
+        f'<tr{tr_extra}>'
+        f'<td style="{_TH_STYLE}">{label}</td>'
+        f'<td style="{_TD_STYLE}">{display}</td>'
+        f'</tr>'
+    )
+
+
+def _section(title: str, rows: list[str]) -> str:
+    """Wrap rows in a titled section card."""
+    if not rows:
+        return ""
+    return (
+        f'<div style="{_SECTION_STYLE}">'
+        f'<div style="{_SECTION_HEADER_STYLE}">{title}</div>'
+        f'<table style="{_TABLE_STYLE}">'
+        + "".join(rows) +
+        f'</table>'
+        f'</div>'
+    )
+
+
+def _highlight_box(message: str) -> str:
+    """Render a highlighted warning/info box."""
+    return f'<div style="{_HIGHLIGHT_BOX_STYLE}">{message}</div>'
+
+
+# ---------------------------------------------------------------
+# Entity field builders — exhaustive, grouped by category
+# ---------------------------------------------------------------
+
+def _sc_fields(info: dict, show_formal_number: bool) -> list[str]:
+    """Build all SC record fields, grouped."""
+    alt = False
+
+    def row(label, value):
+        nonlocal alt
+        r = _field(label, value, alt=alt)
+        alt = not alt
+        return r
+
+    rows: list[str] = []
+
+    # Basic info
+    sc_no = (info.get("sc_no") or "") if show_formal_number else ""
+    rows.append(row("SC 编号", sc_no))
+    rows.append(row("申请类型", info.get("request_type") or ""))
+    rows.append(row("成本中心", info.get("cost_center") or ""))
+    rows.append(row("SC 金额", _fmt_amount(info.get("sc_amount"))))
+    rows.append(row("服务期间", _fmt_period(
+        info.get("service_period_start"), info.get("service_period_end")
+    )))
+    rows.append(row("描述", info.get("description") or ""))
+    rows.append(row("资产标识", info.get("asset") or ""))
+    rows.append(row("资产数量", info.get("asset_nums") or ""))
+    rows.append(row("内部系统编号", info.get("internal_system_number") or ""))
+
+    # Dates
+    rows.append(row("创建时间", info.get("created_at") or ""))
+    rows.append(row("更新时间", info.get("updated_at") or ""))
+    rows.append(row("提交时间", info.get("pending_date") or ""))
+    rows.append(row("批准时间", info.get("approved_date") or ""))
+    rows.append(row("关闭时间", info.get("closed_at") or ""))
+    return rows
+
+
+def _po_fields(info: dict, show_formal_number: bool) -> list[str]:
+    """Build all PO fields, grouped."""
+    alt = False
+
+    def row(label, value):
+        nonlocal alt
+        r = _field(label, value, alt=alt)
+        alt = not alt
+        return r
+
+    rows: list[str] = []
+
+    # Basic
+    po_no = (info.get("po_no") or "") if show_formal_number else ""
+    rows.append(row("PO 编号", po_no))
+    rows.append(row("供应商", info.get("vendor_name") or ""))
+
+    # Financial
+    rows.append(row("PO 金额", _fmt_amount(info.get("po_amount"))))
+    rows.append(row("成本中心", info.get("cost_center") or ""))
+
+    # Contract
+    rows.append(row("合同编号", info.get("contract_no") or ""))
+    rows.append(row("合同类型", info.get("contract_type") or ""))
+    rows.append(row("合同期间", _fmt_period(
+        info.get("contract_from"), info.get("contract_to")
+    )))
+    rows.append(row("合同POS", info.get("contract_pos") or ""))
+
+    # Payment
+    rows.append(row("付款频率", info.get("payment_frequency") or ""))
+
+    # Personnel
+    rows.append(row("采购员", info.get("purchaser") or ""))
+
+    # Dates
+    rows.append(row("激活日期", info.get("activing_date") or ""))
+    rows.append(row("创建时间", info.get("created_at") or ""))
+    rows.append(row("更新时间", info.get("updated_at") or ""))
+    return rows
+
+
+def _gr_fields(info: dict, show_formal_number: bool) -> list[str]:
+    """Build all GR fields, grouped."""
+    alt = False
+
+    def row(label, value):
+        nonlocal alt
+        r = _field(label, value, alt=alt)
+        alt = not alt
+        return r
+
+    rows: list[str] = []
+
+    # Basic
+    gr_no = (info.get("gr_no") or "") if show_formal_number else ""
+    rows.append(row("GR 编号", gr_no))
+
+    # Financial
+    rows.append(row("预估金额 (净价)", _fmt_amount(info.get("estimated_amount"))))
+    rows.append(row("确认金额 (含税)", _fmt_amount(info.get("con_value"))))
+    rows.append(row("增值税率(%)", info.get("tax_rate") or ""))
+
+    # Description
+    rows.append(row("货物/服务描述", info.get("goods_service_description") or ""))
+    rows.append(row("备注", info.get("remark") or ""))
+
+    # Confirmation
+    rows.append(row("确认名称", info.get("confirmation_name") or ""))
+
+    # Delivery
+    rows.append(row("交付期间", _fmt_period(
+        info.get("delivery_from"), info.get("delivery_to")
+    )))
+    rows.append(row("最后交付日", info.get("last_delivery") or ""))
+
+    # Dates
+    rows.append(row("创建时间", info.get("created_at") or ""))
+    rows.append(row("提交时间", info.get("pending_date") or ""))
+    rows.append(row("批准时间", info.get("approved_date") or ""))
+    rows.append(row("取消时间", info.get("cancelled_at") or ""))
+    rows.append(row("确认时间", info.get("confirmed_at") or ""))
+    return rows
+
+
+# ---------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------
+
+def _fmt_amount(value) -> str:
+    """Format a numeric amount with thousands separator, or return empty string."""
+    if value is None:
+        return ""
+    try:
+        n = float(value)
+        return f"{n:,.2f}"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def _fmt_period(start, end) -> str:
+    """Format a date range."""
+    s = start or ""
+    e = end or ""
+    if s and e:
+        return f"{s} ~ {e}"
+    if s or e:
+        return f"{s}{e}"
+    return ""
+
+
+def _utc_now_cn() -> str:
+    """Current time in China Standard Time (UTC+8)."""
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+
+
+def _now_iso() -> str:
+    """Current timestamp in ISO format."""
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S+08:00")
+
+
+# ---------------------------------------------------------------
+# HTML shell
+# ---------------------------------------------------------------
+
+def _html_shell(*, title: str, subtitle: str, body: str) -> str:
+    """Wrap body content in the unified email HTML template."""
+    return (
+        f'<!DOCTYPE html>'
+        f'<html lang="zh-CN">'
+        f'<head><meta charset="utf-8"></head>'
+        f'<body style="{_PAGE_STYLE}">'
+        f'<div style="{_CONTAINER_STYLE}">'
+        # Header
+        f'<div style="{_HEADER_STYLE}">'
+        f'<div style="{_HEADER_TITLE_STYLE}">{title}</div>'
+        f'<div style="{_HEADER_SUBTITLE_STYLE}">{subtitle}</div>'
+        f'</div>'
+        # Body
+        f'<div style="{_BODY_STYLE}">'
+        f'{body}'
+        f'</div>'
+        # Footer
+        f'<div style="{_FOOTER_STYLE}">'
+        f'此邮件由 Contract Management System 自动发送，请勿回复。<br>'
+        f'生成时间：{_utc_now_cn()}'
+        f'</div>'
+        f'</div>'
+        f'</body>'
+        f'</html>'
+    )
+
+
+# ---------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------
+
+def build_subject(entry: dict, entity_info: dict) -> str:
+    """Build email subject line in Chinese."""
+    entity_type = entry["entity_type"]
+    entity_id = entry["entity_id"]
+    event_key = entry["event_key"]
+    event_type = entry.get("event_type", "")
+
+    type_label = _TYPE_LABELS.get(entity_type, entity_type)
+
+    if event_type == "status_change":
+        label = _TRANSITION_LABELS.get(event_key, event_key)
+        return f"[Contract] {type_label} {entity_id} {label}"
+
+    if event_type == "threshold_date":
+        sc_no = entity_info.get("sc_no") or entity_id
+        months = event_key.replace("threshold_date:", "").replace("m", "")
+        return f"[Contract] SC {sc_no} 合同即将到期 — 剩余不足{months}个月"
+
+    if event_type == "threshold_amount":
+        sc_no = entity_info.get("sc_no") or entity_id
+        pct = event_key.replace("threshold_amount:", "").replace("%", "")
+        return f"[Contract] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
+
+    if event_type == "custom_schedule":
+        po_no = entity_info.get("po_no") or entity_id
+        return f"[Contract] PO {po_no} 定期提醒"
+
+    return f"[Contract] {type_label} {entity_id} — {event_key}"
+
+
+def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
+    """Build the HTML email body using the modern unified template.
+
+    Shows ALL database fields for the entity, grouped into logical sections.
+    Event keys are translated to human-readable Chinese labels.
+    """
+    entity_type = entry["entity_type"]
+    entity_id = entry["entity_id"]
+    event_key = entry.get("event_key", "")
+    event_type = entry.get("event_type", "")
+    show_formal_number = event_key not in _EARLY_STAGE_TRANSITIONS
+
+    type_label = _TYPE_LABELS.get(entity_type, entity_type)
+
+    # --- title / subtitle ---
+    title = f"{type_label} {entity_id}"
+    subtitle = _describe_event(event_type, event_key)
+
+    # --- highlight for threshold events ---
+    highlight = ""
+    if event_type in ("threshold_date", "threshold_amount"):
+        highlight = _highlight_box(
+            f"⚠️ <b>{subtitle}</b> — 请及时处理以避免影响业务。"
+        )
+
+    # --- status & event section ---
+    status_value = _status_badge(entity_info.get("status") or "")
+    status_rows = [
+        _field("通知类型", type_label, alt=False),
+        _field("实体 ID", entity_id, alt=True),
+        _field("事件", subtitle, alt=False),
+        _field("当前状态", status_value, alt=True),
+        _field("触发时间", entry.get("created_at") or "", alt=False),
+    ]
+
+    # --- custom schedule description ---
+    schedule_rows: list[str] = []
+    if event_type == "custom_schedule":
+        schedule_desc = _describe_schedule(event_key)
+        if schedule_desc:
+            schedule_rows.append(_field("提醒计划", schedule_desc, alt=False))
+
+    # --- entity fields ---
+    if entity_type == "sc":
+        entity_rows = _sc_fields(entity_info, show_formal_number)
+    elif entity_type == "po":
+        entity_rows = _po_fields(entity_info, show_formal_number)
+    elif entity_type == "gr":
+        entity_rows = _gr_fields(entity_info, show_formal_number)
+    else:
+        entity_rows = []
+
+    # --- assemble body ---
+    body_parts = [
+        highlight,
+        _section("通知信息", status_rows),
+        _section("提醒计划", schedule_rows) if schedule_rows else "",
+        _section(f"{type_label} 详细信息", entity_rows),
+    ]
+
+    return _html_shell(
+        title=title,
+        subtitle=subtitle,
+        body="".join(body_parts),
+    )
 
 
 def build_monthly_summary_subject(year: int, month: int) -> str:
@@ -191,17 +508,9 @@ def build_monthly_summary_body(
         po_no, sc_no, vendor_name, po_amount, open_po_amount,
         contract_to, remaining_days, status
     """
-    lines = [
-        f"<p>Dear {requester_name},</p>",
-        f"<p>以下是您 {year}年{month}月 的采购订单月度汇总，包括各PO的剩余金额和合同到期时间：</p>",
-        f"<table border='1' cellpadding='4' cellspacing='0' style='border-collapse:collapse'>",
-        f"<tr style='background:#f5f5f5'>"
-        f"<th>PO No</th><th>SC No</th><th>Vendor</th><th>PO Amount</th>"
-        f"<th>Open Amount</th><th>Contract To</th><th>Remaining Days</th><th>Status</th>"
-        f"</tr>",
-    ]
-
-    for po in po_list:
+    # Build table rows
+    table_rows: list[str] = []
+    for i, po in enumerate(po_list):
         po_no = po.get("po_no") or "-"
         sc_no = po.get("sc_no") or "-"
         vendor = po.get("vendor_name") or "-"
@@ -209,31 +518,74 @@ def build_monthly_summary_body(
         open_amount = f"{po['open_po_amount']:,.0f}" if po.get("open_po_amount") else "-"
         contract_to = po.get("contract_to") or "-"
         remaining = po.get("remaining_days")
-        remaining_str = f"{remaining} days" if remaining is not None else "-"
-        status = po.get("status") or "-"
+        remaining_str = f"{remaining} 天" if remaining is not None else "-"
+        status = _STATUS_LABELS.get(po.get("status") or "", po.get("status") or "-")
 
-        # Highlight rows with low remaining budget or close deadlines
+        # Row highlight rules
         row_style = ""
         if remaining is not None and remaining < 30:
-            row_style = " style='background:#fff3cd'"
-        elif po.get("open_po_amount") is not None and po.get("po_amount") and po["open_po_amount"] / po["po_amount"] < 0.1:
-            row_style = " style='background:#f8d7da'"
+            row_style = "background-color:#fef7e0"
+        elif (
+            po.get("open_po_amount") is not None
+            and po.get("po_amount")
+            and po["open_po_amount"] / po["po_amount"] < 0.1
+        ):
+            row_style = "background-color:#fce8e6"
 
-        lines.append(
-            f"<tr{row_style}>"
-            f"<td>{po_no}</td><td>{sc_no}</td><td>{vendor}</td>"
-            f"<td>{po_amount}</td><td>{open_amount}</td>"
-            f"<td>{contract_to}</td><td>{remaining_str}</td><td>{status}</td>"
-            f"</tr>"
+        tr = (
+            f'<tr style="{row_style}">'
+            f'<td style="{_TD_STYLE}">{po_no}</td>'
+            f'<td style="{_TD_STYLE}">{sc_no}</td>'
+            f'<td style="{_TD_STYLE}">{vendor}</td>'
+            f'<td style="{_TD_STYLE}">{po_amount}</td>'
+            f'<td style="{_TD_STYLE}">{open_amount}</td>'
+            f'<td style="{_TD_STYLE}">{contract_to}</td>'
+            f'<td style="{_TD_STYLE}">{remaining_str}</td>'
+            f'<td style="{_TD_STYLE}">{status}</td>'
+            f'</tr>'
         )
+        table_rows.append(tr)
 
-    lines.append("</table>")
-    lines.append("<p>This is an automated notification from the Contract Management System.</p>")
-    lines.append(f"<p><small>Generated: {_utc_now_cn()}</small></p>")
+    header = (
+        f'<tr style="background-color:#f8f9fa">'
+        f'<th style="{_TH_STYLE}">PO 编号</th>'
+        f'<th style="{_TH_STYLE}">SC 编号</th>'
+        f'<th style="{_TH_STYLE}">供应商</th>'
+        f'<th style="{_TH_STYLE}">PO 金额</th>'
+        f'<th style="{_TH_STYLE}">剩余金额</th>'
+        f'<th style="{_TH_STYLE}">合同到期日</th>'
+        f'<th style="{_TH_STYLE}">剩余天数</th>'
+        f'<th style="{_TH_STYLE}">状态</th>'
+        f'</tr>'
+    )
 
-    return "\n".join(lines)
+    legend = (
+        '<div style="margin-top:16px;font-size:12px;color:#5f6368">'
+        '<span style="display:inline-block;width:12px;height:12px;'
+        'background-color:#fef7e0;border:1px solid #f9ab00;margin-right:4px;vertical-align:middle"></span> '
+        '黄色 = 合同到期不足30天 &nbsp;&nbsp;'
+        '<span style="display:inline-block;width:12px;height:12px;'
+        'background-color:#fce8e6;border:1px solid #d93025;margin-right:4px;vertical-align:middle"></span> '
+        '红色 = 预算剩余不足10%'
+        '</div>'
+    )
 
+    inner_body = (
+        f'<p style="margin:0 0 16px 0">您好 {requester_name}，</p>'
+        f'<p style="margin:0 0 20px 0;color:#5f6368">'
+        f'以下是您 {year}年{month}月 的采购订单月度汇总，包括各 PO 的剩余金额和合同到期时间：'
+        f'</p>'
+        f'<div style="{_SECTION_STYLE}">'
+        f'<table style="{_TABLE_STYLE}">'
+        f'{header}'
+        + "".join(table_rows) +
+        f'</table>'
+        f'</div>'
+        f'{legend}'
+    )
 
-def _utc_now_cn() -> str:
-    from datetime import datetime, timezone, timedelta
-    return (datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M"))
+    return _html_shell(
+        title=f"{year}年{month}月 PO 月度汇总",
+        subtitle=f"申请人：{requester_name}",
+        body=inner_body,
+    )
