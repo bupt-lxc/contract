@@ -179,3 +179,83 @@ class TestDescribeEvent:
 
         result2 = templates._describe_event("custom_schedule", "schedule:2:weekly_day:2026-06-10")
         assert "每周定期提醒" == result2
+
+
+class TestChildGrTable:
+    def test_child_gr_table_renders(self):
+        child_grs = [
+            {
+                "gr_no": "GR-2026-001",
+                "estimated_amount": 30000,
+                "con_value": 32000,
+                "goods_service_description": "软件开发服务",
+                "delivery_from": "2026-01-01",
+                "delivery_to": "2026-06-30",
+                "status": "approved",
+            },
+            {
+                "gr_no": "GR-2026-002",
+                "estimated_amount": 15000,
+                "con_value": None,
+                "goods_service_description": "硬件采购",
+                "delivery_from": None,
+                "delivery_to": None,
+                "status": "pending",
+            },
+        ]
+        html = templates._child_gr_table(child_grs)
+        assert "关联验收申请 (2)" in html
+        assert "GR-2026-001" in html
+        assert "GR-2026-002" in html
+        assert "30,000.00" in html
+        assert "32,000.00" in html
+        assert "软件开发服务" in html
+        assert "硬件采购" in html
+        assert "已批准" in html
+        assert "待审批" in html
+
+    def test_po_body_shows_child_gr_section(self):
+        entry = {
+            "entity_type": "po",
+            "entity_id": "PO-001",
+            "event_type": "status_change",
+            "event_key": "finish",
+            "created_at": "2026-01-15T10:00:00Z",
+        }
+        entity_info = {
+            "po_no": "PO-2026-001",
+            "po_amount": 80000,
+            "status": "finished",
+            "child_grs": [
+                {
+                    "gr_no": "GR-2026-001",
+                    "estimated_amount": 20000,
+                    "con_value": 21000,
+                    "goods_service_description": "服务A",
+                    "delivery_from": "2026-01-01",
+                    "delivery_to": "2026-03-31",
+                    "status": "approved",
+                },
+            ],
+        }
+        body = templates.build_body(entry, entity_info, {})
+        assert "关联验收申请 (1)" in body
+        assert "GR-2026-001" in body
+        assert "20,000.00" in body
+        assert "服务A" in body
+
+    def test_po_body_without_child_grs_omits_section(self):
+        entry = {
+            "entity_type": "po",
+            "entity_id": "PO-002",
+            "event_type": "status_change",
+            "event_key": "finish",
+            "created_at": "2026-01-15T10:00:00Z",
+        }
+        entity_info = {
+            "po_no": "PO-2026-002",
+            "po_amount": 50000,
+            "status": "finished",
+        }
+        body = templates.build_body(entry, entity_info, {})
+        assert "关联验收申请" not in body

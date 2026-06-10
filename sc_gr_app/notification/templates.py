@@ -418,6 +418,54 @@ def _child_po_table(child_pos: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------
+# Child GR table (for PO emails)
+# ---------------------------------------------------------------
+
+def _child_gr_table(child_grs: list[dict]) -> str:
+    """Render a table of child GRs for PO emails."""
+    header = (
+        f'<tr style="background-color:#f8f9fa">'
+        f'<th style="{_TH_STYLE}">GR 编号</th>'
+        f'<th style="{_TH_STYLE}">预估金额 (净价)</th>'
+        f'<th style="{_TH_STYLE}">确认金额 (含税)</th>'
+        f'<th style="{_TH_STYLE}">货物/服务描述</th>'
+        f'<th style="{_TH_STYLE}">交付期间</th>'
+        f'<th style="{_TH_STYLE}">状态</th>'
+        f'</tr>'
+    )
+
+    rows: list[str] = []
+    for gr in child_grs:
+        gr_no = gr.get("gr_no") or "-"
+        estimated = _fmt_amount(gr.get("estimated_amount"))
+        con_value = _fmt_amount(gr.get("con_value"))
+        desc = gr.get("goods_service_description") or "-"
+        period = _fmt_period(gr.get("delivery_from"), gr.get("delivery_to"))
+        status = _status_badge(gr.get("status") or "")
+
+        tr = (
+            f'<tr>'
+            f'<td style="{_TD_STYLE}">{gr_no}</td>'
+            f'<td style="{_TD_STYLE}">{estimated}</td>'
+            f'<td style="{_TD_STYLE}">{con_value}</td>'
+            f'<td style="{_TD_STYLE}">{desc}</td>'
+            f'<td style="{_TD_STYLE}">{period}</td>'
+            f'<td style="{_TD_STYLE}">{status}</td>'
+            f'</tr>'
+        )
+        rows.append(tr)
+
+    table = (
+        f'<table style="{_TABLE_STYLE}">'
+        f'{header}'
+        + "".join(rows) +
+        f'</table>'
+    )
+
+    return _section(f"关联验收申请 ({len(child_grs)})", [table])
+
+
+# ---------------------------------------------------------------
 # HTML shell
 # ---------------------------------------------------------------
 
@@ -540,6 +588,11 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
     if entity_type == "sc" and entity_info.get("child_pos"):
         child_po_section = _child_po_table(entity_info["child_pos"])
 
+    # --- child GRs for PO emails ---
+    child_gr_section = ""
+    if entity_type == "po" and entity_info.get("child_grs"):
+        child_gr_section = _child_gr_table(entity_info["child_grs"])
+
     # --- assemble body ---
     body_parts = [
         highlight,
@@ -547,6 +600,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         _section("提醒计划", schedule_rows) if schedule_rows else "",
         _section(f"{type_label} 详细信息", entity_rows),
         child_po_section,
+        child_gr_section,
     ]
 
     return _html_shell(

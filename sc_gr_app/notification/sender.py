@@ -90,6 +90,10 @@ def _attach_budget_info(
         # Also attach all child POs with their budget info
         _attach_child_pos(conn, entity_id, entity_info)
 
+    elif entity_type == "po":
+        # Also attach all child GRs under this PO
+        _attach_child_grs(conn, entity_id, entity_info)
+
 
 def _attach_child_pos(
     conn: sqlite3.Connection,
@@ -133,6 +137,31 @@ def _attach_child_pos(
         child_pos.append(po)
 
     entity_info["child_pos"] = child_pos
+
+
+def _attach_child_grs(
+    conn: sqlite3.Connection,
+    po_id: str,
+    entity_info: dict,
+) -> None:
+    """Query all GRs under a PO, attach as child_grs list."""
+    rows = conn.execute(
+        """
+        SELECT gr_id, gr_no, estimated_amount, con_value, status,
+               goods_service_description, delivery_from, delivery_to
+        FROM gr_requests
+        WHERE po_id = ?
+        ORDER BY gr_no
+        """,
+        (po_id,),
+    ).fetchall()
+
+    child_grs = []
+    for r in rows:
+        gr = dict(r)
+        child_grs.append(gr)
+
+    entity_info["child_grs"] = child_grs
 
 
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
