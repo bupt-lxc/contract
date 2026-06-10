@@ -87,6 +87,53 @@ def _attach_budget_info(
         entity_info["sc_available_amount"] = sc_amount - pending - approved
         entity_info["consumed_amount"] = pending + approved
 
+        # Also attach all child POs with their budget info
+        _attach_child_pos(conn, entity_id, entity_info)
+
+
+def _attach_child_pos(
+    conn: sqlite3.Connection,
+    sc_id: str,
+    entity_info: dict,
+) -> None:
+    """Query all POs under an SC with their budget info, attach as child_pos list."""
+    rows = conn.execute(
+        """
+        SELECT p.po_id, p.po_no, p.po_amount, p.status, p.contract_to,
+               v.vendor_name
+        FROM pos p
+        LEFT JOIN vendors v ON v.vendor_id = p.vendor_id
+        WHERE p.sc_id = ?
+        ORDER BY p.po_no
+        """,
+        (sc_id,),
+    ).fetchall()
+
+    child_pos = []
+    for r in rows:
+        po = dict(r)
+        # Compute per-PO open amount
+        gr_totals = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
+                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
+              COALESCE(SUM(CASE WHEN status = 'approved'
+                                 THEN con_value ELSE 0 END), 0) AS con_value_total
+            FROM gr_requests
+            WHERE po_id = ?
+            """,
+            (po["po_id"],),
+        ).fetchone()
+        po_amount = po.get("po_amount") or 0
+        pending = gr_totals["pending_total"] or 0
+        approved = gr_totals["con_value_total"] or 0
+        po["open_po_amount"] = po_amount - pending - approved
+        po["consumed_amount"] = pending + approved
+        child_pos.append(po)
+
+    entity_info["child_pos"] = child_pos
+
 
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
     """Map user IDs to email addresses from the users table."""

@@ -367,6 +367,57 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------
+# Child PO table (for SC emails)
+# ---------------------------------------------------------------
+
+def _child_po_table(child_pos: list[dict]) -> str:
+    """Render a table of child POs with budget info for SC emails."""
+    header = (
+        f'<tr style="background-color:#f8f9fa">'
+        f'<th style="{_TH_STYLE}">PO 编号</th>'
+        f'<th style="{_TH_STYLE}">供应商</th>'
+        f'<th style="{_TH_STYLE}">PO 金额</th>'
+        f'<th style="{_TH_STYLE}">已消费</th>'
+        f'<th style="{_TH_STYLE}">剩余可用</th>'
+        f'<th style="{_TH_STYLE}">合同到期</th>'
+        f'<th style="{_TH_STYLE}">状态</th>'
+        f'</tr>'
+    )
+
+    rows: list[str] = []
+    for po in child_pos:
+        po_no = po.get("po_no") or "-"
+        vendor = po.get("vendor_name") or "-"
+        po_amount = _fmt_amount(po.get("po_amount"))
+        consumed = _fmt_amount(po.get("consumed_amount"))
+        open_amt = _fmt_amount(po.get("open_po_amount"))
+        contract_to = po.get("contract_to") or "-"
+        status = _status_badge(po.get("status") or "")
+
+        tr = (
+            f'<tr>'
+            f'<td style="{_TD_STYLE}">{po_no}</td>'
+            f'<td style="{_TD_STYLE}">{vendor}</td>'
+            f'<td style="{_TD_STYLE}">{po_amount}</td>'
+            f'<td style="{_TD_STYLE}">{consumed}</td>'
+            f'<td style="{_TD_STYLE}">{open_amt}</td>'
+            f'<td style="{_TD_STYLE}">{contract_to}</td>'
+            f'<td style="{_TD_STYLE}">{status}</td>'
+            f'</tr>'
+        )
+        rows.append(tr)
+
+    table = (
+        f'<table style="{_TABLE_STYLE}">'
+        f'{header}'
+        + "".join(rows) +
+        f'</table>'
+    )
+
+    return _section(f"关联采购订单 ({len(child_pos)})", [table])
+
+
+# ---------------------------------------------------------------
 # HTML shell
 # ---------------------------------------------------------------
 
@@ -484,12 +535,18 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
     else:
         entity_rows = []
 
+    # --- child POs for SC emails ---
+    child_po_section = ""
+    if entity_type == "sc" and entity_info.get("child_pos"):
+        child_po_section = _child_po_table(entity_info["child_pos"])
+
     # --- assemble body ---
     body_parts = [
         highlight,
         _section("通知信息", status_rows),
         _section("提醒计划", schedule_rows) if schedule_rows else "",
         _section(f"{type_label} 详细信息", entity_rows),
+        child_po_section,
     ]
 
     return _html_shell(
