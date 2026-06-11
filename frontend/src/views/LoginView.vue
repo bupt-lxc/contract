@@ -18,7 +18,7 @@
       <!-- Authorized state -->
       <div v-if="state === 'authorized'" class="login-state">
         <!-- Dev mode role selector -->
-        <div v-if="isDev" class="dev-role-select">
+        <div v-if="isDev || isBeta" class="dev-role-select">
           <el-result icon="success" :title="$t('login.identityVerified')">
             <template #sub-title>
               <p>{{ user?.user_name }}</p>
@@ -80,12 +80,12 @@
         </el-result>
       </div>
     </el-card>
-    <p class="login-version">{{ $t('app.version') }}</p>
+    <p class="login-version">{{ versionText }}</p>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Loading, Setting, User } from '@element-plus/icons-vue'
@@ -97,10 +97,13 @@ const state = ref('loading')  // loading | retrying | authorized | role_selected
 const user = ref(null)
 const isDev = ref(false)
 const isBeta = ref(false)
+const appVersion = ref('')
 const lastError = ref('')
 const retryCount = ref(0)
 const MAX_RETRIES = 10
 let retryTimer = null
+
+const versionText = computed(() => t('app.version', { version: appVersion.value || '?' }))
 
 function stopRetry() {
   if (retryTimer) {
@@ -130,6 +133,11 @@ async function verify() {
     } catch {
       isBeta.value = false
       window.__isBeta = false
+    }
+    try {
+      appVersion.value = await callApi('get_version')
+    } catch {
+      appVersion.value = '?'
     }
     if (isBeta.value) {
       document.title = 'PO Management Platform Beta'

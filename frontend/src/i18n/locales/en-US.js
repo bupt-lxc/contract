@@ -2,7 +2,7 @@ export default {
   app: {
     title: 'PO Management Platform',
     subtitle: 'Purchase Order Management Platform',
-    version: 'v2.0.0 · Audi C/EV-L',
+    version: 'v{version} · Audi C/EV-L',
     brand: 'POMP',
     brandShort: 'PO',
     betaLabel: 'Beta'

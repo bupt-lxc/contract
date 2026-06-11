@@ -39,10 +39,14 @@ class ApiBridge:
     def is_beta(self, _payload=None) -> dict:
         return ok(os.getenv("SC_GR_BETA") == "1")
 
+    def get_version(self, _payload=None) -> dict:
+        from sc_gr_app import __version__
+        return ok(__version__)
+
     def switch_dev_role(self, payload) -> dict:
         """Switch the dev user's role between admin and requester. Dev mode only."""
-        if os.getenv("SC_GR_DEV") != "1":
-            return fail(PermissionDenied("switch_dev_role is only available in dev mode"))
+        if os.getenv("SC_GR_DEV") != "1" and os.getenv("SC_GR_BETA") != "1":
+            return fail(PermissionDenied("switch_dev_role is only available in dev or beta mode"))
         try:
             payload = self._required_payload(payload)
             role = _require_payload_field(payload, "role")
