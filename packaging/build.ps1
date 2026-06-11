@@ -1,9 +1,27 @@
+param([switch]$Beta)
+
 $ErrorActionPreference = "Stop"
 
 Push-Location (Join-Path $PSScriptRoot "..")
 
-$sharedDrive = "\\ap.vwg\fileshare\AUDI CHINA\Audi_China_RnD\R&D\EG\10_EG-V\80000_EG_W\DMAS\01 Daily working files\contract"
+# Auto-detect beta from project-root .env file (SC_GR_BETA=1).
+# The -Beta switch overrides — use it to force a release build even when .env says beta.
+$projectRoot = Get-Location
+$projectEnv = Join-Path $projectRoot ".env"
+if (-not $PSBoundParameters.ContainsKey('Beta') -and (Test-Path $projectEnv)) {
+    $envContent = Get-Content $projectEnv -Raw
+    if ($envContent -match 'SC_GR_BETA\s*=\s*1') {
+        $Beta = $true
+    }
+}
+
+$contractFolder = if ($Beta) { "contract-beta" } else { "contract" }
+$sharedDrive = "\\ap.vwg\fileshare\AUDI CHINA\Audi_China_RnD\R&D\EG\10_EG-V\80000_EG_W\DMAS\01 Daily working files\$contractFolder"
+$appSuffix = if ($Beta) { " Beta" } else { "" }
+$setupPrefix = if ($Beta) { "SC-GR-Management-Beta" } else { "SC-GR-Management" }
+$appId = if ($Beta) { "{{B1C2D3E4-F5A6-7890-ABCD-EF1234567891}" } else { "{{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" }
 Write-Host "Shared drive: $sharedDrive" -ForegroundColor Cyan
+if ($Beta) { Write-Host "*** BETA BUILD ***" -ForegroundColor Yellow }
 
 # 1. Build Vue frontend
 Write-Host "=== Building Vue frontend ===" -ForegroundColor Cyan
@@ -57,6 +75,15 @@ Write-Host "=== Building with PyInstaller ===" -ForegroundColor Cyan
 uv run pyinstaller packaging/app.spec
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
+# Write .env file for beta builds (controls logging, data paths, branding)
+$envFile = Join-Path $distApp ".env"
+if ($Beta) {
+    "SC_GR_BETA=1" | Set-Content -NoNewline $envFile
+    Write-Host "Beta .env written to $envFile" -ForegroundColor Yellow
+} else {
+    if (Test-Path $envFile) { Remove-Item $envFile }
+}
+
 # Read version once for Inno Setup, notification, and shared drive steps
 $version = (uv run python -c "from sc_gr_app import __version__; print(__version__)").Trim()
 
@@ -67,8 +94,11 @@ if (Test-Path $iscc) {
     # Sync version into setup.iss (prevents hardcoded version drift)
     $setupIss = Join-Path $PSScriptRoot "setup.iss"
     (Get-Content -Raw $setupIss) `
+        -replace '#define MyAppName "[^"]*"', "#define MyAppName ""SC GR Management$appSuffix""" `
         -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion ""$version""" `
-        -replace 'OutputBaseFilename=SC-GR-Management-[^-]*-Setup', "OutputBaseFilename=SC-GR-Management-$version-Setup" `
+        -replace 'AppId=\{\{[^}]*\}\}', "AppId=$appId" `
+        -replace 'OutputBaseFilename=[^-]*-[^-]*-Setup', "OutputBaseFilename=$setupPrefix-$version-Setup" `
+        -replace 'DefaultDirName=\{localappdata\}\\[^}]*\}', "DefaultDirName={localappdata}\SC GR Management$appSuffix}" `
         | Set-Content -NoNewline $setupIss
     & $iscc $setupIss
     if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
@@ -82,15 +112,21 @@ uv run pyinstaller packaging/notification.spec --distpath $distDir --workpath (J
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
 # One-file mode outputs directly to dist/
+$notifyPrefix = if ($Beta) { "SC-GR-Notification-Beta" } else { "SC-GR-Notification" }
 $notifySrcExe = Join-Path $distDir "SC-GR-Notification.exe"
-$notifyDstExe = Join-Path $distDir "SC-GR-Notification-$version.exe"
+$notifyDstExe = Join-Path $distDir "$notifyPrefix-$version.exe"
 Copy-Item $notifySrcExe $notifyDstExe
+# For beta, place .env next to the notification EXE so it connects to the beta database
+if ($Beta) {
+    $notifyEnv = Join-Path $distDir ".env"
+    "SC_GR_BETA=1" | Set-Content -NoNewline $notifyEnv
+}
 Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
 
 # 9. Push to shared drive (only if shared drive is accessible)
 $sharedReleases = Join-Path $sharedDrive "releases"
-$guiInstaller = "SC-GR-Management-$version-Setup.exe"
-$notifyExe = "SC-GR-Notification-$version.exe"
+$guiInstaller = "$setupPrefix-$version-Setup.exe"
+$notifyExe = "$notifyPrefix-$version.exe"
 
 Write-Host "=== Pushing to shared drive ===" -ForegroundColor Cyan
 if (-not (Test-Path $sharedReleases)) {

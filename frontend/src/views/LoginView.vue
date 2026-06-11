@@ -1,7 +1,10 @@
 <template>
   <div class="login-screen">
     <el-card class="login-card" shadow="always">
-      <h1 class="login-title">{{ $t('login.title') }}</h1>
+      <h1 class="login-title">
+        {{ $t('login.title') }}
+        <el-tag v-if="isBeta" type="warning" size="small" class="beta-tag">{{ $t('app.betaLabel') }}</el-tag>
+      </h1>
       <p class="login-subtitle">{{ $t('login.subtitle') }}</p>
 
       <!-- Loading / Retrying state -->
@@ -93,6 +96,7 @@ const { t } = useI18n()
 const state = ref('loading')  // loading | retrying | authorized | role_selected | unauthorized
 const user = ref(null)
 const isDev = ref(false)
+const isBeta = ref(false)
 const lastError = ref('')
 const retryCount = ref(0)
 const MAX_RETRIES = 10
@@ -119,6 +123,16 @@ async function verify() {
       isDev.value = await callApi('is_dev')
     } catch {
       isDev.value = false
+    }
+    try {
+      isBeta.value = await callApi('is_beta')
+      window.__isBeta = isBeta.value
+    } catch {
+      isBeta.value = false
+      window.__isBeta = false
+    }
+    if (isBeta.value) {
+      document.title = 'SC GR Management Beta'
     }
     state.value = 'authorized'
   } catch (e) {
@@ -178,6 +192,10 @@ onUnmounted(stopRetry)
   font-weight: 700;
   color: #1e293b;
   margin-bottom: 4px;
+}
+.beta-tag {
+  vertical-align: middle;
+  margin-left: 8px;
 }
 .login-subtitle {
   font-size: 13px;

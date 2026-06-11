@@ -36,6 +36,9 @@ class ApiBridge:
     def is_dev(self, _payload=None) -> dict:
         return ok(os.getenv("SC_GR_DEV") == "1")
 
+    def is_beta(self, _payload=None) -> dict:
+        return ok(os.getenv("SC_GR_BETA") == "1")
+
     def switch_dev_role(self, payload) -> dict:
         """Switch the dev user's role between admin and requester. Dev mode only."""
         if os.getenv("SC_GR_DEV") != "1":

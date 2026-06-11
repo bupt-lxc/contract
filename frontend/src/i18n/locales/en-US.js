@@ -4,7 +4,8 @@ export default {
     subtitle: 'Budget & Purchase Order Management',
     version: 'v2.0.0 · Audi C/EV-L',
     brand: 'SC GR Ops',
-    brandShort: 'SC'
+    brandShort: 'SC',
+    betaLabel: 'Beta'
   },
 
   nav: {

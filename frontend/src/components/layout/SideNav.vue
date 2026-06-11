@@ -3,6 +3,7 @@
     <div class="sidenav-brand">
       <span v-if="!collapsed" class="brand-text">{{ $t('app.brand') }}</span>
       <span v-else class="brand-icon">{{ $t('app.brandShort') }}</span>
+      <span v-if="isBeta" class="beta-indicator" :title="$t('app.betaLabel')">β</span>
     </div>
     <el-menu
       :default-active="activeRoute"
@@ -75,6 +76,7 @@ const activeRoute = computed(() => {
 })
 
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
+const isBeta = computed(() => !!window.__isBeta)
 </script>
 
 <style scoped>
@@ -94,6 +96,12 @@ const isAdmin = computed(() => window.__currentUser?.role === 'admin')
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .brand-icon { font-size: 18px; }
+.beta-indicator {
+  font-size: 11px;
+  color: #f59e0b;
+  margin-left: 6px;
+  font-weight: 700;
+}
 .sidenav-menu {
   flex: 1;
   border-right: none;

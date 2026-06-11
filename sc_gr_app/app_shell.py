@@ -14,20 +14,20 @@ from sc_gr_app.config import default_config
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.services.user_service import seed_users
 
-MUTEX_NAME = "Local\\SC_GR_MANAGEMENT_INSTANCE"
-WINDOW_TITLE = "SC GR Management"
+MUTEX_NAME = "Local\\SC_GR_MANAGEMENT_BETA_INSTANCE" if os.getenv("SC_GR_BETA") == "1" else "Local\\SC_GR_MANAGEMENT_INSTANCE"
+WINDOW_TITLE = "SC GR Management Beta" if os.getenv("SC_GR_BETA") == "1" else "SC GR Management"
 DEV_MODE = os.getenv("SC_GR_DEV") == "1"
+BETA_MODE = os.getenv("SC_GR_BETA") == "1"
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 
 
 def _setup_logging():
-    """Write app logs to the install directory in append mode.
-
-    Log file lives next to the exe so it survives version upgrades.
-    Old logs are never pruned — the file grows indefinitely."""
-    log_dir = Path(sys.executable).parent
-    log_path = log_dir / "sc-gr-app.log"
+    """Beta builds: write debug log to the desktop. Release builds: no file logging."""
+    if not BETA_MODE:
+        return
+    desktop = Path.home() / "Desktop"
+    log_path = desktop / "sr-gr-debug.log"
     try:
         root = logging.getLogger()
         root.setLevel(logging.DEBUG)
@@ -40,8 +40,6 @@ def _setup_logging():
         root.addHandler(fh)
     except OSError:
         pass  # can't log — nothing we can do at this early stage
-MIN_WIDTH, MIN_HEIGHT = 1100, 700
-DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 
 # Store WNDPROC callback reference to prevent garbage collection
 _tray_wndproc = None
@@ -109,7 +107,8 @@ def _single_instance_check():
 
 
 def _webview2_storage():
-    base = Path(os.getenv("LOCALAPPDATA") or Path.home()) / "sc-gr-management" / "webview2"
+    folder = "sc-gr-management-beta" if BETA_MODE else "sc-gr-management"
+    base = Path(os.getenv("LOCALAPPDATA") or Path.home()) / folder / "webview2"
     base.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(base))
     return base
@@ -138,6 +137,8 @@ def _check_update():
     if manifest is None:
         if os.getenv("SC_GR_DEV") == "1":
             return
+        if BETA_MODE:
+            return  # beta releases folder may not exist yet
         releases_dir = _releases_dir()
         manifest_path = releases_dir / "manifest.json"
         if not releases_dir.exists():

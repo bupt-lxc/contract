@@ -1,27 +1,69 @@
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+
+def _load_dotenv():
+    """Load .env file from next to the executable (or _internal for PyInstaller).
+
+    Only sets keys that aren't already in the environment, so OS-level
+    overrides always win. Safe to call multiple times — first write wins.
+    """
+    exe_dir = Path(sys.executable).parent
+    candidates = [exe_dir / ".env"]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / ".env")
+    for env_path in candidates:
+        try:
+            if not env_path.is_file():
+                continue
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if key and key not in os.environ:
+                    os.environ[key] = value
+        except OSError:
+            pass
+
+
+_load_dotenv()
+
+
+def _contract_folder() -> str:
+    return "contract-beta" if os.getenv("SC_GR_BETA") == "1" else "contract"
 
 
 # Shared drive may be reached via UNC path or mapped drive letter (e.g. K:).
 # Both point to the same network location — try each and use the first
 # one that is actually accessible on this machine.
-_SHARED_SUBPATH = (
+_SHARED_BASE = (
     r"AUDI CHINA\Audi_China_RnD\R&D\EG\10_EG-V"
-    r"\80000_EG_W\DMAS\01 Daily working files\contract"
+    r"\80000_EG_W\DMAS\01 Daily working files"
 )
-SHARED_DRIVE_DIR = Path(r"\\ap.vwg\fileshare") / _SHARED_SUBPATH
-K_DRIVE_DIR = Path("K:/") / _SHARED_SUBPATH
 
-_CANDIDATE_DIRS = [SHARED_DRIVE_DIR, K_DRIVE_DIR]
+
+def _shared_subpath() -> str:
+    return f"{_SHARED_BASE}\\{_contract_folder()}"
+
+
+def _make_candidates() -> list:
+    subpath = _shared_subpath()
+    return [Path(r"\\ap.vwg\fileshare") / subpath, Path("K:/") / subpath]
 
 
 def _resolve_base_dir() -> Path:
     """Return the first accessible shared-drive path, or UNC as fallback."""
-    for candidate in _CANDIDATE_DIRS:
+    candidates = _make_candidates()
+    for candidate in candidates:
         if candidate.exists():
             return candidate
-    return SHARED_DRIVE_DIR
+    return candidates[0]
 
 
 @dataclass(frozen=True)

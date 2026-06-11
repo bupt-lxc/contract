@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import SideNav from '@/components/layout/SideNav.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
@@ -26,6 +26,12 @@ const route = useRoute()
 const sidebarCollapsed = ref(false)
 
 const layout = computed(() => route.meta?.layout || 'default')
+
+onMounted(() => {
+  if (window.__isBeta) {
+    document.title = 'SC GR Management Beta'
+  }
+})
 </script>
 
 <style scoped>
