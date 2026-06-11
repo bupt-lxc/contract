@@ -170,6 +170,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_delete_gr": is_admin or is_owner,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
+        "can_transfer_sc": is_admin or is_owner,
     }
 
 
@@ -926,6 +927,57 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 raise
 
     return after
+
+
+def transfer_sc(config: AppConfig, current_user: dict, sc_id: str, new_requester_id: str) -> dict:
+    """Transfer SC ownership to another user. Admin or current owner can transfer."""
+    require_requester_or_admin(current_user)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                before = _get_sc(conn, sc_id)
+
+                perms = _sc_permissions(current_user, before)
+                if not perms["can_transfer_sc"]:
+                    raise PermissionDenied("没有权限转移此 SC 的所有者")
+
+                target = conn.execute(
+                    "SELECT user_id FROM users WHERE user_id = ?",
+                    (new_requester_id,),
+                ).fetchone()
+                if target is None:
+                    raise ValidationError(f"目标用户不存在: {new_requester_id}")
+
+                if before["requester_id"] == new_requester_id:
+                    return before
+
+                timestamp = utc_now()
+                conn.execute(
+                    "UPDATE sc_records SET requester_id = ?, updated_at = ? WHERE sc_id = ?",
+                    (new_requester_id, timestamp, sc_id),
+                )
+
+                after = _get_sc(conn, sc_id)
+
+                write_audit_log(
+                    conn,
+                    action_type="transfer_sc",
+                    object_type="sc",
+                    object_id=sc_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+
+                conn.commit()
+                return after
+            except Exception:
+                conn.rollback()
+                raise
 
 
 def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:

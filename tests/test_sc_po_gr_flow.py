@@ -7,7 +7,7 @@ from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr, submit_gr, delete_gr
 from sc_gr_app.services.po_service import create_po, submit_po, delete_po
-from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc
+from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc, transfer_sc
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -1011,6 +1011,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_delete_gr": True,
         "can_manage_po": True,
         "can_manage_gr": True,
+        "can_transfer_sc": True,
     }
     assert requester_detail["permissions"]["can_manage_po"] is True
     assert requester_detail["permissions"]["can_manage_gr"] is True
@@ -1976,3 +1977,101 @@ def test_reject_non_pending_gr_on_draft_po(app_config):
             {"po_id": po["po_id"], "requester_id": "U1", "estimated_amount": 100,
              "status": "pending"},
         )
+
+
+class TestTransferSc:
+    """Tests for transfer_sc — transferring SC ownership."""
+
+    def test_admin_can_transfer_any_sc(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        sc = _create_and_approve_sc(app_config)
+        result = transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
+        assert result["requester_id"] == "U2"
+
+    def test_owner_can_transfer_own_sc(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        sc = _create_and_approve_sc(app_config)
+        result = transfer_sc(app_config, USER, sc["sc_id"], "U2")
+        assert result["requester_id"] == "U2"
+
+    def test_non_owner_non_admin_cannot_transfer(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        sc = _create_and_approve_sc(app_config)
+        with pytest.raises(PermissionDenied):
+            transfer_sc(app_config, OTHER_USER, sc["sc_id"], "U2")
+
+    def test_cannot_transfer_to_nonexistent_user(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        sc = _create_and_approve_sc(app_config)
+        with pytest.raises(ValidationError, match="目标用户不存在"):
+            transfer_sc(app_config, ADMIN, sc["sc_id"], "NOBODY")
+
+    def test_transfer_to_same_user_is_idempotent(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        sc = _create_and_approve_sc(app_config)
+        result = transfer_sc(app_config, ADMIN, sc["sc_id"], "U1")
+        assert result["requester_id"] == "U1"
+
+    def test_audit_log_is_written(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        sc = _create_and_approve_sc(app_config)
+        transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
+        with connect(app_config) as conn:
+            row = conn.execute(
+                "SELECT * FROM audit_logs WHERE action_type = 'transfer_sc' AND object_id = ?",
+                (sc["sc_id"],),
+            ).fetchone()
+        assert row is not None
+        assert row["operator_id"] == "A1"
+
+    def test_requester_id_changes_after_transfer(self, app_config):
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        sc = _create_and_approve_sc(app_config)
+        assert sc["requester_id"] == "U1"
+        result = transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
+        assert result["requester_id"] == "U2"
+        # Verify persisted
+        with connect(app_config) as conn:
+            persisted = conn.execute(
+                "SELECT requester_id FROM sc_records WHERE sc_id = ?", (sc["sc_id"],)
+            ).fetchone()
+        assert persisted["requester_id"] == "U2"
+
+    def test_can_transfer_regardless_of_sc_status(self, app_config):
+        """Transfer should work for all SC statuses."""
+        migrate(app_config)
+        seed_users(app_config)
+        seed_other_user(app_config)
+        # Draft SC
+        sc = create_sc_draft(app_config, USER, {"requester_id": "U1"})
+        result = transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
+        assert result["requester_id"] == "U2"
+
+
+def _create_and_approve_sc(app_config):
+    """Helper: create an SC and approve it, return the SC dict."""
+    sc = create_sc(
+        app_config, USER,
+        {
+            "sc_no": "SC-TRANSFER",
+            "requester_id": "U1",
+            "request_type": "service",
+            "cost_center": 2001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        },
+    )
+    return approve_sc(app_config, ADMIN, sc["sc_id"])

@@ -17,6 +17,7 @@
         <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
         <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
+        <el-button v-if="permissions.can_transfer_sc" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
       </div>
     </div>
 
@@ -118,6 +119,25 @@
       :vendors="vendors"
       @save="handlePoSave"
     />
+
+    <el-dialog v-model="transferDialogVisible" :title="$t('sc.transferOwner')" width="480px">
+      <p style="margin-bottom:16px;color:#5f6368">
+        {{ $t('sc.transferOwnerHint', { no: detail.sc?.sc_no || detail.sc?.sc_id, old: detail.sc?.requester_id }) }}
+      </p>
+      <el-select v-model="selectedNewOwner" :placeholder="$t('sc.selectNewOwner')"
+                 filterable style="width:100%">
+        <el-option v-for="u in activeUsers"
+                   :key="u.user_id" :label="`${u.user_name} (${u.user_id})`"
+                   :value="u.user_id"
+                   :disabled="u.user_id === detail.sc?.requester_id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="transferDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :disabled="!selectedNewOwner" @click="handleTransferOwner">
+          {{ $t('common.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -352,6 +372,29 @@ async function handleRemoveVendor(vendorId) {
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
+const transferDialogVisible = ref(false)
+const selectedNewOwner = ref('')
+
+function openTransferDialog() {
+  selectedNewOwner.value = ''
+  transferDialogVisible.value = true
+}
+
+async function handleTransferOwner() {
+  if (!selectedNewOwner.value) return
+  try {
+    await callApi('transfer_sc', {
+      sc_id: scId.value,
+      new_requester_id: selectedNewOwner.value,
+    })
+    ElMessage.success(t('sc.ownerTransferred'))
+    transferDialogVisible.value = false
+    await fetchDetail(scId.value)
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
   }
 }
 

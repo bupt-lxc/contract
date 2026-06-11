@@ -206,7 +206,11 @@ home: {
     confirmRemoveVendor: 'Remove vendor "{name}" from this SC?',
     vendorAdded: 'Vendor added',
     vendorRemoved: 'Vendor removed',
-    vendorRequiredForSubmit: 'At least one vendor is required before submitting'
+    vendorRequiredForSubmit: 'At least one vendor is required before submitting',
+    transferOwner: 'Transfer Owner',
+    transferOwnerHint: 'Transfer ownership of {no} from {old} to:',
+    selectNewOwner: 'Select new owner',
+    ownerTransferred: 'Owner transferred',
   },
 
   po: {
