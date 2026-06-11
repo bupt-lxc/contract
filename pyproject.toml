@@ -11,9 +11,14 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "markdown>=3.10.2",
+    "playwright>=1.60.0",
     "pyinstaller>=6.20.0",
+    "pypdf>=6.13.2",
     "pytest>=9.0.3",
+    "weasyprint>=69.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
