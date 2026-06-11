@@ -15,10 +15,10 @@ if (-not $PSBoundParameters.ContainsKey('Beta') -and (Test-Path $projectEnv)) {
     }
 }
 
-$contractFolder = if ($Beta) { "contract-beta" } else { "contract" }
+$contractFolder = if ($Beta) { "pomp-beta" } else { "pomp" }
 $sharedDrive = "\\ap.vwg\fileshare\AUDI CHINA\Audi_China_RnD\R&D\EG\10_EG-V\80000_EG_W\DMAS\01 Daily working files\$contractFolder"
 $appSuffix = if ($Beta) { " Beta" } else { "" }
-$setupPrefix = if ($Beta) { "SC-GR-Management-Beta" } else { "SC-GR-Management" }
+$setupPrefix = if ($Beta) { "POMP-Beta" } else { "POMP" }
 $appId = if ($Beta) { "{{B1C2D3E4-F5A6-7890-ABCD-EF1234567891}" } else { "{{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" }
 Write-Host "Shared drive: $sharedDrive" -ForegroundColor Cyan
 if ($Beta) { Write-Host "*** BETA BUILD ***" -ForegroundColor Yellow }
@@ -42,7 +42,7 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
 # 4. Clean old build artifacts
 $distDir = Join-Path (Get-Location) "dist"
-$distApp = Join-Path $distDir "SC GR Management"
+$distApp = Join-Path $distDir "PO Management Platform"
 if (Test-Path -LiteralPath $distApp) {
     Remove-Item -LiteralPath $distApp -Recurse -Force
 }
@@ -94,11 +94,11 @@ if (Test-Path $iscc) {
     # Sync version into setup.iss (prevents hardcoded version drift)
     $setupIss = Join-Path $PSScriptRoot "setup.iss"
     (Get-Content -Raw $setupIss) `
-        -replace '#define MyAppName "[^"]*"', "#define MyAppName ""SC GR Management$appSuffix""" `
+        -replace '#define MyAppName "[^"]*"', "#define MyAppName ""PO Management Platform$appSuffix""" `
         -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion ""$version""" `
         -replace 'AppId=\{\{[^}]*\}\}', "AppId=$appId" `
         -replace 'OutputBaseFilename=[^-]*-[^-]*-Setup', "OutputBaseFilename=$setupPrefix-$version-Setup" `
-        -replace 'DefaultDirName=\{localappdata\}\\[^}]*\}', "DefaultDirName={localappdata}\SC GR Management$appSuffix}" `
+        -replace 'DefaultDirName=\{localappdata\}\\[^}]*\}', "DefaultDirName={localappdata}\PO Management Platform$appSuffix}" `
         | Set-Content -NoNewline $setupIss
     & $iscc $setupIss
     if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
@@ -112,8 +112,8 @@ uv run pyinstaller packaging/notification.spec --distpath $distDir --workpath (J
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
 # One-file mode outputs directly to dist/
-$notifyPrefix = if ($Beta) { "SC-GR-Notification-Beta" } else { "SC-GR-Notification" }
-$notifySrcExe = Join-Path $distDir "SC-GR-Notification.exe"
+$notifyPrefix = if ($Beta) { "POMP-Notification-Beta" } else { "POMP-Notification" }
+$notifySrcExe = Join-Path $distDir "POMP-Notification.exe"
 $notifyDstExe = Join-Path $distDir "$notifyPrefix-$version.exe"
 Copy-Item $notifySrcExe $notifyDstExe
 # For beta, place .env next to the notification EXE so it connects to the beta database

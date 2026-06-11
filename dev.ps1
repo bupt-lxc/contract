@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 # ============================================
-# SC GR Management -- Dev Mode Launcher
+# PO Management Platform -- Dev Mode Launcher
 # Uses local database for offline development
 # ============================================
 $env:SC_GR_DEV = "1"
@@ -11,7 +11,7 @@ $projectRoot = Get-Location
 $env:SC_GR_DATA_DIR = $projectRoot
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " SC GR Management -- DEV MODE" -ForegroundColor Cyan
+Write-Host " PO Management Platform -- DEV MODE" -ForegroundColor Cyan
 Write-Host " Database: $projectRoot\data\sc_gr.sqlite3" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 

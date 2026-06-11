@@ -488,7 +488,7 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
         f'</div>'
         # Footer
         f'<div style="{_FOOTER_STYLE}">'
-        f'此邮件由 Contract Management System 自动发送，请勿回复。<br>'
+        f'此邮件由 PO Management Platform 自动发送，请勿回复。<br>'
         f'生成时间：{_utc_now_cn()}'
         f'</div>'
         f'</div>'
@@ -512,23 +512,23 @@ def build_subject(entry: dict, entity_info: dict) -> str:
 
     if event_type == "status_change":
         label = _TRANSITION_LABELS.get(event_key, event_key)
-        return f"[Contract] {type_label} {entity_id} {label}"
+        return f"[POMP] {type_label} {entity_id} {label}"
 
     if event_type == "threshold_date":
         sc_no = entity_info.get("sc_no") or entity_id
         months = event_key.replace("threshold_date:", "").replace("m", "")
-        return f"[Contract] SC {sc_no} 合同即将到期 — 剩余不足{months}个月"
+        return f"[POMP] SC {sc_no} 合同即将到期 — 剩余不足{months}个月"
 
     if event_type == "threshold_amount":
         sc_no = entity_info.get("sc_no") or entity_id
         pct = event_key.replace("threshold_amount:", "").replace("%", "")
-        return f"[Contract] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
+        return f"[POMP] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
 
     if event_type == "custom_schedule":
         po_no = entity_info.get("po_no") or entity_id
-        return f"[Contract] PO {po_no} 定期提醒"
+        return f"[POMP] PO {po_no} 定期提醒"
 
-    return f"[Contract] {type_label} {entity_id} — {event_key}"
+    return f"[POMP] {type_label} {entity_id} — {event_key}"
 
 
 def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
@@ -612,7 +612,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
 
 def build_monthly_summary_subject(year: int, month: int) -> str:
     """Subject line for the monthly PO summary email."""
-    return f"[Contract] {year}年{month}月 PO月度汇总 — 剩余金额与合同到期提醒"
+    return f"[POMP] {year}年{month}月 PO月度汇总 — 剩余金额与合同到期提醒"
 
 
 def build_monthly_summary_body(

@@ -1,5 +1,5 @@
 [project]
-name = "sc-gr-management"
+name = "po-management-platform"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [

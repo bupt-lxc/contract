@@ -1,6 +1,6 @@
 @echo off
 REM ============================================
-REM SC GR Management -- Dev Mode Launcher
+REM PO Management Platform -- Dev Mode Launcher
 REM Uses local database for offline development
 REM ============================================
 set SC_GR_DEV=1
@@ -8,7 +8,7 @@ set SC_GR_DATA_DIR=%~dp0
 
 echo.
 echo ========================================
-echo  SC GR Management -- DEV MODE
+echo  PO Management Platform -- DEV MODE
 echo  Database: %~dp0data\sc_gr.sqlite3
 echo ========================================
 echo.
