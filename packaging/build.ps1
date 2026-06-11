@@ -97,7 +97,7 @@ if (Test-Path $iscc) {
         -replace '#define MyAppName "[^"]*"', "#define MyAppName ""PO Management Platform$appSuffix""" `
         -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion ""$version""" `
         -replace 'AppId=\{\{[^}]*\}\}', "AppId=$appId" `
-        -replace 'OutputBaseFilename=[^-]*-[^-]*-Setup', "OutputBaseFilename=$setupPrefix-$version-Setup" `
+        -replace 'OutputBaseFilename=.*-Setup', "OutputBaseFilename=$setupPrefix-$version-Setup" `
         -replace 'DefaultDirName=\{localappdata\}\\[^}]*\}', "DefaultDirName={localappdata}\PO Management Platform$appSuffix}" `
         | Set-Content -NoNewline $setupIss
     & $iscc $setupIss
@@ -133,26 +133,34 @@ if (-not (Test-Path $sharedReleases)) {
     New-Item -ItemType Directory -Path $sharedReleases -Force | Out-Null
 }
 
-# Copy files
-Copy-Item -Path (Join-Path $distDir "installer\$guiInstaller") -Destination $sharedReleases -Force
+# Copy notification executable (always built)
 Copy-Item -Path (Join-Path $distDir $notifyExe) -Destination $sharedReleases -Force
-
-# Compute SHA256
-$guiHash = (Get-FileHash -Path (Join-Path $sharedReleases $guiInstaller) -Algorithm SHA256).Hash.ToLower()
 $notifyHash = (Get-FileHash -Path (Join-Path $sharedReleases $notifyExe) -Algorithm SHA256).Hash.ToLower()
+
+# Copy GUI installer (only if Inno Setup was available)
+$guiPath = Join-Path $distDir "installer\$guiInstaller"
+$guiHash = $null
+if (Test-Path $guiPath) {
+    Copy-Item -Path $guiPath -Destination $sharedReleases -Force
+    $guiHash = (Get-FileHash -Path (Join-Path $sharedReleases $guiInstaller) -Algorithm SHA256).Hash.ToLower()
+} else {
+    Write-Host "=== GUI installer not found, skipping ===" -ForegroundColor Yellow
+}
 
 # Generate manifest.json
 $manifest = @{
     version = $version
     published_at = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
     changelog_cn = ""
-    gui = @{
-        installer = $guiInstaller
-        sha256 = $guiHash
-    }
     notification = @{
         package = $notifyExe
         sha256 = $notifyHash
+    }
+}
+if ($guiHash) {
+    $manifest.gui = @{
+        installer = $guiInstaller
+        sha256 = $guiHash
     }
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 3
