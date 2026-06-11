@@ -1,6 +1,7 @@
 <template>
   <div class="header-left">
     <span class="header-title">{{ $t('app.title') }}</span>
+    <el-tag v-if="isBeta" type="warning" size="small">{{ $t('app.betaLabel') }}</el-tag>
     <el-breadcrumb separator="/">
       <el-breadcrumb-item
         v-for="(item, index) in breadcrumbs"
@@ -36,6 +37,7 @@ const route = useRoute()
 const router = useRouter()
 
 const user = computed(() => window.__currentUser || null)
+const isBeta = computed(() => !!window.__isBeta)
 
 const breadcrumbs = computed(() => {
   const name = route.name

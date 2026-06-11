@@ -4,7 +4,8 @@ export default {
     subtitle: '预算与采购订单管理',
     version: 'v2.0.0 · Audi C/EV-L',
     brand: 'SC GR 运营',
-    brandShort: 'SC'
+    brandShort: 'SC',
+    betaLabel: '测试版'
   },
 
   nav: {
