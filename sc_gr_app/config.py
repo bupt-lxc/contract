@@ -36,7 +36,7 @@ _load_dotenv()
 
 
 def _contract_folder() -> str:
-    return "contract-beta" if os.getenv("SC_GR_BETA") == "1" else "contract"
+    return "pomp-beta" if os.getenv("SC_GR_BETA") == "1" else "pomp"
 
 
 # Shared drive may be reached via UNC path or mapped drive letter (e.g. K:).
@@ -79,7 +79,7 @@ def default_config(base_dir: Path | None = None) -> AppConfig:
         if env_data:
             base_dir = Path(env_data)
         elif os.getenv("SC_GR_DEV") == "1":
-            base_dir = Path(os.getenv("APPDATA", Path.home())) / "sc-gr-management-dev"
+            base_dir = Path(os.getenv("APPDATA", Path.home())) / "pomp-dev"
         else:
             base_dir = _resolve_base_dir()
     root = Path(base_dir)

@@ -406,7 +406,7 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
 
     expected_url = Path(app_shell.__file__).parent / "web" / "index.html"
     assert calls[0:2] == [("migrate", config), ("seed", config)]
-    assert calls[2][0:2] == ("create_window", ("SC GR Management",))
+    assert calls[2][0:2] == ("create_window", ("PO Management Platform",))
     window_kwargs = calls[2][2]
     assert window_kwargs["url"] == f"file://{expected_url}"
     assert window_kwargs["js_api"].config is config

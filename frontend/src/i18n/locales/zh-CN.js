@@ -1,10 +1,10 @@
 export default {
   app: {
-    title: 'SC GR 运营管理',
-    subtitle: '预算与采购订单管理',
+    title: 'PO 管理平台',
+    subtitle: '采购订单管理平台',
     version: 'v2.0.0 · Audi C/EV-L',
-    brand: 'SC GR 运营',
-    brandShort: 'SC',
+    brand: 'POMP',
+    brandShort: 'PO',
     betaLabel: '测试版'
   },
 
@@ -99,8 +99,8 @@ export default {
   },
 
   login: {
-    title: 'SC GR 运营管理',
-    subtitle: '预算与采购订单管理',
+    title: 'PO 管理平台',
+    subtitle: '采购订单管理平台',
     detecting: '正在检测身份...',
     retrying: '重试中...',
     attempt: '第 {count} 次尝试',

@@ -132,7 +132,7 @@ async function verify() {
       window.__isBeta = false
     }
     if (isBeta.value) {
-      document.title = 'SC GR Management Beta'
+      document.title = 'PO Management Platform Beta'
     }
     state.value = 'authorized'
   } catch (e) {

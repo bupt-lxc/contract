@@ -30,7 +30,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="SC-GR-Notification",
+    name="POMP-Notification",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

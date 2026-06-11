@@ -29,7 +29,7 @@ const layout = computed(() => route.meta?.layout || 'default')
 
 onMounted(() => {
   if (window.__isBeta) {
-    document.title = 'SC GR Management Beta'
+    document.title = 'PO Management Platform Beta'
   }
 })
 </script>

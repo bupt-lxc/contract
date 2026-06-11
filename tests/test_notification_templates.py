@@ -138,7 +138,7 @@ class TestBuildSubject:
             "event_key": "submit",
         }
         subject = templates.build_subject(entry, {})
-        assert "[Contract] PO PO-001 已提交" == subject
+        assert "[POMP] PO PO-001 已提交" == subject
 
     def test_threshold_date_subject(self):
         entry = {

@@ -45,7 +45,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="SC GR Management",
+    name="PO Management Platform",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -65,5 +65,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="SC GR Management",
+    name="PO Management Platform",
 )

@@ -1,6 +1,6 @@
-# SC GR Management
+# PO Management Platform (POMP)
 
-Windows desktop application for department-side SC (Shopping Cart) budget, PO (Purchase Order) / vendor, and GR (Goods Receipt) management. Built for Audi C/EV-L.
+Windows desktop application for department-side SC budget, PO/vendor, and GR management. Built for Audi C/EV-L.
 
 The app tracks SCs, POs, vendors, and GRs locally; actual financial approval happens in an external system. Core domain rule: **SC is the budget source** — PO allocates SC funds to vendors, GR draws from PO funds.
 
@@ -214,7 +214,7 @@ In dev mode (`SC_GR_DEV=1`), the launcher scripts (`dev.bat` / `dev.ps1`) automa
 powershell -ExecutionPolicy Bypass -File packaging/build.ps1
 ```
 
-This runs `uv sync`, `pytest`, and `pyinstaller` in sequence. After the build, run the Inno Setup Compiler on `packaging/setup.iss` to produce `dist/installer/SC-GR-Management-2.0.0-Setup.exe`.
+This runs `uv sync`, `pytest`, and `pyinstaller` in sequence. After the build, run the Inno Setup Compiler on `packaging/setup.iss` to produce `dist/installer/POMP-2.0.0-Setup.exe`.
 
 ## Operations
 

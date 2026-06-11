@@ -1,10 +1,10 @@
 export default {
   app: {
-    title: 'SC GR Operations',
-    subtitle: 'Budget & Purchase Order Management',
+    title: 'PO Management Platform',
+    subtitle: 'Purchase Order Management Platform',
     version: 'v2.0.0 · Audi C/EV-L',
-    brand: 'SC GR Ops',
-    brandShort: 'SC',
+    brand: 'POMP',
+    brandShort: 'PO',
     betaLabel: 'Beta'
   },
 
@@ -99,8 +99,8 @@ export default {
   },
 
   login: {
-    title: 'SC GR Operations',
-    subtitle: 'Budget & Purchase Order Management',
+    title: 'PO Management Platform',
+    subtitle: 'Purchase Order Management Platform',
     detecting: 'Detecting identity...',
     retrying: 'Retrying...',
     attempt: 'Attempt {count}',

@@ -14,8 +14,8 @@ from sc_gr_app.config import default_config
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.services.user_service import seed_users
 
-MUTEX_NAME = "Local\\SC_GR_MANAGEMENT_BETA_INSTANCE" if os.getenv("SC_GR_BETA") == "1" else "Local\\SC_GR_MANAGEMENT_INSTANCE"
-WINDOW_TITLE = "SC GR Management Beta" if os.getenv("SC_GR_BETA") == "1" else "SC GR Management"
+MUTEX_NAME = "Local\\POMP_BETA_INSTANCE" if os.getenv("SC_GR_BETA") == "1" else "Local\\POMP_INSTANCE"
+WINDOW_TITLE = "PO Management Platform Beta" if os.getenv("SC_GR_BETA") == "1" else "PO Management Platform"
 DEV_MODE = os.getenv("SC_GR_DEV") == "1"
 BETA_MODE = os.getenv("SC_GR_BETA") == "1"
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
@@ -27,7 +27,7 @@ def _setup_logging():
     if not BETA_MODE:
         return
     desktop = Path.home() / "Desktop"
-    log_path = desktop / "sr-gr-debug.log"
+    log_path = desktop / "pomp-debug.log"
     try:
         root = logging.getLogger()
         root.setLevel(logging.DEBUG)
@@ -107,7 +107,7 @@ def _single_instance_check():
 
 
 def _webview2_storage():
-    folder = "sc-gr-management-beta" if BETA_MODE else "sc-gr-management"
+    folder = "pomp-beta" if BETA_MODE else "pomp"
     base = Path(os.getenv("LOCALAPPDATA") or Path.home()) / folder / "webview2"
     base.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(base))
@@ -129,7 +129,7 @@ def _check_update():
         default_config()
     except OSError as exc:
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             f"Unable to access shared drive.\n\nError: {exc}\n\nVerify the shared drive is accessible.",
         )
 
@@ -148,7 +148,7 @@ def _check_update():
         else:
             detail = f"Failed to read update manifest:\n{manifest_path}"
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             f"{detail}\n\nVerify the shared drive is accessible.",
         )
 
@@ -157,14 +157,14 @@ def _check_update():
 
     if not verify_manifest(manifest):
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             "Update manifest is invalid. Contact your administrator.",
         )
 
     new_version = manifest["version"]
     changelog = manifest.get("changelog_cn", "")
     body = f"Found version {new_version}\n\n{changelog}\n\nClick OK to install the update."
-    rc = _user32.MessageBoxW(0, body, "SC GR Management — Update Available", 0x40 | 0x01)  # MB_ICONINFORMATION | MB_OKCANCEL
+    rc = _user32.MessageBoxW(0, body, "PO Management Platform — Update Available", 0x40 | 0x01)  # MB_ICONINFORMATION | MB_OKCANCEL
     if rc != 1:  # IDOK
         sys.exit(0)
 
@@ -172,12 +172,12 @@ def _check_update():
     expected_hash = manifest["gui"]["sha256"]
     releases_dir = _releases_dir()
     installer_src = releases_dir / installer_name
-    temp_dir = Path(os.getenv("TEMP")) / "sc-gr-update"
+    temp_dir = Path(os.getenv("TEMP")) / "pomp-update"
     try:
         temp_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             "Failed to create temporary directory for the update. Check disk space.",
         )
     installer_dst = temp_dir / installer_name
@@ -187,14 +187,14 @@ def _check_update():
         shutil.copy2(installer_src, installer_dst)
     except OSError:
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             "Failed to copy the update. Verify the shared drive is accessible.",
         )
 
     actual_hash = sha256_file(installer_dst)
     if actual_hash != expected_hash:
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             "Update file is corrupted. Contact your administrator.",
         )
 
@@ -211,7 +211,7 @@ def _check_update():
         )
     except OSError:
         _show_error_and_exit(
-            "SC GR Management — Update Error",
+            "PO Management Platform — Update Error",
             "Failed to start the installer. Contact your administrator.",
         )
 
@@ -274,7 +274,7 @@ def _setup_tray(window):
 
     window.events.shown += _on_shown
 
-    icon = Icon("sc-gr-mgmt", image, WINDOW_TITLE, Menu(
+    icon = Icon("pomp", image, WINDOW_TITLE, Menu(
         MenuItem("Show Window", show_window, default=True),
         MenuItem("Exit", exit_app),
     ))
@@ -322,7 +322,7 @@ def run_app():
 
     config, init_error = _init_database()
     if init_error and not DEV_MODE:
-        _show_error_and_exit("SC GR Management — Database Error", init_error)
+        _show_error_and_exit("PO Management Platform — Database Error", init_error)
 
     html_path = Path(__file__).parent / "web" / "index.html"
     storage_path = _webview2_storage()
