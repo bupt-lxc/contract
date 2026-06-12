@@ -1,7 +1,10 @@
 """Read/write notification_queue. Shared pattern with desktop notification_service."""
 
 import json
+import logging
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_pending(conn: sqlite3.Connection) -> list[dict]:
@@ -23,6 +26,7 @@ def mark_sent(conn: sqlite3.Connection, queue_id: int, timestamp: str) -> None:
         "UPDATE notification_queue SET status = 'sent', sent_at = ? WHERE id = ?",
         (timestamp, queue_id),
     )
+    logger.debug("Status change: queue #%d → sent", queue_id)
 
 
 def mark_failed(conn: sqlite3.Connection, queue_id: int, error_msg: str) -> None:
@@ -30,6 +34,7 @@ def mark_failed(conn: sqlite3.Connection, queue_id: int, error_msg: str) -> None
         "UPDATE notification_queue SET status = 'failed', error_msg = ? WHERE id = ?",
         (error_msg, queue_id),
     )
+    logger.debug("Status change: queue #%d → failed (%s)", queue_id, error_msg)
 
 
 def queue_threshold(
@@ -50,6 +55,7 @@ def queue_threshold(
         """,
         (entity_type, entity_id, event_type, event_key, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
     )
+    logger.debug("Queued threshold: %s/%s event=%s", entity_type, entity_id, event_key)
 
 
 def is_threshold_sent(conn: sqlite3.Connection, entity_type: str, entity_id: str, event_key: str) -> bool:
@@ -65,6 +71,7 @@ def mark_threshold_sent(conn: sqlite3.Connection, entity_type: str, entity_id: s
         "INSERT OR IGNORE INTO notification_sent_threshold (entity_type, entity_id, event_key, sent_at) VALUES (?, ?, ?, ?)",
         (entity_type, entity_id, event_key, timestamp),
     )
+    logger.debug("Threshold marked sent: %s/%s event=%s", entity_type, entity_id, event_key)
 
 
 def queue_custom_schedule(
@@ -85,3 +92,4 @@ def queue_custom_schedule(
         """,
         (entity_type, entity_id, event_key, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
     )
+    logger.debug("Queued custom schedule: %s/%s event=%s", entity_type, entity_id, event_key)

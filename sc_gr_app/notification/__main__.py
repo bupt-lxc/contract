@@ -1,46 +1,86 @@
 """Entry point for the notification script.
 
 Usage:
-    uv run python -m sc_gr_app.notification                    # poll loop (default: 5min)
+    uv run python -m sc_gr_app.notification                    # poll loop (default: 10s)
     uv run python -m sc_gr_app.notification --poll-interval 60 # custom interval
     uv run python -m sc_gr_app.notification --run-once         # one cycle + exit
     uv run python -m sc_gr_app.notification --thresholds-only  # only threshold check
     uv run python -m sc_gr_app.notification --draft            # save to Drafts folder (dev mode)
+    uv run python -m sc_gr_app.notification --beta             # force beta database
 """
 
 import argparse
 import logging
+import os
 import sys
+from pathlib import Path
 
 from sc_gr_app.config import default_config
+from sc_gr_app.db.migrations import migrate
 from sc_gr_app.notification import engine, sender
+
+
+def _setup_logging() -> None:
+    """Configure logging to stdout and a desktop log file.
+
+    The desktop log captures all scan/send/error/status-change events
+    so operators can monitor the notification service at a glance.
+    """
+    desktop = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
+    desktop.mkdir(parents=True, exist_ok=True)
+    log_path = desktop / "pomp-notification.log"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    fmt = logging.Formatter(
+        "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Stdout handler
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(fmt)
+    root_logger.addHandler(stream_handler)
+
+    # Desktop file handler — captures everything at DEBUG level
+    file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(fmt)
+    root_logger.addHandler(file_handler)
+
+    logging.info("Desktop log: %s", log_path)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Email notification script")
-    parser.add_argument("--poll-interval", type=int, default=300,
-                        help="Seconds between queue checks (default: 300)")
+    parser.add_argument("--poll-interval", type=int, default=10,
+                        help="Seconds between queue checks (default: 10)")
     parser.add_argument("--run-once", action="store_true",
                         help="Run one cycle and exit")
     parser.add_argument("--thresholds-only", action="store_true",
                         help="Run only the threshold check and exit")
     parser.add_argument("--draft", action="store_true",
                         help="Save emails to Drafts folder instead of sending (dev mode)")
+    parser.add_argument("--beta", action="store_true",
+                        help="Force beta database (pomp-beta) regardless of env or exe name")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    if args.beta:
+        os.environ["SC_GR_BETA"] = "1"
+
+    _setup_logging()
 
     if args.draft:
         sender.set_draft_mode(True)
 
     config = default_config()
-    logging.info("Using database: %s", config.db_path)
+    logging.info("Notification started. Database: %s", config.db_path)
+    logging.info("Poll interval: %ss", args.poll_interval)
+    logging.info("Draft mode: %s", args.draft)
+
+    migrate(config)
 
     # Update check for run-once and thresholds-only modes
     if args.run_once or args.thresholds_only:
@@ -57,9 +97,7 @@ def main():
 def _check_for_update(config):
     """Check for notification update. On success, replaces current exe and exits.
     On any failure, logs and returns silently (email delivery takes priority)."""
-    import os
     import shutil
-    from pathlib import Path
 
     from sc_gr_app.update import fetch_manifest, is_update_available, verify_manifest, sha256_file
 

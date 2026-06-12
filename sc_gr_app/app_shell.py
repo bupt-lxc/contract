@@ -163,7 +163,7 @@ def _check_update():
 
     new_version = manifest["version"]
     changelog = manifest.get("changelog_cn", "")
-    body = f"Found version {new_version}\n\n{changelog}\n\nClick OK to install the update."
+    body = f"Found version {new_version}\n\n{changelog}\n\nClick OK to install the update. The app will restart automatically."
     rc = _user32.MessageBoxW(0, body, "PO Management Platform — Update Available", 0x40 | 0x01)  # MB_ICONINFORMATION | MB_OKCANCEL
     if rc != 1:  # IDOK
         sys.exit(0)
@@ -204,10 +204,9 @@ def _check_update():
         subprocess.Popen(
             [
                 str(installer_dst),
-                "/VERYSILENT",
+                "/SILENT",
                 f"/DIR={install_dir}",
             ],
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
         )
     except OSError:
         _show_error_and_exit(
