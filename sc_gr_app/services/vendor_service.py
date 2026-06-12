@@ -349,17 +349,11 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
     preview = []
     for rec in records:
         errors_list = []
-        # Required fields
-        if not rec.get("vendor_id", "").strip():
-            errors_list.append("vendor_id is required")
         if not rec.get("vendor_name", "").strip():
             errors_list.append("vendor_name is required")
         if not rec.get("service_scope", "").strip():
             errors_list.append("service_scope is required")
-        elif rec.get("service_scope", "").strip() not in SUPPORTED_SERVICE_SCOPES:
-            errors_list.append(f"Invalid service_scope: {rec.get('service_scope')}")
 
-        # Check duplicate
         vid = rec.get("vendor_id", "").strip()
         if vid and vid in existing_ids:
             errors_list.append(f"vendor_id '{vid}' already exists")
@@ -369,6 +363,13 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
         preview.append(rec)
 
     return preview
+
+
+def _generate_vendor_id(conn) -> str:
+    """Generate a unique vendor_id from current UTC timestamp."""
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return f"V{ts}"
 
 
 def execute_import(
@@ -390,9 +391,7 @@ def execute_import(
         for i, rec in enumerate(rows):
             vid = rec.get("vendor_id", "").strip()
             if not vid:
-                skipped += 1
-                errors.append(f"Row {i + 1}: vendor_id is empty, skipped")
-                continue
+                vid = _generate_vendor_id(conn)
             if vid in existing_ids:
                 skipped += 1
                 errors.append(f"Row {i + 1}: vendor_id '{vid}' already exists, skipped")
@@ -403,10 +402,6 @@ def execute_import(
             if not vname or not scope:
                 skipped += 1
                 errors.append(f"Row {i + 1}: missing required fields, skipped")
-                continue
-            if scope not in SUPPORTED_SERVICE_SCOPES:
-                skipped += 1
-                errors.append(f"Row {i + 1}: invalid service_scope '{scope}', skipped")
                 continue
 
             try:

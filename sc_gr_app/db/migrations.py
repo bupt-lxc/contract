@@ -3,7 +3,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -969,6 +969,42 @@ def _migrate_v22(conn) -> None:
     _record(conn, 22)
 
 
+def _migrate_v23(conn) -> None:
+    """Remove CHECK constraint on vendors.service_scope to allow free-form values."""
+    if _table_exists(conn, "vendors"):
+        conn.execute("""
+            CREATE TABLE vendors_new (
+              vendor_id TEXT PRIMARY KEY,
+              vendor_name TEXT NOT NULL,
+              ksrm_vendor_code TEXT,
+              contact_person TEXT,
+              phone TEXT,
+              service_scope TEXT NOT NULL,
+              email TEXT,
+              description TEXT,
+              inquiry_history TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              company_name_cn TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO vendors_new
+            SELECT
+              vendor_id, vendor_name, ksrm_vendor_code, contact_person, phone,
+              service_scope, email, description, inquiry_history, status,
+              company_name_cn,
+              created_by, created_at, updated_at
+            FROM vendors
+        """)
+        conn.execute("DROP TABLE vendors")
+        conn.execute("ALTER TABLE vendors_new RENAME TO vendors")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vendors_name ON vendors(vendor_name)")
+    _record(conn, 23)
+
+
 def migrate(config: AppConfig) -> None:
     with connect(config) as conn:
         try:
@@ -1079,6 +1115,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v22(conn)
                 conn.commit()
+            if 23 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v23(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
