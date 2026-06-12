@@ -40,6 +40,7 @@ export default {
     delete: 'Delete',
     disable: 'Disable',
     enable: 'Enable',
+    confirmAdd: 'Confirm Add',
     export: 'Export',
     submit: 'Submit',
     approve: 'Approve',
@@ -362,7 +363,11 @@ home: {
     reselect: 'Reselect',
     importResult: 'Import Result',
     imported: '{n} imported successfully',
-    skippedRows: '{n} skipped'
+    skippedRows: '{n} skipped',
+    deleteConfirm: 'Are you sure you want to delete this vendor? This action cannot be undone.',
+    vendorDeleted: 'Vendor deleted',
+    ksrmDuplicateTitle: 'Duplicate KSRM Code',
+    ksrmDuplicateMessage: 'KSRM code "{code}" already exists for vendor "{name}". Continue adding?'
   },
 
   user: {

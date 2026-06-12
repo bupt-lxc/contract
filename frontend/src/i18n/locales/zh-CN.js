@@ -39,6 +39,7 @@ export default {
     edit: '编辑',
     delete: '删除',
     disable: '禁用',
+    confirmAdd: '确认新增',
     enable: '启用',
     export: '导出',
     submit: '提交',
@@ -362,7 +363,11 @@ home: {
     reselect: '重新选择',
     importResult: '导入结果',
     imported: '成功导入 {n} 条',
-    skippedRows: '跳过 {n} 条'
+    skippedRows: '跳过 {n} 条',
+    deleteConfirm: '确认删除此供应商？此操作不可恢复。',
+    vendorDeleted: '供应商已删除',
+    ksrmDuplicateTitle: 'KSRM代码重复',
+    ksrmDuplicateMessage: 'KSRM代码 "{code}" 已存在于供应商 "{name}"，确认继续新增？'
   },
 
   user: {

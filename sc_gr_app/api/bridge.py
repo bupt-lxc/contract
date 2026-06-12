@@ -413,6 +413,26 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def delete_vendor(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            vendor_id = _require_payload_field(payload, "vendor_id")
+            return ok(vendor_service.delete_vendor(self.config, current_user, vendor_id))
+        except Exception as exc:
+            return fail(exc)
+
+    def check_ksrm_duplicate(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            self._require_current_user()
+            ksrm_code = _require_payload_field(payload, "ksrm_code")
+            exclude_vendor_id = payload.get("exclude_vendor_id")
+            result = vendor_service.check_ksrm_duplicate(self.config, ksrm_code, exclude_vendor_id)
+            return ok({"duplicate": result})
+        except Exception as exc:
+            return fail(exc)
+
     def add_sc_vendor(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)

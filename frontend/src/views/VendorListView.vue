@@ -38,6 +38,11 @@
               <el-button type="danger" link size="small">{{ $t('common.disable') }}</el-button>
             </template>
           </el-popconfirm>
+          <el-popconfirm :title="$t('vendor.deleteConfirm')" @confirm="handleDelete(row)">
+            <template #reference>
+              <el-button type="danger" size="small">{{ $t('vendor.delete') }}</el-button>
+            </template>
+          </el-popconfirm>
         </template>
       </el-table-column>
       <template #empty><el-empty :description="state.error || $t('vendor.noRecords')" /></template>
@@ -69,7 +74,7 @@ import VendorImportDialog from '@/components/vendor/VendorImportDialog.vue'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
-const { state, searchVendors, createVendor, updateVendor, disableVendor } = useVendor()
+const { state, searchVendors, createVendor, updateVendor, disableVendor, deleteVendor } = useVendor()
 const { exportRows } = useExport()
 const exporting = ref(false)
 
@@ -134,6 +139,13 @@ async function handleDisable(row) {
   try {
     await disableVendor(row.vendor_id)
     ElMessage.success(t('vendor.vendorDisabled'))
+  } catch (e) { ElMessage.error(e.message) }
+}
+
+async function handleDelete(row) {
+  try {
+    await deleteVendor(row.vendor_id)
+    ElMessage.success(t('vendor.vendorDeleted'))
   } catch (e) { ElMessage.error(e.message) }
 }
 

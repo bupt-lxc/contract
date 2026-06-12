@@ -70,8 +70,9 @@
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import { useVendor } from '@/composables/useVendor.js'
 
 const props = defineProps({
   visible: Boolean,
@@ -81,6 +82,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'save'])
 const { t } = useI18n()
+const { checkKsrmDuplicate } = useVendor()
 
 const formRef = ref()
 const submitting = ref(false)
@@ -117,6 +119,26 @@ watch(() => props.visible, (val) => {
 async function handleSave() {
   if (!formRef.value) return
   try { await formRef.value.validate() } catch { return }
+
+  // KSRM duplicate check on create
+  if (props.mode === 'create' && form.ksrm_vendor_code && form.ksrm_vendor_code.trim()) {
+    try {
+      const duplicate = await checkKsrmDuplicate(form.ksrm_vendor_code.trim())
+      if (duplicate) {
+        await ElMessageBox.confirm(
+          t('vendor.ksrmDuplicateMessage', { code: form.ksrm_vendor_code, name: duplicate.vendor_name }),
+          t('vendor.ksrmDuplicateTitle'),
+          { confirmButtonText: t('common.confirmAdd'), cancelButtonText: t('common.cancel'), type: 'warning' }
+        )
+      }
+    } catch (e) {
+      // User cancelled or API error
+      if (e === 'cancel' || e === 'close') return
+      ElMessage.error(e.message)
+      return
+    }
+  }
+
   submitting.value = true
   try {
     emit('save', { ...form })

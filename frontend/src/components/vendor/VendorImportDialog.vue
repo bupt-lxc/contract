@@ -43,15 +43,16 @@
         <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="140" />
         <el-table-column prop="contact_person" :label="$t('vendor.contact')" width="100" />
         <el-table-column prop="email" :label="$t('vendor.email')" min-width="150" />
-        <el-table-column :label="$t('vendor.validation')" width="180">
+        <el-table-column :label="$t('vendor.validation')" width="200">
           <template #default="{ row }">
-            <span v-if="row._valid" style="color:#67c23a">✓ {{ $t('vendor.valid') }}</span>
-            <span v-else style="color:#f56c6c">
-              <el-tooltip v-for="err in row._errors" :key="err" :content="err" placement="top">
-                <span style="margin-right:4px">✗</span>
-              </el-tooltip>
-              {{ row._errors.join('; ') }}
-            </span>
+            <div v-if="row._errors.length > 0" style="color:#f56c6c;font-size:12px">
+              <span v-for="err in row._errors" :key="err">✗ {{ err }}<br /></span>
+            </div>
+            <div v-if="row._warnings && row._warnings.length > 0" style="color:#e6a23c;font-size:12px">
+              <span v-for="w in row._warnings" :key="w">⚠ {{ w }}<br /></span>
+            </div>
+            <span v-if="row._valid && (!row._warnings || row._warnings.length === 0)" style="color:#67c23a">✓ {{ $t('vendor.valid') }}</span>
+            <span v-else-if="row._valid && row._warnings && row._warnings.length > 0" style="color:#e6a23c">⚠ {{ $t('vendor.valid') }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -142,7 +143,7 @@ async function handleImport() {
   importing.value = true
   try {
     const validRows = preview.value.filter(r => r._valid).map(r => {
-      const { _errors, _valid, ...rest } = r
+      const { _errors, _valid, _warnings, ...rest } = r
       return rest
     })
     result.value = await callApi('confirm_vendor_import', { rows: validRows })

@@ -38,11 +38,23 @@ export function useVendor() {
     await searchVendors()
   }
 
+  async function deleteVendor(vendorId) {
+    await callApi('delete_vendor', { vendor_id: vendorId })
+    await searchVendors()
+  }
+
+  async function checkKsrmDuplicate(ksrmCode, excludeVendorId = null) {
+    const result = await callApi('check_ksrm_duplicate', { ksrm_code: ksrmCode, exclude_vendor_id: excludeVendorId })
+    return result.duplicate
+  }
+
   return {
     state: readonly(state),
     searchVendors,
     createVendor,
     updateVendor,
-    disableVendor
+    disableVendor,
+    deleteVendor,
+    checkKsrmDuplicate
   }
 }
