@@ -278,17 +278,9 @@ async function handleClose() {
 
 async function handleRevoke() {
   try {
-    const status = detail.value.sc?.status
-    const messages = {
-      manager_confirm: { confirm: 'sc.confirmRevoke',   success: 'sc.revoked' },
-      pending:         { confirm: 'sc.confirmRevokePending', success: 'sc.revoked' },
-      approved:        { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
-      closed:          { confirm: 'sc.confirmRollback', success: 'sc.rolledBack' },
-    }
-    const msg = messages[status] || messages.pending
-    await ElMessageBox.confirm(t(msg.confirm), t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('sc.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
     await callApi('revoke_sc', { sc_id: scId.value })
-    ElMessage.success(t(msg.success))
+    ElMessage.success(t('sc.revoked'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

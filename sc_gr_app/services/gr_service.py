@@ -878,17 +878,19 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
 
 
 def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Roll back GR status. pending→manager_confirm, approved→pending, cancelled→pending."""
-    require_requester_or_admin(current_user)
+    """Revoke GR back to draft. Only the SC requester can revoke, and only from manager_confirm or pending."""
 
     with connect(config) as lookup_conn:
         sc_id = _get_gr_sc_id(lookup_conn, gr_id)
         sc = lookup_conn.execute(
-            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+            "SELECT requester_id, status FROM sc_records WHERE sc_id = ?",
             (sc_id,),
         ).fetchone()
-        if current_user["role"] != "admin" and (sc is None or sc["requester_id"] != current_user["user_id"]):
-            raise PermissionDenied("Only the SC owner or admin can revoke GRs")
+
+    if sc is None:
+        raise NotFound(f"SC {sc_id} not found")
+    if sc["requester_id"] != current_user["user_id"]:
+        raise PermissionDenied("Only the SC requester can revoke GRs")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -897,35 +899,14 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
 
-                if before["status"] == "pending":
-                    # pending → manager_confirm
-                    conn.execute(
-                        """update gr_requests
-                        set status = 'manager_confirm'
-                        where gr_id = ?""",
-                        (gr_id,),
-                    )
-                elif before["status"] == "approved":
-                    conn.execute(
-                        """update gr_requests
-                        set status = 'pending',
-                            con_value = NULL,
-                            approved_by = NULL,
-                            approved_at = NULL
-                        where gr_id = ?""",
-                        (gr_id,),
-                    )
-                elif before["status"] == "cancelled":
-                    conn.execute(
-                        """update gr_requests
-                        set status = 'pending',
-                            cancelled_by = NULL,
-                            cancelled_at = NULL
-                        where gr_id = ?""",
-                        (gr_id,),
-                    )
-                else:
-                    raise ConflictError("GR must be pending, approved or cancelled to revoke")
+                if before["status"] not in ("manager_confirm", "pending"):
+                    raise ConflictError("Only manager_confirm or pending GR can be revoked back to draft")
+
+                timestamp = utc_now()
+                conn.execute(
+                    "update gr_requests set status = 'draft', confirmed_at = NULL, pending_date = NULL, updated_at = ? where gr_id = ?",
+                    (timestamp, gr_id),
+                )
 
                 after = _get_gr(conn, gr_id)
                 write_audit_log(

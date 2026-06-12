@@ -164,7 +164,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
         "can_close_sc": is_admin and is_approved,
-        "can_revoke_sc": ((is_admin or is_owner) and (is_pending or is_manager_confirm)) or (is_admin and (is_approved or is_closed)),
+        "can_revoke_sc": is_owner and (is_pending or is_manager_confirm),
         "can_delete_sc": (is_admin or is_owner) and (is_draft or is_closed),
         "can_delete_po": is_admin or is_owner,
         "can_delete_gr": is_admin or is_owner,
@@ -986,66 +986,29 @@ def transfer_sc(config: AppConfig, current_user: dict, sc_id: str, new_requester
 
 
 def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    """Roll back SC status. pending→draft (owner/admin), approved→pending / closed→approved (admin only)."""
-    require_requester_or_admin(current_user)
-
+    """Revoke SC back to draft. Only the requester can revoke, and only from manager_confirm or pending."""
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
+                if before is None:
+                    raise NotFound(f"SC {sc_id} not found")
 
-                if before["status"] == "pending":
-                    # pending → manager_confirm: owner or admin
-                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
-                        raise PermissionDenied("Only the SC owner or admin can revoke")
-                    new_status = "manager_confirm"
-                    action_type = "revoke_sc"
-                elif before["status"] == "manager_confirm":
-                    # manager_confirm → draft: owner or admin
-                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
-                        raise PermissionDenied("Only the SC owner or admin can revoke")
-                    new_status = "draft"
-                    action_type = "revoke_sc"
-                elif before["status"] == "approved":
-                    # approved → pending: admin only
-                    require_admin(current_user)
-                    new_status = "pending"
-                    action_type = "rollback_sc"
-                elif before["status"] == "closed":
-                    # closed → approved: admin only
-                    require_admin(current_user)
-                    new_status = "approved"
-                    action_type = "rollback_sc"
-                else:
-                    raise ConflictError("SC must be pending, manager_confirm, approved or closed to revoke")
+                if before["requester_id"] != current_user["user_id"]:
+                    raise PermissionDenied("Only the SC requester can revoke")
+                if before["status"] not in ("manager_confirm", "pending"):
+                    raise ConflictError("Only manager_confirm or pending SC can be revoked back to draft")
 
                 timestamp = utc_now()
-                if new_status == "draft":
-                    conn.execute(
-                        "update sc_records set status = 'draft', confirmed_at = NULL, updated_at = ? where sc_id = ?",
-                        (timestamp, sc_id),
-                    )
-                elif new_status == "manager_confirm":
-                    conn.execute(
-                        "update sc_records set status = 'manager_confirm', updated_at = ? where sc_id = ?",
-                        (timestamp, sc_id),
-                    )
-                elif new_status == "pending":
-                    conn.execute(
-                        "update sc_records set status = 'pending', approved_by = NULL, approved_at = NULL, updated_at = ? where sc_id = ?",
-                        (timestamp, sc_id),
-                    )
-                else:
-                    # closed → approved: clear closed_at, keep approved_by/approved_at
-                    conn.execute(
-                        "update sc_records set status = 'approved', closed_at = NULL, updated_at = ? where sc_id = ?",
-                        (timestamp, sc_id),
-                    )
+                conn.execute(
+                    "update sc_records set status = 'draft', confirmed_at = NULL, pending_date = NULL, updated_at = ? where sc_id = ?",
+                    (timestamp, sc_id),
+                )
                 after = _get_sc(conn, sc_id)
                 write_audit_log(
                     conn,
-                    action_type=action_type,
+                    action_type="revoke_sc",
                     object_type="sc",
                     object_id=sc_id,
                     sc_id=sc_id,

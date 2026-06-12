@@ -9,7 +9,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && (po.status === 'activing' || po.status === 'finished')" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
+        <el-button v-if="isRequester && po.status === 'activing'" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'activing' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
@@ -169,6 +169,7 @@ const grs = computed(() => {
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
 })
 const vendors = computed(() => vendorState.rows)
+const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 const notificationConfig = computed(() => notifState.poConfig)
 const customSchedules = computed(() => notifState.customSchedules || [])
 
@@ -211,7 +212,7 @@ async function handleFinish() {
 
 async function handleRevoke() {
   try {
-    await ElMessageBox.confirm(t('po.confirmRevoke'), t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('po.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
     await callApi('revoke_po', { po_id: poId.value })
     ElMessage.success(t('po.revoked'))
     await fetchDetail(scId.value)
