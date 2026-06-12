@@ -202,7 +202,7 @@ def _highlight_box(message: str) -> str:
 # Entity field builders — exhaustive, grouped by category
 # ---------------------------------------------------------------
 
-def _sc_fields(info: dict, show_formal_number: bool) -> list[str]:
+def _sc_fields(info: dict, show_formal_number: bool, requester_name: str = "") -> list[str]:
     """Build all SC record fields, grouped."""
     alt = False
 
@@ -217,6 +217,7 @@ def _sc_fields(info: dict, show_formal_number: bool) -> list[str]:
     # Basic info
     sc_no = (info.get("sc_no") or "") if show_formal_number else ""
     rows.append(row("SC 编号", sc_no))
+    rows.append(row("申请人", requester_name or (info.get("requester_id") or "")))
     rows.append(row("申请类型", info.get("request_type") or ""))
     rows.append(row("成本中心", info.get("cost_center") or ""))
     rows.append(row("SC 金额", _fmt_amount(info.get("sc_amount"))))
@@ -241,7 +242,7 @@ def _sc_fields(info: dict, show_formal_number: bool) -> list[str]:
     return rows
 
 
-def _po_fields(info: dict, show_formal_number: bool) -> list[str]:
+def _po_fields(info: dict, show_formal_number: bool, requester_name: str = "") -> list[str]:
     """Build all PO fields, grouped."""
     alt = False
 
@@ -256,6 +257,7 @@ def _po_fields(info: dict, show_formal_number: bool) -> list[str]:
     # Basic
     po_no = (info.get("po_no") or "") if show_formal_number else ""
     rows.append(row("PO 编号", po_no))
+    rows.append(row("申请人", requester_name or (info.get("requester_id") or "")))
     rows.append(row("供应商", info.get("vendor_name") or ""))
 
     # Financial
@@ -287,7 +289,7 @@ def _po_fields(info: dict, show_formal_number: bool) -> list[str]:
     return rows
 
 
-def _gr_fields(info: dict, show_formal_number: bool) -> list[str]:
+def _gr_fields(info: dict, show_formal_number: bool, requester_name: str = "") -> list[str]:
     """Build all GR fields, grouped."""
     alt = False
 
@@ -302,6 +304,7 @@ def _gr_fields(info: dict, show_formal_number: bool) -> list[str]:
     # Basic
     gr_no = (info.get("gr_no") or "") if show_formal_number else ""
     rows.append(row("GR 编号", gr_no))
+    rows.append(row("申请人", requester_name or (info.get("requester_id") or "")))
 
     # Financial
     rows.append(row("预估金额 (净价)", _fmt_amount(info.get("estimated_amount"))))
@@ -531,7 +534,8 @@ def build_subject(entry: dict, entity_info: dict) -> str:
     return f"[POMP] {type_label} {entity_id} — {event_key}"
 
 
-def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
+def build_body(entry: dict, entity_info: dict, user_emails: dict,
+               actor_name: str = "", requester_name: str = "") -> str:
     """Build the HTML email body using the modern unified template.
 
     Shows ALL database fields for the entity, grouped into logical sections.
@@ -563,8 +567,10 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
         _field("实体 ID", entity_id, alt=True),
         _field("事件", subtitle, alt=False),
         _field("当前状态", status_value, alt=True),
-        _field("触发时间", entry.get("created_at") or "", alt=False),
     ]
+    if event_type == "status_change":
+        status_rows.append(_field("操作者", actor_name or "系统", alt=False))
+    status_rows.append(_field("触发时间", entry.get("created_at") or "", alt=len(status_rows) % 2 == 0))
 
     # --- custom schedule description ---
     schedule_rows: list[str] = []
@@ -575,11 +581,11 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict) -> str:
 
     # --- entity fields ---
     if entity_type == "sc":
-        entity_rows = _sc_fields(entity_info, show_formal_number)
+        entity_rows = _sc_fields(entity_info, show_formal_number, requester_name)
     elif entity_type == "po":
-        entity_rows = _po_fields(entity_info, show_formal_number)
+        entity_rows = _po_fields(entity_info, show_formal_number, requester_name)
     elif entity_type == "gr":
-        entity_rows = _gr_fields(entity_info, show_formal_number)
+        entity_rows = _gr_fields(entity_info, show_formal_number, requester_name)
     else:
         entity_rows = []
 

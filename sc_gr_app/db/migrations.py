@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1008,6 +1008,15 @@ def _migrate_v23(conn) -> None:
     _record(conn, 23)
 
 
+def _migrate_v24(conn) -> None:
+    """Add actor_id column to notification_queue to track who triggered the notification."""
+    if _table_exists(conn, "notification_queue"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(notification_queue)")}
+        if "actor_id" not in existing:
+            conn.execute("ALTER TABLE notification_queue ADD COLUMN actor_id TEXT")
+    _record(conn, 24)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1136,6 +1145,10 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v23(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 24 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v24(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

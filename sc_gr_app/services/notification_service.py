@@ -135,21 +135,23 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
            WHERE entity_type = ? AND entity_id = ? AND event_key = ? AND status = 'pending'""",
         (entity_type, entity_id, transition),
     ).fetchone()
+    actor_id = current_user["user_id"]
+
     if existing:
         conn.execute(
             """UPDATE notification_queue
-               SET to_recipients = ?, cc_recipients = ?, created_at = ?
+               SET to_recipients = ?, cc_recipients = ?, actor_id = ?, created_at = ?
                WHERE id = ?""",
-            (json.dumps(to_ids), json.dumps(cc_ids), timestamp, existing["id"]),
+            (json.dumps(to_ids), json.dumps(cc_ids), actor_id, timestamp, existing["id"]),
         )
     else:
         conn.execute(
             """
             INSERT INTO notification_queue
-                (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, created_at)
-            VALUES (?, ?, 'status_change', ?, ?, ?, ?)
+                (entity_type, entity_id, event_type, event_key, to_recipients, cc_recipients, actor_id, created_at)
+            VALUES (?, ?, 'status_change', ?, ?, ?, ?, ?)
             """,
-            (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), timestamp),
+            (entity_type, entity_id, transition, json.dumps(to_ids), json.dumps(cc_ids), actor_id, timestamp),
         )
 
 
