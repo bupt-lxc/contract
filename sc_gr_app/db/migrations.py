@@ -1,4 +1,7 @@
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
+
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
@@ -1006,6 +1009,18 @@ def _migrate_v23(conn) -> None:
 
 
 def migrate(config: AppConfig) -> None:
+    db_path = Path(config.db_path)
+
+    # Auto-backup before running any pending migrations
+    if db_path.exists():
+        with connect(config) as check_conn:
+            applied = _applied_versions(check_conn)
+        max_applied = max(applied) if applied else 0
+        if max_applied < SCHEMA_VERSION:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            backup_path = db_path.with_name(f"{db_path.stem}_{timestamp}.sqlite3.bak")
+            shutil.copy2(db_path, backup_path)
+
     with connect(config) as conn:
         try:
             applied = _applied_versions(conn)
