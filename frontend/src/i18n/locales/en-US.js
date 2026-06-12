@@ -367,7 +367,8 @@ home: {
     deleteConfirm: 'Are you sure you want to delete this vendor? This action cannot be undone.',
     vendorDeleted: 'Vendor deleted',
     ksrmDuplicateTitle: 'Duplicate KSRM Code',
-    ksrmDuplicateMessage: 'KSRM code "{code}" already exists for vendor "{name}". Continue adding?'
+    ksrmDuplicateMessage: 'KSRM code "{code}" already exists for vendor "{name}". Continue adding?',
+    editSyncNotice: 'Editing supplier information here will not sync to existing supplier information in SC records.'
   },
 
   user: {

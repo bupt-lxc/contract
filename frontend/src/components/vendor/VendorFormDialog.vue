@@ -5,6 +5,14 @@
     width="520px"
     @update:model-value="$emit('update:visible', $event)"
   >
+    <el-alert
+      v-if="mode === 'edit'"
+      :title="$t('vendor.editSyncNotice')"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom:16px"
+    />
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="12">

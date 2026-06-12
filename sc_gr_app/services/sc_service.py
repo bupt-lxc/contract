@@ -330,7 +330,12 @@ def remove_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_i
                     "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
                 ).fetchone()
                 if count_row["cnt"] <= 1:
-                    raise ConflictError("Cannot remove the last vendor from SC")
+                    raise ConflictError(
+                        "供应商信息不允许为空，更新信息请在供应商界面更改（更改后不同步，需重新添加）\n"
+                        "The supplier information cannot be left blank. To update the information, "
+                        "please make the changes in the supplier interface "
+                        "(the changes will not be synchronized and you need to re-add them)."
+                    )
 
                 cursor = conn.execute(
                     "DELETE FROM sc_vendors WHERE sc_id = ? AND vendor_id = ?",

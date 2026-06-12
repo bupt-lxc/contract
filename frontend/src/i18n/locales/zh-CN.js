@@ -367,7 +367,8 @@ home: {
     deleteConfirm: '确认删除此供应商？此操作不可恢复。',
     vendorDeleted: '供应商已删除',
     ksrmDuplicateTitle: 'KSRM代码重复',
-    ksrmDuplicateMessage: 'KSRM代码 "{code}" 已存在于供应商 "{name}"，确认继续新增？'
+    ksrmDuplicateMessage: 'KSRM代码 "{code}" 已存在于供应商 "{name}"，确认继续新增？',
+    editSyncNotice: '此处供应商信息的编辑，不会同步更改现有SC内对应的供应商的信息'
   },
 
   user: {

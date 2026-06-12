@@ -11,8 +11,8 @@
 
     <div v-else class="vendor-list">
       <div v-for="v in vendors" :key="v.vendor_id" class="vendor-row">
-        <el-collapse class="vendor-collapse">
-          <el-collapse-item>
+        <el-collapse class="vendor-collapse" :model-value="expandedNames">
+          <el-collapse-item :name="v.vendor_id">
             <template #title>
               <span class="vendor-title">{{ v.vendor_name }}</span>
               <el-tag size="small" type="info" style="margin-left:8px">{{ v.vendor_id }}</el-tag>
@@ -89,6 +89,7 @@ defineEmits(['add', 'remove'])
 const pickerVisible = ref(false)
 
 const existingVendorIds = computed(() => props.vendors.map(v => v.vendor_id))
+const expandedNames = computed(() => props.vendors.map(v => v.vendor_id))
 </script>
 
 <style scoped>
