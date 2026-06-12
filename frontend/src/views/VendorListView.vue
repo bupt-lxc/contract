@@ -40,7 +40,7 @@
           </el-popconfirm>
           <el-popconfirm :title="$t('vendor.deleteConfirm')" @confirm="handleDelete(row)">
             <template #reference>
-              <el-button type="danger" size="small">{{ $t('vendor.delete') }}</el-button>
+              <el-button type="danger" link size="small">{{ $t('common.delete') }}</el-button>
             </template>
           </el-popconfirm>
         </template>

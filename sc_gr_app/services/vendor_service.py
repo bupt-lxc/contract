@@ -239,6 +239,16 @@ def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict
                 before = _get_vendor(conn, vendor_id)
                 if not before:
                     raise ValidationError(f"Vendor {vendor_id} not found")
+                dep_count = conn.execute(
+                    "select count(*) from pos where vendor_id = ?",
+                    (vendor_id,),
+                ).fetchone()[0]
+                if dep_count > 0:
+                    raise ValidationError(
+                        f"Cannot delete vendor '{before['vendor_name']}': "
+                        f"it is referenced by {dep_count} purchase order(s). "
+                        f"Please delete the related POs first."
+                    )
                 conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
                 write_audit_log(
                     conn,
