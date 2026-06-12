@@ -2,7 +2,7 @@
 ; Run after PyInstaller build: dist/PO Management Platform/
 
 #define MyAppName "PO Management Platform Beta"
-#define MyAppVersion "2.0.9"
+#define MyAppVersion "2.1.3"
 #define MyAppPublisher "Audi C/EV-L"
 #define MyAppURL ""
 #define MyAppExeName "PO Management Platform.exe"
@@ -16,7 +16,7 @@ DefaultDirName={localappdata}\PO Management Platform Beta}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist\installer
-OutputBaseFilename=POMP-Beta-2.0.9-Setup
+OutputBaseFilename=POMP-Beta-2.1.3-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -40,7 +40,7 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall shellexec
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal"

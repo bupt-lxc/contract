@@ -265,22 +265,43 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
 def process_pending(conn: sqlite3.Connection) -> tuple[int, int]:
     """Send all pending queue entries. Returns (sent_count, failed_count)."""
     entries = queue.fetch_pending(conn)
+    if not entries:
+        return 0, 0
+
+    logger.debug("Processing %d pending queue entries", len(entries))
     sent = 0
     failed = 0
     timestamp = _utc_now()
 
     for entry in entries:
+        eid = entry["id"]
+        entity_type = entry["entity_type"]
+        entity_id = entry["entity_id"]
+        event_type = entry["event_type"]
+        logger.debug(
+            "Sending queue #%d: type=%s entity=%s/%s event=%s",
+            eid, entity_type, entity_id, event_type, entry["event_key"],
+        )
         try:
             if send_entry(conn, entry):
-                queue.mark_sent(conn, entry["id"], timestamp)
+                queue.mark_sent(conn, eid, timestamp)
                 sent += 1
+                logger.info(
+                    "SENT queue #%d: %s/%s (%s)", eid, entity_type, entity_id, event_type,
+                )
             else:
-                queue.mark_failed(conn, entry["id"], "No valid To addresses")
+                queue.mark_failed(conn, eid, "No valid To addresses")
                 failed += 1
+                logger.warning(
+                    "FAILED queue #%d: %s/%s — no valid To addresses",
+                    eid, entity_type, entity_id,
+                )
         except Exception as exc:
-            queue.mark_failed(conn, entry["id"], str(exc))
+            queue.mark_failed(conn, eid, str(exc))
             failed += 1
-            logger.error("Failed to send queue entry %s: %s", entry["id"], exc)
+            logger.error(
+                "ERROR queue #%d: %s/%s — %s", eid, entity_type, entity_id, exc,
+            )
 
     return sent, failed
 
@@ -288,21 +309,42 @@ def process_pending(conn: sqlite3.Connection) -> tuple[int, int]:
 def process_failed(conn: sqlite3.Connection) -> tuple[int, int]:
     """Retry all failed queue entries. Returns (recovered_count, still_failed_count)."""
     entries = queue.fetch_failed(conn)
+    if not entries:
+        return 0, 0
+
+    logger.debug("Retrying %d failed queue entries", len(entries))
     recovered = 0
     still_failed = 0
     timestamp = _utc_now()
 
     for entry in entries:
+        eid = entry["id"]
+        entity_type = entry["entity_type"]
+        entity_id = entry["entity_id"]
+        logger.debug(
+            "Retrying queue #%d: type=%s entity=%s/%s",
+            eid, entity_type, entity_id, entry["event_type"],
+        )
         try:
             if send_entry(conn, entry):
-                queue.mark_sent(conn, entry["id"], timestamp)
+                queue.mark_sent(conn, eid, timestamp)
                 recovered += 1
+                logger.info(
+                    "RECOVERED queue #%d: %s/%s (retry succeeded)",
+                    eid, entity_type, entity_id,
+                )
             else:
-                queue.mark_failed(conn, entry["id"], "No valid To addresses")
+                queue.mark_failed(conn, eid, "No valid To addresses")
                 still_failed += 1
+                logger.warning(
+                    "STILL FAILED queue #%d: %s/%s — no valid To addresses",
+                    eid, entity_type, entity_id,
+                )
         except Exception as exc:
-            queue.mark_failed(conn, entry["id"], str(exc))
+            queue.mark_failed(conn, eid, str(exc))
             still_failed += 1
-            logger.error("Retry failed for queue entry %s: %s", entry["id"], exc)
+            logger.error(
+                "RETRY ERROR queue #%d: %s/%s — %s", eid, entity_type, entity_id, exc,
+            )
 
     return recovered, still_failed

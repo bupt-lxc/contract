@@ -36,7 +36,16 @@ _load_dotenv()
 
 
 def _contract_folder() -> str:
-    return "pomp-beta" if os.getenv("SC_GR_BETA") == "1" else "pomp"
+    if os.getenv("SC_GR_BETA") == "1":
+        return "pomp-beta"
+    # Fallback for frozen executables: detect beta from the exe filename
+    # so the notification exe always connects to the correct database
+    # even when the .env file is missing from the deployment directory.
+    if getattr(sys, "frozen", False):
+        exe_name = Path(sys.executable).stem
+        if "Beta" in exe_name or "beta" in exe_name:
+            return "pomp-beta"
+    return "pomp"
 
 
 # Shared drive may be reached via UNC path or mapped drive letter (e.g. K:).

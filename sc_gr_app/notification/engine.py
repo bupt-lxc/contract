@@ -11,12 +11,12 @@ from sc_gr_app.notification import sender, thresholds, monthly, schedules
 logger = logging.getLogger(__name__)
 
 
-def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
+def run_poll_loop(config: AppConfig, poll_interval: int = 10) -> None:
     """Run the notification poll loop indefinitely. Sends emails + periodic threshold checks.
 
     Args:
         config: AppConfig for DB access
-        poll_interval: Seconds between pending queue checks (default 5 min)
+        poll_interval: Seconds between pending queue checks (default 10s)
     """
     last_threshold_check_date = None
 
@@ -25,44 +25,44 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 300) -> None:
     while True:
         try:
             with connect(config) as conn:
-                # Process pending queue (every cycle)
                 sent, failed = sender.process_pending(conn)
-                if sent or failed:
-                    logger.info("Pending queue: %s sent, %s failed", sent, failed)
+                if sent:
+                    logger.info("Sent: %d email(s) successfully", sent)
+                if failed:
+                    logger.warning("Failed: %d email(s)", failed)
 
-                # Retry failed queue
                 recovered, still_failed = sender.process_failed(conn)
-                if recovered or still_failed:
-                    logger.info("Failed retry: %s recovered, %s still failed", recovered, still_failed)
+                if recovered:
+                    logger.info("Recovered: %d previously failed email(s) re-sent", recovered)
+                if still_failed:
+                    logger.warning("Still failed: %d email(s) after retry", still_failed)
 
-                # Daily checks (threshold + monthly summary)
-                today = datetime.now(timezone.utc).date()
-                if last_threshold_check_date != today:
+            # Daily checks on a separate connection so explicit BEGIN IMMEDIATE
+            # never collides with prior DML on the same handle.
+            today = datetime.now(timezone.utc).date()
+            if last_threshold_check_date != today:
+                with connect(config) as conn:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
                         date_count, amount_count = thresholds.check_all_active_pos(conn)
-                        conn.commit()
                         if date_count or amount_count:
-                            logger.info("Daily threshold check: %s date events, %s amount events",
-                                        date_count, amount_count)
+                            logger.info(
+                                "Daily threshold check: %s date events, %s amount events",
+                                date_count, amount_count)
 
-                        # Custom schedules (same daily cadence as thresholds)
                         schedule_count = schedules.check_custom_schedules(conn)
                         if schedule_count:
                             logger.info("Custom schedule check: %s events queued", schedule_count)
 
-                        # Monthly summary on the 1st
                         summary_count = monthly.check_monthly_summary(conn)
                         if summary_count:
-                            conn.commit()
                             logger.info("Monthly summary: %s requester emails queued", summary_count)
 
+                        conn.commit()
                         last_threshold_check_date = today
                     except Exception:
                         conn.rollback()
                         raise
-
-                conn.commit()
 
         except Exception:
             logger.exception("Error in poll cycle")
@@ -79,24 +79,24 @@ def run_once(config: AppConfig) -> None:
         recovered, still_failed = sender.process_failed(conn)
         logger.info("Failed retry: %s recovered, %s still failed", recovered, still_failed)
 
+    with connect(config) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             date_count, amount_count = thresholds.check_all_active_pos(conn)
-            conn.commit()
             logger.info("Thresholds: %s date, %s amount", date_count, amount_count)
+
+            schedule_count = schedules.check_custom_schedules(conn)
+            if schedule_count:
+                logger.info("Custom schedule check: %s events queued", schedule_count)
+
+            summary_count = monthly.check_monthly_summary(conn)
+            if summary_count:
+                logger.info("Monthly summary: %s requester emails queued", summary_count)
+
+            conn.commit()
         except Exception:
             conn.rollback()
             raise
-
-        schedule_count = schedules.check_custom_schedules(conn)
-        if schedule_count:
-            logger.info("Custom schedule check: %s events queued", schedule_count)
-
-        summary_count = monthly.check_monthly_summary(conn)
-        if summary_count:
-            logger.info("Monthly summary: %s requester emails queued", summary_count)
-
-        conn.commit()
 
 
 def run_thresholds_only(config: AppConfig) -> None:
