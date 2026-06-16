@@ -116,7 +116,7 @@
       v-model:visible="poDialogVisible"
       :mode="poDialogMode"
       :record="poDialogRecord"
-      :vendors="vendors"
+      :vendors="scVendors"
       @save="handlePoSave"
     />
 
@@ -172,6 +172,7 @@ const scId = computed(() => route.params.id)
 const detail = computed(() => state.detail || {})
 const permissions = computed(() => detail.value.permissions || {})
 const vendors = computed(() => vendorState.rows)
+const scVendors = computed(() => detail.value?.vendors || [])
 const activeUsers = ref([])
 
 const editDialogVisible = ref(false)
