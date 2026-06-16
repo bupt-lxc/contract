@@ -7,7 +7,7 @@ from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr, submit_gr, delete_gr
 from sc_gr_app.services.po_service import create_po, submit_po, delete_po
-from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc, transfer_sc
+from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc, transfer_sc, add_sc_vendor
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -107,6 +107,7 @@ def seed_approved_sc_vendor_po(
             "service_scope": "General Service",
         },
     )
+    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
     created_po = create_po(
         app_config,
         ADMIN,
@@ -253,6 +254,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
             "service_scope": "General Service",
         },
     )
+    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
     created_po = create_po(
         app_config,
         ADMIN,
@@ -386,6 +388,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
             "service_scope": "General Service",
         },
     )
+    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
     create_po(
         app_config,
         ADMIN,
@@ -737,6 +740,7 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
         "create_sc",
         "approve_sc",
         "create_vendor",
+        "add_sc_vendor",
         "create_po",
         "create_gr",
         "approve_gr",
@@ -1478,6 +1482,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
     )
     sc2_id = created_sc2["sc_id"]
     approve_sc(app_config, ADMIN, sc2_id)
+    add_sc_vendor(app_config, ADMIN, sc2_id, "V1")
     created_po2 = create_po(
         app_config,
         ADMIN,
@@ -1602,6 +1607,7 @@ def test_create_draft_po_under_draft_sc(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1620,6 +1626,7 @@ def test_reject_non_draft_po_under_draft_sc(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     with pytest.raises(ConflictError, match="Draft SC only allows draft PO"):
         create_po(
             app_config, USER,
@@ -1637,6 +1644,7 @@ def test_create_draft_gr_under_draft_po(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1663,6 +1671,7 @@ def test_submit_po_blocked_while_sc_draft(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1684,6 +1693,7 @@ def test_submit_sc_allowed_with_draft_po(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1714,6 +1724,7 @@ def test_approve_sc_succeeds_with_draft_po(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1749,6 +1760,7 @@ def test_approve_sc_with_cascade_pos(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
     po1 = create_po(
         app_config, USER,
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1792,6 +1804,7 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1830,6 +1843,7 @@ def test_manual_submit_po_with_budget_check(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1860,6 +1874,7 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1898,6 +1913,7 @@ def test_delete_draft_po(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1921,6 +1937,7 @@ def test_delete_draft_gr(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
@@ -1948,6 +1965,7 @@ def test_reject_draft_po_on_approved_sc(app_config):
         app_config, ADMIN,
         {"vendor_id": "V2", "vendor_name": "Vendor2", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, ADMIN, sc_id, "V2")
     with pytest.raises(ConflictError, match="Approved SC does not allow draft PO"):
         create_po(
             app_config, ADMIN,
@@ -1965,6 +1983,7 @@ def test_reject_non_pending_gr_on_draft_po(app_config):
         app_config, USER,
         {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
     )
+    add_sc_vendor(app_config, USER, sc["sc_id"], "V1")
     po = create_po(
         app_config, USER,
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},

@@ -151,6 +151,15 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 if vendor is None:
                     raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
+                sc_vendor = conn.execute(
+                    "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                    (sc_id, data["vendor_id"]),
+                ).fetchone()
+                if sc_vendor is None:
+                    raise ValidationError(
+                        f"Vendor {data['vendor_id']} is not linked to SC {sc_id}"
+                    )
+
                 is_draft = status == "draft"
                 if not is_draft:
                     budget = compute_sc_budget_decimal(config, sc_id)
@@ -373,6 +382,14 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     ).fetchone()
                     if vendor is None:
                         raise NotFound(f"Vendor not found: {merged['vendor_id']}")
+                    sc_vendor = conn.execute(
+                        "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                        (sc_id, merged["vendor_id"]),
+                    ).fetchone()
+                    if sc_vendor is None:
+                        raise ValidationError(
+                            f"Vendor {merged['vendor_id']} is not linked to SC {sc_id}"
+                        )
 
                 sibling_total = sum(
                     (
