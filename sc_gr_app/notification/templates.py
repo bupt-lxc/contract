@@ -1,4 +1,4 @@
-"""Email subject and body templates (Chinese) — modern HTML design.
+"""Email subject and body templates (English) — modern HTML design.
 
 All email types (status_change, threshold_date, threshold_amount,
 custom_schedule, monthly_summary) share a unified HTML template with:
@@ -535,7 +535,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     """Build the HTML email body using the modern unified template.
 
     Shows ALL database fields for the entity, grouped into logical sections.
-    Event keys are translated to human-readable Chinese labels.
+    Event keys are translated to human-readable English labels.
     """
     entity_type = entry["entity_type"]
     entity_id = entry["entity_id"]
@@ -573,7 +573,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     if event_type == "custom_schedule":
         schedule_desc = _describe_schedule(event_key)
         if schedule_desc:
-            schedule_rows.append(_field("提醒计划", schedule_desc, alt=False))
+            schedule_rows.append(_field("Schedule", schedule_desc, alt=False))
 
     # --- entity fields ---
     if entity_type == "sc":
