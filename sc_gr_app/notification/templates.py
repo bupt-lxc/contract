@@ -222,7 +222,8 @@ def _sc_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
     if "sc_available_amount" in info:
         rows.append(row("Available Amount", _fmt_amount(info.get("sc_available_amount"))))
     rows.append(row("Service Period", _fmt_period(
-        info.get("service_period_start"), info.get("service_period_end")
+        _fmt_datetime(info.get("service_period_start")),
+        _fmt_datetime(info.get("service_period_end"))
     )))
     rows.append(row("Description", info.get("description") or ""))
     rows.append(row("Asset", info.get("asset") or ""))
@@ -230,11 +231,11 @@ def _sc_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
     rows.append(row("Internal System Number", info.get("internal_system_number") or ""))
 
     # Dates
-    rows.append(row("Created At", info.get("created_at") or ""))
-    rows.append(row("Updated At", info.get("updated_at") or ""))
-    rows.append(row("Pending Date", info.get("pending_date") or ""))
-    rows.append(row("Approved Date", info.get("approved_date") or ""))
-    rows.append(row("Closed Date", info.get("closed_at") or ""))
+    rows.append(row("Created At", _fmt_datetime(info.get("created_at"))))
+    rows.append(row("Updated At", _fmt_datetime(info.get("updated_at"))))
+    rows.append(row("Pending Date", _fmt_datetime(info.get("pending_date"))))
+    rows.append(row("Approved Date", _fmt_datetime(info.get("approved_date"))))
+    rows.append(row("Closed Date", _fmt_datetime(info.get("closed_at"))))
     return rows
 
 
@@ -268,7 +269,8 @@ def _po_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
     rows.append(row("Contract No", info.get("contract_no") or ""))
     rows.append(row("Contract Type", info.get("contract_type") or ""))
     rows.append(row("Contract Period", _fmt_period(
-        info.get("contract_from"), info.get("contract_to")
+        _fmt_datetime(info.get("contract_from")),
+        _fmt_datetime(info.get("contract_to"))
     )))
     rows.append(row("Contract Pos.", info.get("contract_pos") or ""))
 
@@ -279,9 +281,9 @@ def _po_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
     rows.append(row("Purchaser", info.get("purchaser") or ""))
 
     # Dates
-    rows.append(row("Activing Date", info.get("activing_date") or ""))
-    rows.append(row("Created At", info.get("created_at") or ""))
-    rows.append(row("Updated At", info.get("updated_at") or ""))
+    rows.append(row("Activing Date", _fmt_datetime(info.get("activing_date"))))
+    rows.append(row("Created At", _fmt_datetime(info.get("created_at"))))
+    rows.append(row("Updated At", _fmt_datetime(info.get("updated_at"))))
     return rows
 
 
@@ -316,16 +318,17 @@ def _gr_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
 
     # Delivery
     rows.append(row("Delivery Period", _fmt_period(
-        info.get("delivery_from"), info.get("delivery_to")
+        _fmt_datetime(info.get("delivery_from")),
+        _fmt_datetime(info.get("delivery_to"))
     )))
-    rows.append(row("Last Delivery", info.get("last_delivery") or ""))
+    rows.append(row("Last Delivery", _fmt_datetime(info.get("last_delivery"))))
 
     # Dates
-    rows.append(row("Created At", info.get("created_at") or ""))
-    rows.append(row("Pending Date", info.get("pending_date") or ""))
-    rows.append(row("Approved Date", info.get("approved_date") or ""))
-    rows.append(row("Cancelled At", info.get("cancelled_at") or ""))
-    rows.append(row("Confirmed At", info.get("confirmed_at") or ""))
+    rows.append(row("Created At", _fmt_datetime(info.get("created_at"))))
+    rows.append(row("Pending Date", _fmt_datetime(info.get("pending_date"))))
+    rows.append(row("Approved Date", _fmt_datetime(info.get("approved_date"))))
+    rows.append(row("Cancelled At", _fmt_datetime(info.get("cancelled_at"))))
+    rows.append(row("Confirmed At", _fmt_datetime(info.get("confirmed_at"))))
     return rows
 
 
@@ -353,6 +356,33 @@ def _fmt_period(start, end) -> str:
     if s or e:
         return f"{s}{e}"
     return ""
+
+
+def _fmt_datetime(value) -> str:
+    """Format an ISO 8601 UTC timestamp to CST readable string (seconds precision)."""
+    if not value:
+        return "-"
+    try:
+        s = str(value)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        if "T" in s:
+            date_part, time_part = s.split("T", 1)
+            if "+" in time_part:
+                time_part = time_part.split("+")[0]
+            elif time_part.endswith("Z"):
+                time_part = time_part[:-1]
+            dt_parts = date_part.split("-")
+            tm_parts = time_part.split(":")
+            year, month, day = int(dt_parts[0]), int(dt_parts[1]), int(dt_parts[2])
+            hour, minute = int(tm_parts[0]), int(tm_parts[1])
+            second = int(float(tm_parts[2]))
+            dt_utc = datetime(year, month, day, hour, minute, second)
+            dt_cst = dt_utc + timedelta(hours=8)
+            return dt_cst.strftime("%Y-%m-%d %H:%M:%S")
+        return s
+    except (ValueError, TypeError, IndexError):
+        return str(value)
 
 
 def _utc_now_cn() -> str:
@@ -566,7 +596,7 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     ]
     if event_type == "status_change":
         status_rows.append(_field("Operator", actor_name or "System", alt=False))
-    status_rows.append(_field("Trigger Time", entry.get("created_at") or "", alt=len(status_rows) % 2 == 0))
+    status_rows.append(_field("Trigger Time", _fmt_datetime(entry.get("created_at")), alt=len(status_rows) % 2 == 0))
 
     # --- custom schedule description ---
     schedule_rows: list[str] = []
