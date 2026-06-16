@@ -65,7 +65,7 @@
       v-model:visible="poDialogVisible"
       :mode="poDialogMode"
       :record="poDialogRecord"
-      :vendors="vendors"
+      :vendors="scLinkedVendors"
       :sc-record="selectedScRecord"
       @save="handlePoSave"
     />
@@ -79,7 +79,6 @@ import { useI18n } from 'vue-i18n'
 import { Plus, Download } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { usePo } from '@/composables/usePo.js'
-import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import PoTable from '@/components/po/PoTable.vue'
@@ -90,11 +89,10 @@ const route = useRoute()
 const { t } = useI18n()
 
 const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
-const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const exporting = ref(false)
 
-const vendors = computed(() => vendorState.rows)
+const scLinkedVendors = ref([])
 
 const poStatuses = [
   { label: t('status.draft'), value: 'draft' },
@@ -170,9 +168,13 @@ function openCreatePoDialog() {
   scSelectVisible.value = true
 }
 
-function confirmScSelection() {
+async function confirmScSelection() {
   if (!selectedScId.value) return
   selectedScRecord.value = eligibleScs.value.find(s => s.sc_id === selectedScId.value) || null
+  try {
+    const detail = await callApi('get_sc_detail', { sc_id: selectedScId.value })
+    scLinkedVendors.value = detail?.vendors || []
+  } catch { scLinkedVendors.value = [] }
   scSelectVisible.value = false
   poDialogMode.value = 'create'
   poDialogRecord.value = null
@@ -283,6 +285,6 @@ onMounted(async () => {
     filters.status = route.query.status
     setFilters(filters)
   }
-  await Promise.all([searchPos(null, Object.keys(filters).length ? filters : null), searchVendors(), loadEligibleScs()])
+  await Promise.all([searchPos(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
 })
 </script>
