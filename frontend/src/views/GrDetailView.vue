@@ -10,7 +10,7 @@
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.is_admin && (gr.status === 'approved' || gr.status === 'cancelled' || gr.status === 'pending')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
+        <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'manager_confirm' || gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
@@ -129,6 +129,7 @@ const grAuditLogs = computed(() => {
   const logs = scDetail.value?.audit_logs || []
   return logs.filter(l => l.object_type === 'gr' && l.object_id === grId.value)
 })
+const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 
 const editDialogVisible = ref(false)
 const attachRefreshKey = ref(0)
@@ -202,8 +203,7 @@ async function handleCancel() {
 
 async function handleRevoke() {
   try {
-    const confirmMsg = gr.value.status === 'pending' ? t('gr.confirmRevokePending') : t('gr.confirmRevoke')
-    await ElMessageBox.confirm(confirmMsg, t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('gr.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
     await callApi('revoke_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.revoked'))
     await fetchDetail(scId.value)

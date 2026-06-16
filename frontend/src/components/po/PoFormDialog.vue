@@ -45,7 +45,7 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item :label="$t('po.contractNo')" prop="contract_no">
+          <el-form-item :label="$t('po.contractNo')">
             <el-input v-model="form.contract_no" />
           </el-form-item>
         </el-col>
@@ -144,8 +144,7 @@ const rules = {
   vendor_id: [{ required: true, message: t('po.vendorRequired'), trigger: 'change' }],
   po_amount: [{ required: true, message: t('po.poAmountRequired'), trigger: 'blur' }],
   contract_from: [{ required: true, message: t('po.contractFromRequired'), trigger: 'change' }],
-  contract_to: [{ required: true, message: t('po.contractToRequired'), trigger: 'change' }],
-  contract_no: [{ required: true, message: t('po.contractNoRequired'), trigger: 'blur' }]
+  contract_to: [{ required: true, message: t('po.contractToRequired'), trigger: 'change' }]
 }
 
 watch(() => props.visible, (val) => {

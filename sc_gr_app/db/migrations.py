@@ -1,9 +1,12 @@
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
+
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 24
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -969,7 +972,64 @@ def _migrate_v22(conn) -> None:
     _record(conn, 22)
 
 
+def _migrate_v23(conn) -> None:
+    """Remove CHECK constraint on vendors.service_scope to allow free-form values."""
+    if _table_exists(conn, "vendors"):
+        conn.execute("""
+            CREATE TABLE vendors_new (
+              vendor_id TEXT PRIMARY KEY,
+              vendor_name TEXT NOT NULL,
+              ksrm_vendor_code TEXT,
+              contact_person TEXT,
+              phone TEXT,
+              service_scope TEXT NOT NULL,
+              email TEXT,
+              description TEXT,
+              inquiry_history TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              company_name_cn TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO vendors_new
+            SELECT
+              vendor_id, vendor_name, ksrm_vendor_code, contact_person, phone,
+              service_scope, email, description, inquiry_history, status,
+              company_name_cn,
+              created_by, created_at, updated_at
+            FROM vendors
+        """)
+        conn.execute("DROP TABLE vendors")
+        conn.execute("ALTER TABLE vendors_new RENAME TO vendors")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vendors_name ON vendors(vendor_name)")
+    _record(conn, 23)
+
+
+def _migrate_v24(conn) -> None:
+    """Add actor_id column to notification_queue to track who triggered the notification."""
+    if _table_exists(conn, "notification_queue"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(notification_queue)")}
+        if "actor_id" not in existing:
+            conn.execute("ALTER TABLE notification_queue ADD COLUMN actor_id TEXT")
+    _record(conn, 24)
+
+
 def migrate(config: AppConfig) -> None:
+    db_path = Path(config.db_path)
+
+    # Auto-backup before running any pending migrations
+    if db_path.exists():
+        with connect(config) as check_conn:
+            applied = _applied_versions(check_conn)
+        max_applied = max(applied) if applied else 0
+        if max_applied < SCHEMA_VERSION:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            backup_path = db_path.with_name(f"{db_path.stem}_{timestamp}.sqlite3.bak")
+            shutil.copy2(db_path, backup_path)
+
     with connect(config) as conn:
         try:
             applied = _applied_versions(conn)
@@ -1078,6 +1138,16 @@ def migrate(config: AppConfig) -> None:
             if 22 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v22(conn)
+                conn.commit()
+            if 23 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v23(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 24 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v24(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

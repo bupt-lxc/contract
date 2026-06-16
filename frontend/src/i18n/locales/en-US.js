@@ -40,6 +40,7 @@ export default {
     delete: 'Delete',
     disable: 'Disable',
     enable: 'Enable',
+    confirmAdd: 'Confirm Add',
     export: 'Export',
     submit: 'Submit',
     approve: 'Approve',
@@ -181,6 +182,7 @@ home: {
     confirmRevoke: 'Revoke this SC? It will return to draft status.',
     confirmRevokePending: 'Revoke this SC? It will return to manager confirm status.',
     confirmRollback: 'Roll back this SC? It will return to pending status.',
+    confirmRevokeToDraft: 'Revoke this SC? It will return to draft status and require resubmission.',
     revoked: 'Revoked',
     rolledBack: 'Rolled back',
     deleteSc: 'Delete SC',
@@ -252,6 +254,7 @@ home: {
     contractNoRequired: 'Contract Number is required',
     revoke: 'Rollback',
     confirmRevoke: 'Roll back this PO?',
+    confirmRevokeToDraft: 'Revoke this PO? It will return to draft status and require resubmission.',
     revoked: 'Rolled back',
     deletePo: 'Delete PO',
     confirmDeletePo: 'Delete this PO? This cannot be undone.',
@@ -315,6 +318,7 @@ home: {
     revoke: 'Rollback',
     confirmRevoke: 'Roll back this GR?',
     confirmRevokePending: 'Revoke this GR? It will return to manager confirm status.',
+    confirmRevokeToDraft: 'Revoke this GR? It will return to draft status and require resubmission.',
     revoked: 'Rolled back',
     deleteGr: 'Delete GR',
     confirmDeleteGr: 'Delete this GR? This cannot be undone.',
@@ -362,7 +366,12 @@ home: {
     reselect: 'Reselect',
     importResult: 'Import Result',
     imported: '{n} imported successfully',
-    skippedRows: '{n} skipped'
+    skippedRows: '{n} skipped',
+    deleteConfirm: 'Are you sure you want to delete this vendor? This action cannot be undone.',
+    vendorDeleted: 'Vendor deleted',
+    ksrmDuplicateTitle: 'Duplicate KSRM Code',
+    ksrmDuplicateMessage: 'KSRM code "{code}" already exists for vendor "{name}". Continue adding?',
+    editSyncNotice: 'Editing supplier information here will not sync to existing supplier information in SC records.'
   },
 
   user: {

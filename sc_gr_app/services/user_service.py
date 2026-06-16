@@ -23,13 +23,12 @@ def now() -> str:
 def seed_users(config: AppConfig) -> None:
     timestamp = now()
     with connect(config) as conn:
+        existing = conn.execute(
+            "select count(*) as cnt from users"
+        ).fetchone()
+        if existing and existing["cnt"] > 0:
+            return
         for machine_id, user_name, role, email in SEED_USERS:
-            existing = conn.execute(
-                "select user_id from users where machine_id = ?",
-                (machine_id,),
-            ).fetchone()
-            if existing:
-                continue
             conn.execute(
                 """
                 insert into users (

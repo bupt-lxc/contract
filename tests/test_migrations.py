@@ -48,7 +48,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
     assert rows[0][1]
     assert rows[1][1]
 
@@ -64,7 +64,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
 
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
@@ -287,7 +287,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
 
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
@@ -669,3 +669,47 @@ def test_open_po_amount_is_not_stored(app_config):
         }
 
     assert "open_po_amount" not in columns
+
+
+def test_migrate_creates_backup_when_pending_migrations_exist(app_config):
+    """When migrations are pending, a timestamped .sqlite3.bak file is created."""
+    from sc_gr_app.db.migrations import _migrate_v1
+
+    # Run v1 to create all core tables, then remove all schema_migrations
+    # records so that subsequent migrate() sees all versions as pending
+    with sqlite3.connect(app_config.db_path) as conn:
+        _migrate_v1(conn)
+        conn.execute("DELETE FROM schema_migrations")
+        conn.commit()
+
+    from pathlib import Path
+    db_path = Path(app_config.db_path)
+    original_size = db_path.stat().st_size
+
+    existing_baks = list(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
+
+    migrate(app_config)
+
+    new_baks = list(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
+    assert len(new_baks) == len(existing_baks) + 1
+    assert new_baks[-1].stat().st_size == original_size
+
+
+def test_migrate_skips_backup_when_no_pending_migrations(app_config):
+    """When DB is already at latest version, no backup is created."""
+    # First, create the DB file so it exists before migrate()
+    from pathlib import Path
+    db_path = Path(app_config.db_path)
+    db_path.touch()
+
+    # First migrate: DB is empty but exists, so a backup IS created
+    migrate(app_config)
+
+    existing_baks = set(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
+    assert len(existing_baks) == 1  # backup from first migrate
+
+    # Second migrate: all versions applied, no new backup
+    migrate(app_config)
+
+    after_baks = set(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
+    assert after_baks == existing_baks

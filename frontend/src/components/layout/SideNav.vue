@@ -4,6 +4,7 @@
       <span v-if="!collapsed" class="brand-text">{{ $t('app.brand') }}</span>
       <span v-else class="brand-icon">{{ $t('app.brandShort') }}</span>
       <span v-if="isBeta" class="beta-indicator" :title="$t('app.betaLabel')">β</span>
+      <span v-if="!collapsed && version" class="version-text">{{ version }}</span>
     </div>
     <el-menu
       :default-active="activeRoute"
@@ -53,8 +54,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { callApi } from '@/api/bridge.js'
 import {
   Monitor, Document, ShoppingCart, CircleCheck, OfficeBuilding,
   Message, Setting, DArrowLeft, DArrowRight
@@ -66,6 +68,7 @@ defineProps({
 defineEmits(['toggle'])
 
 const route = useRoute()
+const version = ref('')
 
 const activeRoute = computed(() => {
   if (route.path.startsWith('/sc')) return '/sc'
@@ -77,6 +80,14 @@ const activeRoute = computed(() => {
 
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const isBeta = computed(() => !!window.__isBeta)
+
+onMounted(async () => {
+  try {
+    version.value = await callApi('get_version')
+  } catch {
+    // version not critical — silently ignore
+  }
+})
 </script>
 
 <style scoped>
@@ -101,6 +112,12 @@ const isBeta = computed(() => !!window.__isBeta)
   color: #f59e0b;
   margin-left: 6px;
   font-weight: 700;
+}
+.version-text {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 6px;
+  font-weight: 400;
 }
 .sidenav-menu {
   flex: 1;

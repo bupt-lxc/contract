@@ -151,6 +151,15 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 if vendor is None:
                     raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
+                sc_vendor = conn.execute(
+                    "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                    (sc_id, data["vendor_id"]),
+                ).fetchone()
+                if sc_vendor is None:
+                    raise ValidationError(
+                        f"Vendor {data['vendor_id']} is not linked to SC {sc_id}"
+                    )
+
                 is_draft = status == "draft"
                 if not is_draft:
                     budget = compute_sc_budget_decimal(config, sc_id)
@@ -373,6 +382,14 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     ).fetchone()
                     if vendor is None:
                         raise NotFound(f"Vendor not found: {merged['vendor_id']}")
+                    sc_vendor = conn.execute(
+                        "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                        (sc_id, merged["vendor_id"]),
+                    ).fetchone()
+                    if sc_vendor is None:
+                        raise ValidationError(
+                            f"Vendor {merged['vendor_id']} is not linked to SC {sc_id}"
+                        )
 
                 sibling_total = sum(
                     (
@@ -503,35 +520,43 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Roll back PO status. activing→draft, finished→activing."""
-    require_requester_or_admin(current_user)
+    """Revoke PO back to draft. Only the SC requester can revoke, and only from activing."""
 
     with connect(config) as lookup_conn:
-        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
+        sc = lookup_conn.execute(
+            "select status, requester_id from sc_records where sc_id = ?",
+            (sc_id,),
+        ).fetchone()
+
+    if sc is None:
+        raise NotFound(f"SC {sc_id} not found")
+    if sc["requester_id"] != current_user["user_id"]:
+        raise PermissionDenied("Only the SC requester can revoke POs")
+    if sc["status"] == "closed":
+        raise ConflictError("Closed SC cannot be edited")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                sc = conn.execute(
-                    "select status from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
 
-                if before["status"] == "activing":
-                    new_status = "draft"
-                elif before["status"] == "finished":
-                    new_status = "activing"
-                else:
-                    raise ConflictError("PO must be activing or finished to revoke")
+                if before["status"] != "activing":
+                    raise ConflictError("Only activing PO can be revoked back to draft")
+
+                gr_count = conn.execute(
+                    "select count(*) from gr_requests where po_id = ?",
+                    (po_id,),
+                ).fetchone()[0]
+                if gr_count > 0:
+                    raise ConflictError("Cannot revoke PO with existing GRs")
 
                 timestamp = utc_now()
                 conn.execute(
-                    "update pos set status = ?, updated_at = ? where po_id = ?",
-                    (new_status, timestamp, po_id),
+                    "update pos set status = 'draft', updated_at = ? where po_id = ?",
+                    (timestamp, po_id),
                 )
                 after = _get_po_or_raise(conn, po_id)
                 write_audit_log(

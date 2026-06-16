@@ -176,6 +176,16 @@ def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, s
     return {r["user_id"]: r["email"] for r in rows if r["email"]}
 
 
+def resolve_user_name(conn: sqlite3.Connection, user_id: str) -> str:
+    """Look up a user's display name. Returns the user_name or user_id if not found."""
+    if not user_id:
+        return ""
+    row = conn.execute(
+        "SELECT user_name FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    return row["user_name"] if row else user_id
+
+
 def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     """Send a single queue entry via Outlook. Returns True on success."""
     import pythoncom
@@ -222,12 +232,19 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     # Compute current budget (open amount) at send time for PO and SC emails
     _attach_budget_info(conn, entity_type, entity_id, entity_info)
 
+    # Resolve actor and requester names for the email body
+    actor_id = entry.get("actor_id") or ""
+    actor_name = resolve_user_name(conn, actor_id) if actor_id else ""
+    requester_id = entity_info.get("requester_id") or ""
+    requester_name = resolve_user_name(conn, requester_id) if requester_id else ""
+
     # Monthly summary: body and subject are pre-rendered and stored in app_settings
     if entry["event_type"] == "monthly_summary":
         body, subject = _get_monthly_content(conn, entry)
     else:
         subject = templates.build_subject(entry, entity_info)
-        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map})
+        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
+                                    actor_name=actor_name, requester_name=requester_name)
 
     # Look up attachments for this entity
     attachment_rows = conn.execute(

@@ -20,10 +20,10 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "SC-2026-001" in body
-        assert "SC 编号" in body
+        assert "SC No" in body
         assert "150,000.00" in body
         assert "IT equipment" in body
-        assert "已批准" in body  # status badge (Chinese)
+        assert "Approved" in body  # status badge (English)
 
     def test_po_body_shows_po_fields_not_sc_fields(self):
         entry = {
@@ -40,11 +40,11 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "PO-2026-001" in body
-        assert "PO 编号" in body
+        assert "PO No" in body
         assert "80,000.00" in body
         # Should NOT contain SC-specific labels
-        assert "SC 编号" not in body
-        assert "服务期间" not in body  # SC-specific
+        assert "SC No" not in body
+        assert "Service Period" not in body  # SC-specific
 
     def test_gr_body_shows_gr_fields_not_sc_fields(self):
         entry = {
@@ -62,12 +62,12 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "GR-2026-001" in body
-        assert "GR 编号" in body
+        assert "GR No" in body
         assert "50,000.00" in body
-        assert "确认金额" in body
+        assert "Confirmed Amount" in body
         # Should NOT contain SC-specific labels
-        assert "SC 编号" not in body
-        assert "服务期间" not in body  # SC-specific
+        assert "SC No" not in body
+        assert "Service Period" not in body  # SC-specific
 
     def test_gr_shows_estimated_amount_when_no_con_value(self):
         entry = {
@@ -85,16 +85,16 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "30,000.00" in body
-        assert "预估金额" in body
+        assert "Estimated Amount" in body
 
     def test_early_stage_transitions_show_placeholder_for_formal_numbers(self):
         """In early stages (create, submit, confirm), formal numbers may not
         be assigned yet — the field row appears but shows '-' placeholder
         instead of the number value."""
         for entity_type, entity_id, entity_info, label in [
-            ("sc", "SC-001", {"sc_no": "SC-2026-001", "sc_amount": 1000, "status": "draft"}, "SC 编号"),
-            ("po", "PO-001", {"po_no": "PO-2026-001", "po_amount": 1000, "status": "draft"}, "PO 编号"),
-            ("gr", "GR-001", {"gr_no": "GR-2026-001", "con_value": 1000, "status": "draft"}, "GR 编号"),
+            ("sc", "SC-001", {"sc_no": "SC-2026-001", "sc_amount": 1000, "status": "draft"}, "SC No"),
+            ("po", "PO-001", {"po_no": "PO-2026-001", "po_amount": 1000, "status": "draft"}, "PO No"),
+            ("gr", "GR-001", {"gr_no": "GR-2026-001", "con_value": 1000, "status": "draft"}, "GR No"),
         ]:
             for event_key in ("create", "submit", "confirm"):
                 entry = {
@@ -125,8 +125,8 @@ class TestBuildBody:
         entity_info = {"status": "finished"}  # no po_no, no po_amount
         body = templates.build_body(entry, entity_info, {})
         # Fields with missing values show "-"
-        assert "PO 编号" in body  # label always present
-        assert "已" in body  # status badge contains Chinese label
+        assert "PO No" in body  # label always present
+        assert "Finished" in body  # status badge contains English label
 
 
 class TestBuildSubject:
@@ -138,7 +138,7 @@ class TestBuildSubject:
             "event_key": "submit",
         }
         subject = templates.build_subject(entry, {})
-        assert "[POMP] PO PO-001 已提交" == subject
+        assert "[POMP] PO PO-001 Submitted" == subject
 
     def test_threshold_date_subject(self):
         entry = {
@@ -151,34 +151,32 @@ class TestBuildSubject:
         subject = templates.build_subject(entry, entity_info)
         assert "SC-2026-001" in subject
         assert "3" in subject
-        assert "个月" in subject
-        assert "合同即将到期" in subject
+        assert "Contract Expiring" in subject
 
 
 class TestDescribeEvent:
     def test_status_change_event(self):
-        assert "已提交" == templates._describe_event("status_change", "submit")
-        assert "已批准" == templates._describe_event("status_change", "approve")
-        assert "已拒绝" == templates._describe_event("status_change", "deny")
-        assert "已完成" == templates._describe_event("status_change", "finish")
+        assert "Submitted" == templates._describe_event("status_change", "submit")
+        assert "Approved" == templates._describe_event("status_change", "approve")
+        assert "Denied" == templates._describe_event("status_change", "deny")
+        assert "Finished" == templates._describe_event("status_change", "finish")
 
     def test_threshold_date_event(self):
         result = templates._describe_event("threshold_date", "threshold_date:6m")
-        assert "合同到期提醒" in result
+        assert "Contract Expiry" in result
         assert "6" in result
-        assert "个月" in result
 
     def test_threshold_amount_event(self):
         result = templates._describe_event("threshold_amount", "threshold_amount:10%")
-        assert "预算耗尽提醒" in result
+        assert "Budget Exhaustion" in result
         assert "10" in result
 
     def test_custom_schedule_event(self):
         result = templates._describe_event("custom_schedule", "schedule:1:monthly_day:2026-06-15")
-        assert "每月定期提醒" == result
+        assert "Monthly Reminder" == result
 
         result2 = templates._describe_event("custom_schedule", "schedule:2:weekly_day:2026-06-10")
-        assert "每周定期提醒" == result2
+        assert "Weekly Reminder" == result2
 
 
 class TestChildGrTable:
@@ -188,7 +186,7 @@ class TestChildGrTable:
                 "gr_no": "GR-2026-001",
                 "estimated_amount": 30000,
                 "con_value": 32000,
-                "goods_service_description": "软件开发服务",
+                "goods_service_description": "Software development",
                 "delivery_from": "2026-01-01",
                 "delivery_to": "2026-06-30",
                 "status": "approved",
@@ -197,22 +195,22 @@ class TestChildGrTable:
                 "gr_no": "GR-2026-002",
                 "estimated_amount": 15000,
                 "con_value": None,
-                "goods_service_description": "硬件采购",
+                "goods_service_description": "Hardware purchase",
                 "delivery_from": None,
                 "delivery_to": None,
                 "status": "pending",
             },
         ]
         html = templates._child_gr_table(child_grs)
-        assert "关联验收申请 (2)" in html
+        assert "Related GRs (2)" in html
         assert "GR-2026-001" in html
         assert "GR-2026-002" in html
         assert "30,000.00" in html
         assert "32,000.00" in html
-        assert "软件开发服务" in html
-        assert "硬件采购" in html
-        assert "已批准" in html
-        assert "待审批" in html
+        assert "Software development" in html
+        assert "Hardware purchase" in html
+        assert "Approved" in html
+        assert "Pending" in html
 
     def test_po_body_shows_child_gr_section(self):
         entry = {
@@ -231,7 +229,7 @@ class TestChildGrTable:
                     "gr_no": "GR-2026-001",
                     "estimated_amount": 20000,
                     "con_value": 21000,
-                    "goods_service_description": "服务A",
+                    "goods_service_description": "Service A",
                     "delivery_from": "2026-01-01",
                     "delivery_to": "2026-03-31",
                     "status": "approved",
@@ -239,10 +237,10 @@ class TestChildGrTable:
             ],
         }
         body = templates.build_body(entry, entity_info, {})
-        assert "关联验收申请 (1)" in body
+        assert "Related GRs (1)" in body
         assert "GR-2026-001" in body
         assert "20,000.00" in body
-        assert "服务A" in body
+        assert "Service A" in body
 
     def test_po_body_without_child_grs_omits_section(self):
         entry = {
@@ -258,4 +256,28 @@ class TestChildGrTable:
             "status": "finished",
         }
         body = templates.build_body(entry, entity_info, {})
-        assert "关联验收申请" not in body
+        assert "Related GRs" not in body
+
+
+class TestFmtDatetime:
+    def test_formats_iso_with_timezone(self):
+        result = templates._fmt_datetime("2026-06-16T02:34:12+00:00")
+        assert result == "2026-06-16 10:34:12"
+
+    def test_formats_iso_with_microseconds(self):
+        result = templates._fmt_datetime("2026-06-16T02:34:12.333756+00:00")
+        assert result == "2026-06-16 10:34:12"
+
+    def test_formats_iso_with_z_suffix(self):
+        result = templates._fmt_datetime("2026-01-15T10:00:00Z")
+        assert result == "2026-01-15 18:00:00"
+
+    def test_returns_empty_for_none(self):
+        assert templates._fmt_datetime(None) == ""
+
+    def test_returns_empty_for_empty_string(self):
+        assert templates._fmt_datetime("") == ""
+
+    def test_preserves_non_iso_value(self):
+        result = templates._fmt_datetime("2026-06-16")
+        assert result == "2026-06-16"

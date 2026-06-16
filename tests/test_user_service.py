@@ -212,3 +212,58 @@ def test_disable_user_not_found(app_config):
     current_user = {"user_id": "U-ADMIN", "role": "admin", "machine_id": "TEST001"}
     with pytest.raises(NotFound, match="not found"):
         user_service.disable_user(app_config, current_user, "NONEXIST")
+
+
+class TestSeedUsersSkipWhenNotEmpty:
+    def test_seed_users_inserts_when_table_empty(self, app_config):
+        from sc_gr_app.db.migrations import migrate
+        from sc_gr_app.services.user_service import seed_users
+
+        migrate(app_config)
+        seed_users(app_config)
+
+        with connect(app_config) as conn:
+            count = conn.execute("select count(*) as cnt from users").fetchone()["cnt"]
+        assert count == 6
+
+    def test_seed_users_skips_when_users_exist(self, app_config):
+        from sc_gr_app.db.migrations import migrate
+        from sc_gr_app.services.user_service import seed_users
+
+        migrate(app_config)
+
+        with connect(app_config) as conn:
+            conn.execute(
+                "insert into users (user_id, machine_id, user_name, role, email, status, created_at, updated_at) "
+                "values ('U-CUSTOM', 'CUSTOM01', 'Custom User', 'admin', 'custom@test.com', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+            )
+            conn.commit()
+
+        seed_users(app_config)
+
+        with connect(app_config) as conn:
+            users = conn.execute("select * from users").fetchall()
+        assert len(users) == 1
+        assert users[0]["machine_id"] == "CUSTOM01"
+        assert users[0]["role"] == "admin"
+
+    def test_seed_users_preserves_existing_roles(self, app_config):
+        from sc_gr_app.db.migrations import migrate
+        from sc_gr_app.services.user_service import seed_users
+
+        migrate(app_config)
+
+        # Simulate: existing DB where someone manually changed role to 'requester'
+        with connect(app_config) as conn:
+            conn.execute(
+                "insert into users (user_id, machine_id, user_name, role, email, status, created_at, updated_at) "
+                "values ('U-V2SE7PP', 'V2SE7PP', 'Li, Xingchen', 'requester', 'test@test.com', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+            )
+            conn.commit()
+
+        seed_users(app_config)
+
+        with connect(app_config) as conn:
+            user = conn.execute("select * from users where machine_id = 'V2SE7PP'").fetchone()
+        # Role should stay as manually-set 'requester', not be reset to SEED_USERS 'admin'
+        assert user["role"] == "requester"

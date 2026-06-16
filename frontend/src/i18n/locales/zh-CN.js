@@ -39,6 +39,7 @@ export default {
     edit: '编辑',
     delete: '删除',
     disable: '禁用',
+    confirmAdd: '确认新增',
     enable: '启用',
     export: '导出',
     submit: '提交',
@@ -181,6 +182,7 @@ home: {
     confirmRevoke: '确认撤销此采购需求？将回到草稿状态。',
     confirmRevokePending: '确认撤销此采购需求？将回到管理员确认状态。',
     confirmRollback: '确认回退此采购需求？将从已批准回到待审批状态。',
+    confirmRevokeToDraft: '确认撤销此采购需求？将回到草稿状态，需重新提交。',
     revoked: '已撤销',
     rolledBack: '已回退',
     deleteSc: '删除采购需求',
@@ -252,6 +254,7 @@ home: {
     contractNoRequired: '合同编号为必填项',
     revoke: '回退',
     confirmRevoke: '确认回退此采购订单？',
+    confirmRevokeToDraft: '确认撤销此采购订单？将回到草稿状态，需重新提交。',
     revoked: '已回退',
     deletePo: '删除采购订单',
     confirmDeletePo: '确认删除此采购订单？此操作不可恢复。',
@@ -315,6 +318,7 @@ home: {
     revoke: '回退',
     confirmRevoke: '确认回退此收货记录？',
     confirmRevokePending: '确认回退此收货记录？将回到管理员确认状态。',
+    confirmRevokeToDraft: '确认撤销此收货记录？将回到草稿状态，需重新提交。',
     revoked: '已回退',
     deleteGr: '删除收货记录',
     confirmDeleteGr: '确认删除此收货记录？此操作不可恢复。',
@@ -362,7 +366,12 @@ home: {
     reselect: '重新选择',
     importResult: '导入结果',
     imported: '成功导入 {n} 条',
-    skippedRows: '跳过 {n} 条'
+    skippedRows: '跳过 {n} 条',
+    deleteConfirm: '确认删除此供应商？此操作不可恢复。',
+    vendorDeleted: '供应商已删除',
+    ksrmDuplicateTitle: 'KSRM代码重复',
+    ksrmDuplicateMessage: 'KSRM代码 "{code}" 已存在于供应商 "{name}"，确认继续新增？',
+    editSyncNotice: '此处供应商信息的编辑，不会同步更改现有SC内对应的供应商的信息'
   },
 
   user: {

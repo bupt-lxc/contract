@@ -12,7 +12,7 @@ from sc_gr_app.services.query_service import (
     search_vendors,
     workbench_data,
 )
-from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft
+from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft, add_sc_vendor
 from sc_gr_app.services.vendor_service import create_vendor
 from tests.test_sc_po_gr_flow import ADMIN, OTHER_USER, USER, seed_other_user, seed_users
 
@@ -47,6 +47,7 @@ def seed_query_data(app_config):
             "service_scope": "General Service",
         },
     )
+    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
     created_po = create_po(
         app_config,
         ADMIN,
@@ -343,6 +344,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     )
     sc2_id = created_sc2["sc_id"]
     approve_sc(app_config, ADMIN, sc2_id)
+    add_sc_vendor(app_config, ADMIN, sc2_id, "V1")
     created_po2 = create_po(
         app_config,
         ADMIN,
@@ -494,6 +496,7 @@ def test_workbench_data_po_has_requester_name(app_config):
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
     approve_sc(app_config, ADMIN, sc["sc_id"])
+    add_sc_vendor(app_config, ADMIN, sc["sc_id"], "V1")
     create_po(app_config, ADMIN, {
         "sc_id": sc["sc_id"], "vendor_id": "V1",
         "po_no": "PO-1", "po_amount": 500, "status": "activing",

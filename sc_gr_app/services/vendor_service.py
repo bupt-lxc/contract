@@ -230,6 +230,62 @@ def disable_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dic
     return after
 
 
+def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict:
+    require_requester_or_admin(current_user)
+    with LeaseLock(config.lock_dir, "system", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                before = _get_vendor(conn, vendor_id)
+                if not before:
+                    raise ValidationError(f"Vendor {vendor_id} not found")
+                dep_count = conn.execute(
+                    "select count(*) from pos where vendor_id = ?",
+                    (vendor_id,),
+                ).fetchone()[0]
+                if dep_count > 0:
+                    raise ValidationError(
+                        f"Cannot delete vendor '{before['vendor_name']}': "
+                        f"it is referenced by {dep_count} purchase order(s). "
+                        f"Please delete the related POs first."
+                    )
+                conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
+                write_audit_log(
+                    conn,
+                    action_type="delete_vendor",
+                    object_type="vendor",
+                    object_id=vendor_id,
+                    sc_id=None,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=None,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+    return {"deleted": vendor_id}
+
+
+def check_ksrm_duplicate(config: AppConfig, ksrm_code: str, exclude_vendor_id: str | None = None) -> dict | None:
+    """Return existing vendor dict if ksrm_vendor_code is already in use, else None."""
+    if not ksrm_code or not ksrm_code.strip():
+        return None
+    with connect(config) as conn:
+        if exclude_vendor_id:
+            row = conn.execute(
+                "select * from vendors where ksrm_vendor_code = ? and vendor_id != ?",
+                (ksrm_code.strip(), exclude_vendor_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "select * from vendors where ksrm_vendor_code = ?",
+                (ksrm_code.strip(),),
+            ).fetchone()
+        return _row_to_dict(row) if row else None
+
+
 # ── Vendor import ──
 
 VENDOR_COLUMN_MAP = {
@@ -345,30 +401,42 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
         existing_ids = set(
             r[0] for r in conn.execute("select vendor_id from vendors").fetchall()
         )
+        existing_ksrm = set(
+            r[0] for r in conn.execute(
+                "select coalesce(ksrm_vendor_code, '') from vendors where ksrm_vendor_code is not null and ksrm_vendor_code != ''"
+            ).fetchall()
+        )
 
     preview = []
     for rec in records:
         errors_list = []
-        # Required fields
-        if not rec.get("vendor_id", "").strip():
-            errors_list.append("vendor_id is required")
+        warnings_list = []
         if not rec.get("vendor_name", "").strip():
             errors_list.append("vendor_name is required")
         if not rec.get("service_scope", "").strip():
             errors_list.append("service_scope is required")
-        elif rec.get("service_scope", "").strip() not in SUPPORTED_SERVICE_SCOPES:
-            errors_list.append(f"Invalid service_scope: {rec.get('service_scope')}")
 
-        # Check duplicate
         vid = rec.get("vendor_id", "").strip()
         if vid and vid in existing_ids:
             errors_list.append(f"vendor_id '{vid}' already exists")
 
+        ksrm = rec.get("ksrm_vendor_code", "").strip()
+        if ksrm and ksrm in existing_ksrm:
+            warnings_list.append(f"KSRM code '{ksrm}' already exists in database")
+
         rec["_errors"] = errors_list
+        rec["_warnings"] = warnings_list
         rec["_valid"] = len(errors_list) == 0
         preview.append(rec)
 
     return preview
+
+
+def _generate_vendor_id(conn) -> str:
+    """Generate a unique vendor_id from current UTC timestamp."""
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return f"V{ts}"
 
 
 def execute_import(
@@ -386,16 +454,25 @@ def execute_import(
         existing_ids = set(
             r[0] for r in conn.execute("select vendor_id from vendors").fetchall()
         )
+        existing_ksrm = set(
+            r[0] for r in conn.execute(
+                "select coalesce(ksrm_vendor_code, '') from vendors where ksrm_vendor_code is not null and ksrm_vendor_code != ''"
+            ).fetchall()
+        )
 
         for i, rec in enumerate(rows):
             vid = rec.get("vendor_id", "").strip()
             if not vid:
-                skipped += 1
-                errors.append(f"Row {i + 1}: vendor_id is empty, skipped")
-                continue
+                vid = _generate_vendor_id(conn)
             if vid in existing_ids:
                 skipped += 1
                 errors.append(f"Row {i + 1}: vendor_id '{vid}' already exists, skipped")
+                continue
+
+            ksrm = rec.get("ksrm_vendor_code", "").strip()
+            if ksrm and ksrm in existing_ksrm:
+                skipped += 1
+                errors.append(f"Row {i + 1}: KSRM code '{ksrm}' already exists, skipped")
                 continue
 
             vname = rec.get("vendor_name", "").strip()
@@ -403,10 +480,6 @@ def execute_import(
             if not vname or not scope:
                 skipped += 1
                 errors.append(f"Row {i + 1}: missing required fields, skipped")
-                continue
-            if scope not in SUPPORTED_SERVICE_SCOPES:
-                skipped += 1
-                errors.append(f"Row {i + 1}: invalid service_scope '{scope}', skipped")
                 continue
 
             try:
@@ -448,6 +521,8 @@ def execute_import(
                 )
                 conn.commit()
                 existing_ids.add(vid)
+                if ksrm:
+                    existing_ksrm.add(ksrm)
                 imported += 1
             except Exception:
                 conn.rollback()
