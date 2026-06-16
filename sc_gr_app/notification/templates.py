@@ -359,9 +359,9 @@ def _fmt_period(start, end) -> str:
 
 
 def _fmt_datetime(value) -> str:
-    """Format an ISO 8601 UTC timestamp to CST readable string (seconds precision)."""
+    """Format an ISO 8601 UTC timestamp to China Standard Time (UTC+8), seconds precision."""
     if not value:
-        return "-"
+        return ""
     try:
         s = str(value)
         if s.endswith("Z"):
@@ -370,8 +370,6 @@ def _fmt_datetime(value) -> str:
             date_part, time_part = s.split("T", 1)
             if "+" in time_part:
                 time_part = time_part.split("+")[0]
-            elif time_part.endswith("Z"):
-                time_part = time_part[:-1]
             dt_parts = date_part.split("-")
             tm_parts = time_part.split(":")
             year, month, day = int(dt_parts[0]), int(dt_parts[1]), int(dt_parts[2])
@@ -420,7 +418,7 @@ def _child_po_table(child_pos: list[dict]) -> str:
         po_amount = _fmt_amount(po.get("po_amount"))
         consumed = _fmt_amount(po.get("consumed_amount"))
         open_amt = _fmt_amount(po.get("open_po_amount"))
-        contract_to = po.get("contract_to") or "-"
+        contract_to = _fmt_datetime(po.get("contract_to"))
         status = _status_badge(po.get("status") or "")
 
         tr = (
@@ -469,7 +467,7 @@ def _child_gr_table(child_grs: list[dict]) -> str:
         estimated = _fmt_amount(gr.get("estimated_amount"))
         con_value = _fmt_amount(gr.get("con_value"))
         desc = gr.get("goods_service_description") or "-"
-        period = _fmt_period(gr.get("delivery_from"), gr.get("delivery_to"))
+        period = _fmt_period(_fmt_datetime(gr.get("delivery_from")), _fmt_datetime(gr.get("delivery_to")))
         status = _status_badge(gr.get("status") or "")
 
         tr = (
