@@ -4,7 +4,7 @@ All email types (status_change, threshold_date, threshold_amount,
 custom_schedule, monthly_summary) share a unified HTML template with:
   - Modern card-style layout with inline CSS
   - Complete entity field display (all DB columns)
-  - Human-readable Chinese event labels (no raw event_key exposure)
+  - Human-readable event labels (no raw event_key exposure)
   - Professional color-coded status badges
 """
 
