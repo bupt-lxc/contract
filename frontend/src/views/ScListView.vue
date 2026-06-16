@@ -18,8 +18,8 @@
     <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
       <span style="font-size:13px;color:#1d4ed8;font-weight:500">{{ $t('batch.selected', { count: selectedRows.length }) }}</span>
       <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
-      <el-button v-if="selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
-      <el-button v-if="selectedRows.some(r => r.status === 'pending')" size="small" type="success" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'pending')" size="small" type="success" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
     </div>
 
     <ScTable
@@ -83,6 +83,7 @@ const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSor
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const { t } = useI18n()
+const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const exporting = ref(false)
 
 const scStatuses = [
