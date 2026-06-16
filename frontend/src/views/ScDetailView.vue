@@ -117,6 +117,7 @@
       :mode="poDialogMode"
       :record="poDialogRecord"
       :vendors="scVendors"
+      :sc-record="detail.sc"
       @save="handlePoSave"
     />
 
