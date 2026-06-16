@@ -75,17 +75,17 @@ _FOOTER_STYLE = (
 # ---------------------------------------------------------------
 
 _STATUS_LABELS: dict[str, str] = {
-    "draft": "草稿",
-    "pending": "待审批",
-    "manager_confirm": "待经理确认",
-    "approved": "已批准",
-    "denied": "已拒绝",
-    "closed": "已关闭",
-    "finished": "已完成",
-    "cancelled": "已取消",
-    "activing": "进行中",
-    "po_pending": "待采购审批",
-    "po_approved": "采购已批准",
+    "draft": "Draft",
+    "pending": "Pending",
+    "manager_confirm": "Manager Confirm",
+    "approved": "Approved",
+    "denied": "Denied",
+    "closed": "Closed",
+    "finished": "Finished",
+    "cancelled": "Cancelled",
+    "activing": "Activing",
+    "po_pending": "PO Pending",
+    "po_approved": "PO Approved",
 }
 
 _STATUS_COLORS: dict[str, str] = {
@@ -103,14 +103,14 @@ _STATUS_COLORS: dict[str, str] = {
 }
 
 _TRANSITION_LABELS: dict[str, str] = {
-    "create": "已创建",
-    "submit": "已提交",
-    "confirm": "已确认",
-    "approve": "已批准",
-    "deny": "已拒绝",
-    "close": "已关闭",
-    "finish": "已完成",
-    "cancel": "已取消",
+    "create": "Created",
+    "submit": "Submitted",
+    "confirm": "Confirmed",
+    "approve": "Approved",
+    "deny": "Denied",
+    "close": "Closed",
+    "finish": "Finished",
+    "cancel": "Cancelled",
 }
 
 _TYPE_LABELS: dict[str, str] = {"sc": "SC", "po": "PO", "gr": "GR"}
@@ -132,19 +132,17 @@ def _status_badge(status: str) -> str:
 
 
 def _describe_event(event_type: str, event_key: str) -> str:
-    """Map internal event_key to a human-readable Chinese label."""
+    """Map internal event_key to a human-readable label."""
     if event_type == "status_change":
         return _TRANSITION_LABELS.get(event_key, event_key)
 
     if event_type == "threshold_date":
-        # event_key format: threshold_date:3m / threshold_date:12m
         months = event_key.replace("threshold_date:", "").replace("m", "")
-        return f"合同到期提醒：剩余不足{months}个月"
+        return f"Contract Expiry: Less than {months} months remaining"
 
     if event_type == "threshold_amount":
-        # event_key format: threshold_amount:10% / threshold_amount:50%
         pct = event_key.replace("threshold_amount:", "").replace("%", "")
-        return f"预算耗尽提醒：剩余不足{pct}%"
+        return f"Budget Exhaustion: Less than {pct}% remaining"
 
     if event_type == "custom_schedule":
         return _describe_schedule(event_key)
@@ -153,18 +151,16 @@ def _describe_event(event_type: str, event_key: str) -> str:
 
 
 def _describe_schedule(event_key: str) -> str:
-    """Parse a schedule event_key into a human-readable Chinese description."""
-    # event_key format: schedule:<id>:<type>:<date>
     parts = event_key.split(":")
     if len(parts) < 4 or parts[0] != "schedule":
-        return "定期提醒"
+        return "Scheduled Reminder"
     stype = parts[2]
     type_labels = {
-        "monthly_day": "每月定期提醒",
-        "monthly_weekday": "月度定期提醒",
-        "weekly_day": "每周定期提醒",
+        "monthly_day": "Monthly Reminder",
+        "monthly_weekday": "Monthly Weekday Reminder",
+        "weekly_day": "Weekly Reminder",
     }
-    return type_labels.get(stype, "定期提醒")
+    return type_labels.get(stype, "Scheduled Reminder")
 
 
 def _field(label: str, value: str, *, alt: bool = False) -> str:
@@ -476,7 +472,7 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
     """Wrap body content in the unified email HTML template."""
     return (
         f'<!DOCTYPE html>'
-        f'<html lang="zh-CN">'
+        f'<html lang="en">'
         f'<head><meta charset="utf-8"></head>'
         f'<body style="{_PAGE_STYLE}">'
         f'<div style="{_CONTAINER_STYLE}">'
@@ -491,8 +487,8 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
         f'</div>'
         # Footer
         f'<div style="{_FOOTER_STYLE}">'
-        f'此邮件由 PO Management Platform 自动发送，请勿回复。<br>'
-        f'生成时间：{_utc_now_cn()}'
+        f'This email is automatically sent by PO Management Platform. Please do not reply.<br>'
+        f'Generated at: {_utc_now_cn()}'
         f'</div>'
         f'</div>'
         f'</body>'
@@ -505,7 +501,7 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
 # ---------------------------------------------------------------
 
 def build_subject(entry: dict, entity_info: dict) -> str:
-    """Build email subject line in Chinese."""
+    """Build email subject line."""
     entity_type = entry["entity_type"]
     entity_id = entry["entity_id"]
     event_key = entry["event_key"]
@@ -520,16 +516,16 @@ def build_subject(entry: dict, entity_info: dict) -> str:
     if event_type == "threshold_date":
         sc_no = entity_info.get("sc_no") or entity_id
         months = event_key.replace("threshold_date:", "").replace("m", "")
-        return f"[POMP] SC {sc_no} 合同即将到期 — 剩余不足{months}个月"
+        return f"[POMP] SC {sc_no} Contract Expiring — Less than {months} months"
 
     if event_type == "threshold_amount":
         sc_no = entity_info.get("sc_no") or entity_id
         pct = event_key.replace("threshold_amount:", "").replace("%", "")
-        return f"[POMP] SC {sc_no} 预算即将耗尽 — 剩余不足{pct}%"
+        return f"[POMP] SC {sc_no} Budget Exhausting — Less than {pct}%"
 
     if event_type == "custom_schedule":
         po_no = entity_info.get("po_no") or entity_id
-        return f"[POMP] PO {po_no} 定期提醒"
+        return f"[POMP] PO {po_no} Scheduled Reminder"
 
     return f"[POMP] {type_label} {entity_id} — {event_key}"
 
@@ -557,20 +553,20 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     highlight = ""
     if event_type in ("threshold_date", "threshold_amount"):
         highlight = _highlight_box(
-            f"⚠️ <b>{subtitle}</b> — 请及时处理以避免影响业务。"
+            f"⚠️ <b>{subtitle}</b> — Please handle promptly to avoid business impact."
         )
 
     # --- status & event section ---
     status_value = _status_badge(entity_info.get("status") or "")
     status_rows = [
-        _field("通知类型", type_label, alt=False),
-        _field("实体 ID", entity_id, alt=True),
-        _field("事件", subtitle, alt=False),
-        _field("当前状态", status_value, alt=True),
+        _field("Notification Type", type_label, alt=False),
+        _field("Entity ID", entity_id, alt=True),
+        _field("Event", subtitle, alt=False),
+        _field("Current Status", status_value, alt=True),
     ]
     if event_type == "status_change":
-        status_rows.append(_field("操作者", actor_name or "系统", alt=False))
-    status_rows.append(_field("触发时间", entry.get("created_at") or "", alt=len(status_rows) % 2 == 0))
+        status_rows.append(_field("Operator", actor_name or "System", alt=False))
+    status_rows.append(_field("Trigger Time", entry.get("created_at") or "", alt=len(status_rows) % 2 == 0))
 
     # --- custom schedule description ---
     schedule_rows: list[str] = []
@@ -602,9 +598,9 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     # --- assemble body ---
     body_parts = [
         highlight,
-        _section("通知信息", status_rows),
-        _section("提醒计划", schedule_rows) if schedule_rows else "",
-        _section(f"{type_label} 详细信息", entity_rows),
+        _section("Notification Info", status_rows),
+        _section("Reminder Plan", schedule_rows) if schedule_rows else "",
+        _section(f"{type_label} Details", entity_rows),
         child_po_section,
         child_gr_section,
     ]
