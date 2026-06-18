@@ -1158,6 +1158,9 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     for po in pos:
         po["budget"] = compute_po_budget(config, po["po_id"])
         po["open_po_amount"] = po["budget"]["open_po_amount"]
+        po["consumed_amount"] = po["budget"]["po_con_value_total"]
+        po["pending_total"] = po["budget"]["po_pending_total"]
+        po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
 
     return {
         "sc": sc,
