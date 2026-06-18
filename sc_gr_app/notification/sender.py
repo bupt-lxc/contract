@@ -55,7 +55,10 @@ def _attach_budget_info(
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN estimated_amount ELSE 0 END), 0) AS pending_total,
               COALESCE(SUM(CASE WHEN status = 'approved'
-                                 THEN con_value ELSE 0 END), 0) AS con_value_total
+                                 THEN con_value ELSE 0 END), 0) AS con_value_total,
+              COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
+                                 THEN estimated_amount * (1 + COALESCE(tax_rate, 0) / 100.0)
+                                 ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
             """,
@@ -64,8 +67,11 @@ def _attach_budget_info(
         po_amount = entity_info.get("po_amount") or 0
         pending = gr_totals["pending_total"] or 0
         approved = gr_totals["con_value_total"] or 0
+        pending_incl_tax = gr_totals["pending_total_incl_tax"] or 0
         entity_info["open_po_amount"] = po_amount - pending - approved
-        entity_info["consumed_amount"] = pending + approved
+        entity_info["consumed_amount"] = approved
+        entity_info["pending_total"] = pending
+        entity_info["pending_total_incl_tax"] = pending_incl_tax
 
     elif entity_type == "sc":
         gr_totals = conn.execute(
@@ -74,7 +80,10 @@ def _attach_budget_info(
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gr.con_value, gr.estimated_amount) ELSE 0 END), 0) AS pending_total,
               COALESCE(SUM(CASE WHEN gr.status = 'approved'
-                                 THEN gr.con_value ELSE 0 END), 0) AS con_value_total
+                                 THEN gr.con_value ELSE 0 END), 0) AS con_value_total,
+              COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
+                                 THEN gr.estimated_amount * (1 + COALESCE(gr.tax_rate, 0) / 100.0)
+                                 ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests gr
             JOIN pos po ON po.po_id = gr.po_id
             WHERE po.sc_id = ?
@@ -84,8 +93,11 @@ def _attach_budget_info(
         sc_amount = entity_info.get("sc_amount") or 0
         pending = gr_totals["pending_total"] or 0
         approved = gr_totals["con_value_total"] or 0
+        pending_incl_tax = gr_totals["pending_total_incl_tax"] or 0
         entity_info["sc_available_amount"] = sc_amount - pending - approved
-        entity_info["consumed_amount"] = pending + approved
+        entity_info["consumed_amount"] = approved
+        entity_info["pending_total"] = pending
+        entity_info["pending_total_incl_tax"] = pending_incl_tax
 
         # Also attach all child POs with their budget info
         _attach_child_pos(conn, entity_id, entity_info)
@@ -123,7 +135,10 @@ def _attach_child_pos(
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN estimated_amount ELSE 0 END), 0) AS pending_total,
               COALESCE(SUM(CASE WHEN status = 'approved'
-                                 THEN con_value ELSE 0 END), 0) AS con_value_total
+                                 THEN con_value ELSE 0 END), 0) AS con_value_total,
+              COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
+                                 THEN estimated_amount * (1 + COALESCE(tax_rate, 0) / 100.0)
+                                 ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
             """,
@@ -132,8 +147,11 @@ def _attach_child_pos(
         po_amount = po.get("po_amount") or 0
         pending = gr_totals["pending_total"] or 0
         approved = gr_totals["con_value_total"] or 0
+        pending_incl_tax = gr_totals["pending_total_incl_tax"] or 0
         po["open_po_amount"] = po_amount - pending - approved
-        po["consumed_amount"] = pending + approved
+        po["consumed_amount"] = approved
+        po["pending_total"] = pending
+        po["pending_total_incl_tax"] = pending_incl_tax
         child_pos.append(po)
 
     entity_info["child_pos"] = child_pos
