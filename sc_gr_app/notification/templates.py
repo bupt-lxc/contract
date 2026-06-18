@@ -261,6 +261,10 @@ def _po_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
     rows.append(row("PO Amount", _fmt_amount(info.get("po_amount"))))
     if "consumed_amount" in info:
         rows.append(row("Consumed Amount", _fmt_amount(info.get("consumed_amount"))))
+    if "pending_total" in info:
+        rows.append(row("Pending Est. (excl. tax)", _fmt_amount(info.get("pending_total"))))
+    if "pending_total_incl_tax" in info:
+        rows.append(row("Pending Est. (incl. tax)", _fmt_amount(info.get("pending_total_incl_tax"))))
     if "open_po_amount" in info:
         rows.append(row("Open PO Amount", _fmt_amount(info.get("open_po_amount"))))
     rows.append(row("Cost Center", info.get("cost_center") or ""))
@@ -405,6 +409,8 @@ def _child_po_table(child_pos: list[dict]) -> str:
         f'<th style="{_TH_STYLE}">Vendor</th>'
         f'<th style="{_TH_STYLE}">PO Amount</th>'
         f'<th style="{_TH_STYLE}">Consumed</th>'
+        f'<th style="{_TH_STYLE}">Pending (excl. tax)</th>'
+        f'<th style="{_TH_STYLE}">Pending (incl. tax)</th>'
         f'<th style="{_TH_STYLE}">Open Amount</th>'
         f'<th style="{_TH_STYLE}">Contract End</th>'
         f'<th style="{_TH_STYLE}">Status</th>'
@@ -417,6 +423,8 @@ def _child_po_table(child_pos: list[dict]) -> str:
         vendor = po.get("vendor_name") or "-"
         po_amount = _fmt_amount(po.get("po_amount"))
         consumed = _fmt_amount(po.get("consumed_amount"))
+        pending_excl = _fmt_amount(po.get("pending_total"))
+        pending_incl = _fmt_amount(po.get("pending_total_incl_tax"))
         open_amt = _fmt_amount(po.get("open_po_amount"))
         contract_to = _fmt_datetime(po.get("contract_to"))
         status = _status_badge(po.get("status") or "")
@@ -427,6 +435,8 @@ def _child_po_table(child_pos: list[dict]) -> str:
             f'<td style="{_TD_STYLE}">{vendor}</td>'
             f'<td style="{_TD_STYLE}">{po_amount}</td>'
             f'<td style="{_TD_STYLE}">{consumed}</td>'
+            f'<td style="{_TD_STYLE}">{pending_excl}</td>'
+            f'<td style="{_TD_STYLE}">{pending_incl}</td>'
             f'<td style="{_TD_STYLE}">{open_amt}</td>'
             f'<td style="{_TD_STYLE}">{contract_to}</td>'
             f'<td style="{_TD_STYLE}">{status}</td>'
