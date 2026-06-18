@@ -1084,6 +1084,30 @@ def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
         update_sc(app_config, ADMIN, sc_id, {"sc_amount": 899})
 
 
+def test_update_sc_rejects_amount_below_manager_confirm_gr_usage(app_config):
+    migrate(app_config)
+    seed_users(app_config)
+    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+
+    with connect(app_config) as conn:
+        conn.execute(
+            """
+            insert into gr_requests (
+              gr_id, po_id, requester_id, estimated_amount,
+              status, created_by, created_at
+            ) values ('GR-MC-SC', ?, ?, 300, 'manager_confirm', ?, ?)
+            """,
+            (po_id, "U1", "A1", "2026-06-18T00:00:00+00:00"),
+        )
+        conn.execute("update pos set po_amount = ? where po_id = ?", (100, po_id))
+        conn.commit()
+
+    from sc_gr_app.services.sc_service import update_sc
+
+    with pytest.raises(ConflictError, match="below GR usage"):
+        update_sc(app_config, ADMIN, sc_id, {"sc_amount": 200})
+
+
 def test_update_sc_allows_exact_decimal_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
