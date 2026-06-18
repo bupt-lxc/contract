@@ -57,7 +57,7 @@ def _attach_budget_info(
               COALESCE(SUM(CASE WHEN status = 'approved'
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount * (1 + COALESCE(tax_rate, 0) / 100.0)
+                                 THEN COALESCE(gross_cost, estimated_amount)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
@@ -82,7 +82,7 @@ def _attach_budget_info(
               COALESCE(SUM(CASE WHEN gr.status = 'approved'
                                  THEN gr.con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
-                                 THEN gr.estimated_amount * (1 + COALESCE(gr.tax_rate, 0) / 100.0)
+                                 THEN COALESCE(gr.gross_cost, gr.estimated_amount)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests gr
             JOIN pos po ON po.po_id = gr.po_id
@@ -137,7 +137,7 @@ def _attach_child_pos(
               COALESCE(SUM(CASE WHEN status = 'approved'
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount * (1 + COALESCE(tax_rate, 0) / 100.0)
+                                 THEN COALESCE(gross_cost, estimated_amount)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
@@ -165,7 +165,7 @@ def _attach_child_grs(
     """Query all GRs under a PO, attach as child_grs list."""
     rows = conn.execute(
         """
-        SELECT gr_id, gr_no, estimated_amount, con_value, status,
+        SELECT gr_id, gr_no, estimated_amount, con_value, gross_cost, status,
                goods_service_description, delivery_from, delivery_to
         FROM gr_requests
         WHERE po_id = ?

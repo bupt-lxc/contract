@@ -214,6 +214,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                 _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
 
                 is_draft = gr_status == "draft"
+                gross_cost = _compute_incl_tax(estimated_amount, data.get("tax_rate"))
                 conn.execute(
                     """
                     insert into gr_requests (
@@ -223,6 +224,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       requester_id,
                       estimated_amount,
                       con_value,
+                      gross_cost,
                       tax_rate,
                       status,
                       remark,
@@ -239,7 +241,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       delivery_from,
                       delivery_to,
                       last_delivery
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
@@ -248,6 +250,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         requester_id,
                         float(estimated_amount),
                         None,
+                        float(gross_cost) if gross_cost is not None else None,
                         data.get("tax_rate"),
                         gr_status,
                         data.get("remark"),
@@ -350,7 +353,7 @@ def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestam
     """Approve pending GRs in-place on an existing connection (no lock acquisition).
 
     Used internally by approve_po for cascade approval.
-    Uses estimated_amount as con_value.
+    Uses gross_cost as con_value, falling back to estimated_amount.
     Returns list of approved GR dicts.
     """
     approved = []
@@ -359,7 +362,7 @@ def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestam
         if before["status"] != "pending":
             raise ConflictError(f"GR must be pending to approve: {gr_id}")
 
-        con_value = before["estimated_amount"]
+        con_value = before.get("gross_cost") or before["estimated_amount"]
         conn.execute(
             """
             update gr_requests
@@ -504,9 +507,12 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
 
 
 def _compute_incl_tax(estimated_amount: Decimal, tax_rate) -> Decimal:
-    """Calculate tax-included amount: amount_ex_tax × (1 + tax_rate/100)."""
+    """Calculate tax-included amount: amount_ex_tax × (1 + tax_rate/100).
+
+    Returns estimated_amount when tax_rate is None (gross = net).
+    """
     if tax_rate is None:
-        return None
+        return estimated_amount
     rate = Decimal(str(tax_rate))
     return estimated_amount * (1 + rate / Decimal("100"))
 
@@ -542,19 +548,15 @@ def approve_gr(
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
 
-                # Resolve con_value: explicit value → auto-calculate from tax_rate → error
+                # Resolve con_value: explicit value → auto-fill from gross_cost
                 if con_value is not None:
                     con_value_amount = _non_negative_number(con_value, "con_value")
+                elif before.get("gross_cost") is not None:
+                    con_value_amount = Decimal(str(before["gross_cost"]))
                 else:
-                    computed = _compute_incl_tax(
-                        Decimal(str(before["estimated_amount"])),
-                        before["tax_rate"],
+                    raise ValidationError(
+                        "con_value is required (no gross_cost available for auto-fill)"
                     )
-                    if computed is None:
-                        raise ValidationError(
-                            "con_value is required (no tax_rate set for auto-calculation)"
-                        )
-                    con_value_amount = computed
 
                 extra_amount = con_value_amount - Decimal(
                     str(before["estimated_amount"])
@@ -691,6 +693,13 @@ def update_gr(
                         if po_sc["status"] != "activing":
                             raise ConflictError("PO must be activing")
 
+                    # Recalculate gross_cost when estimated_amount or tax_rate changes
+                    if "estimated_amount" in allowed or "tax_rate" in allowed:
+                        merged["gross_cost"] = _compute_incl_tax(
+                            Decimal(str(merged["estimated_amount"])),
+                            merged.get("tax_rate"),
+                        )
+
                     if not is_draft_gr:
                         old_amount = Decimal(str(before["estimated_amount"]))
                         if po_sc["sc_id"] == sc_id:
@@ -719,6 +728,7 @@ def update_gr(
                         set po_id = ?,
                             requester_id = ?,
                             estimated_amount = ?,
+                            gross_cost = ?,
                             tax_rate = ?,
                             remark = ?,
                             gr_no = ?,
@@ -735,6 +745,7 @@ def update_gr(
                             merged["po_id"],
                             merged["requester_id"],
                             float(amount),
+                            float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
                             merged.get("tax_rate"),
                             merged.get("remark"),
                             merged.get("gr_no"),
@@ -760,6 +771,12 @@ def update_gr(
                         raise ValidationError("No GR fields to update")
 
                     merged = {**before, **allowed}
+                    # Recalculate gross_cost when tax_rate changes on approved GR
+                    if "tax_rate" in allowed:
+                        merged["gross_cost"] = _compute_incl_tax(
+                            Decimal(str(before["estimated_amount"])),
+                            merged.get("tax_rate"),
+                        )
                     if merged.get("con_value") is None:
                         raise ValidationError("con_value is required for approved GR")
                     con_value = _non_negative_number(
@@ -781,6 +798,7 @@ def update_gr(
                         """
                         update gr_requests
                         set con_value = ?,
+                            gross_cost = ?,
                             tax_rate = ?,
                             remark = ?,
                             gr_no = ?,
@@ -791,7 +809,9 @@ def update_gr(
                             last_delivery = ?
                         where gr_id = ?
                         """,
-                        (float(con_value), merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
+                        (float(con_value),
+                         float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
+                         merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
                          merged.get("goods_service_description"), merged.get("confirmation_name"),
                          merged.get("delivery_from"), merged.get("delivery_to"), merged.get("last_delivery"),
                          gr_id),

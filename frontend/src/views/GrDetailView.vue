@@ -36,6 +36,7 @@
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.taxRate')">{{ gr.tax_rate != null ? gr.tax_rate + '%' : '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.grossCost')"><AmountDisplay :value="gr.gross_cost" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.conValue')"><AmountDisplay :value="gr.con_value" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.goodsServiceDescription')" :span="2">{{ gr.goods_service_description || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmationName')">{{ gr.confirmation_name || '-' }}</el-descriptions-item>
@@ -164,12 +165,9 @@ async function handleConfirm() {
 
 async function handleApprove() {
   try {
-    // Pre-fill with auto-calculated tax-included amount if tax_rate is set
+    // Pre-fill with gross_cost (tax-included amount) when available
     const grData = gr.value || {}
-    let defaultVal = ''
-    if (grData.estimated_amount && grData.tax_rate != null) {
-      defaultVal = String(Math.round((Number(grData.estimated_amount) * (1 + Number(grData.tax_rate) / 100)) * 100) / 100)
-    }
+    let defaultVal = String(grData.gross_cost || grData.con_value || '')
     const { value } = await ElMessageBox.prompt(
       t('gr.enterConValue'),
       t('gr.approveGr'),

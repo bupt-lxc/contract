@@ -63,6 +63,7 @@
           :rows="detail.pos || []"
           hide-sc-info
           @row-click="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
+          @detail="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @finish="row => handlePoFinish(row)"
           @submit="row => handlePoSubmit(row)"

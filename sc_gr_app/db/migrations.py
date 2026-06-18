@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1017,6 +1017,23 @@ def _migrate_v24(conn) -> None:
     _record(conn, 24)
 
 
+def _migrate_v25(conn) -> None:
+    """Add gross_cost column to gr_requests (tax-inclusive amount = net + tax)."""
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "gross_cost" not in existing:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN gross_cost REAL")
+        # Backfill from estimated_amount × (1 + tax_rate/100)
+        conn.execute(
+            """
+            UPDATE gr_requests
+            SET gross_cost = estimated_amount * (1 + COALESCE(tax_rate, 0) / 100.0)
+            WHERE gross_cost IS NULL
+            """
+        )
+    _record(conn, 25)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1148,6 +1165,10 @@ def migrate(config: AppConfig) -> None:
             if 24 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v24(conn)
+                conn.commit()
+            if 25 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v25(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

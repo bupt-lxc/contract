@@ -36,9 +36,13 @@
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
+          <el-form-item :label="$t('gr.grossCost')">
+            <el-input-number :model-value="computedInclTax" :precision="2" :min="0" controls-position="right" style="width:100%" disabled />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
           <el-form-item :label="$t('gr.conValue')">
-            <el-input-number v-if="isApproved" v-model="form.con_value" :precision="2" :min="0" controls-position="right" style="width:100%" />
-            <el-input-number v-else :model-value="computedInclTax" :precision="2" :min="0" controls-position="right" style="width:100%" disabled />
+            <el-input-number v-model="form.con_value" :precision="2" :min="0" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -146,10 +150,6 @@ const isReadOnly = computed(() => {
   return status === 'manager_confirm' || status === 'approved'
 })
 
-const isApproved = computed(() => {
-  return props.mode === 'edit' && props.record?.status === 'approved'
-})
-
 // Non-admin users can only select themselves as requester
 const availableUsers = computed(() => {
   if (isAdmin.value) return props.users
@@ -161,7 +161,7 @@ const submitting = ref(false)
 const pickedFiles = ref([])
 
 const emptyForm = () => ({
-  gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, remark: '',
+  gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, gross_cost: null, remark: '',
   pending_date: null, approved_date: null,
   goods_service_description: '', confirmation_name: '', delivery_from: null, delivery_to: null, last_delivery: 'N'
 })
@@ -169,18 +169,21 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 // Auto-calculate tax-included amount: amount_excl_tax × (1 + tax_rate / 100)
+// Returns estimated_amount when no tax_rate set (gross = net)
 const computedInclTax = computed(() => {
   const amount = form.estimated_amount
   const rate = form.tax_rate
-  if (amount == null || amount === '' || rate == null || rate === '') return null
+  if (amount == null || amount === '') return null
   const a = Number(amount)
+  if (isNaN(a)) return null
+  if (rate == null || rate === '') return Math.round(a * 100) / 100
   const r = Number(rate)
-  if (isNaN(a) || isNaN(r)) return null
+  if (isNaN(r)) return Math.round(a * 100) / 100
   return Math.round((a * (1 + r / 100)) * 100) / 100
 })
 
 function calcInclTax() {
-  form.con_value = computedInclTax.value
+  form.gross_cost = computedInclTax.value
 }
 
 const rules = {

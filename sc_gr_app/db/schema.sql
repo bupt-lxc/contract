@@ -92,6 +92,8 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   requester_id TEXT NOT NULL REFERENCES users(user_id),
   estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
   con_value REAL CHECK (con_value >= 0),
+  gross_cost REAL,
+  tax_rate REAL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'cancelled')),
   remark TEXT,
   created_by TEXT NOT NULL REFERENCES users(user_id),
@@ -101,7 +103,13 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   cancelled_by TEXT REFERENCES users(user_id),
   cancelled_at TEXT,
   pending_date TEXT,
-  approved_date TEXT
+  approved_date TEXT,
+  confirmed_at TEXT,
+  goods_service_description TEXT,
+  confirmation_name TEXT,
+  delivery_from TEXT,
+  delivery_to TEXT,
+  last_delivery TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (

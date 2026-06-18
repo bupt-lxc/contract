@@ -310,7 +310,8 @@ def _gr_fields(info: dict, show_formal_number: bool, requester_name: str = "") -
 
     # Financial
     rows.append(row("Estimated Amount (Net)", _fmt_amount(info.get("estimated_amount"))))
-    rows.append(row("Confirmed Amount (Tax incl.)", _fmt_amount(info.get("con_value"))))
+    rows.append(row("Gross Cost (Tax incl.)", _fmt_amount(info.get("gross_cost"))))
+    rows.append(row("Contract Value", _fmt_amount(info.get("con_value"))))
     rows.append(row("VAT Rate (%)", info.get("tax_rate") or ""))
 
     # Description
@@ -464,7 +465,8 @@ def _child_gr_table(child_grs: list[dict]) -> str:
         f'<tr style="background-color:#f8f9fa">'
         f'<th style="{_TH_STYLE}">GR No</th>'
         f'<th style="{_TH_STYLE}">Estimated Amount (Net)</th>'
-        f'<th style="{_TH_STYLE}">Confirmed Amount (Tax incl.)</th>'
+        f'<th style="{_TH_STYLE}">Gross Cost (Tax incl.)</th>'
+        f'<th style="{_TH_STYLE}">Contract Value</th>'
         f'<th style="{_TH_STYLE}">Goods/Service Description</th>'
         f'<th style="{_TH_STYLE}">Delivery Period</th>'
         f'<th style="{_TH_STYLE}">Status</th>'
@@ -475,6 +477,7 @@ def _child_gr_table(child_grs: list[dict]) -> str:
     for gr in child_grs:
         gr_no = gr.get("gr_no") or "-"
         estimated = _fmt_amount(gr.get("estimated_amount"))
+        gross_cost = _fmt_amount(gr.get("gross_cost"))
         con_value = _fmt_amount(gr.get("con_value"))
         desc = gr.get("goods_service_description") or "-"
         period = _fmt_period(_fmt_datetime(gr.get("delivery_from")), _fmt_datetime(gr.get("delivery_to")))
@@ -484,6 +487,7 @@ def _child_gr_table(child_grs: list[dict]) -> str:
             f'<tr>'
             f'<td style="{_TD_STYLE}">{gr_no}</td>'
             f'<td style="{_TD_STYLE}">{estimated}</td>'
+            f'<td style="{_TD_STYLE}">{gross_cost}</td>'
             f'<td style="{_TD_STYLE}">{con_value}</td>'
             f'<td style="{_TD_STYLE}">{desc}</td>'
             f'<td style="{_TD_STYLE}">{period}</td>'
