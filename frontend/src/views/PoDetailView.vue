@@ -63,6 +63,7 @@
         <GrTable
           :rows="grs"
           @row-click="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
+          @detail="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @cancel="row => handleGrCancel(row)"
@@ -246,11 +247,8 @@ async function handleSubmit() {
 
 async function handleGrApprove(row) {
   try {
-    // Pre-fill with auto-calculated tax-included amount if tax_rate is set
-    let defaultVal = ''
-    if (row.estimated_amount && row.tax_rate != null) {
-      defaultVal = String(Math.round((Number(row.estimated_amount) * (1 + Number(row.tax_rate) / 100)) * 100) / 100)
-    }
+    // Pre-fill with gross_cost (tax-included amount) when available
+    let defaultVal = String(row.gross_cost || row.con_value || '')
     const { value } = await ElMessageBox.prompt(
       t('gr.enterConValue'),
       t('gr.approveGr'),

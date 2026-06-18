@@ -460,23 +460,23 @@ def test_po_pending_total_incl_tax_applies_tax_rate(app_config):
         seed_sc(conn, sc_amount=1000)
         seed_vendor(conn)
         seed_po(conn, po_amount=500)
-        # GR with 13% tax
+        # GR with 13% tax (gross_cost = 100 * 1.13 = 113)
         conn.execute(
             """
             insert into gr_requests (
               gr_id, po_id, requester_id, estimated_amount, con_value,
-              tax_rate, status, created_by, created_at
-            ) values ('GR1', 'PO1', 'U1', 100, NULL, 13, 'pending', 'U1', ?)
+              gross_cost, tax_rate, status, created_by, created_at
+            ) values ('GR1', 'PO1', 'U1', 100, NULL, 113, 13, 'pending', 'U1', ?)
             """,
             (TIMESTAMP,),
         )
-        # GR with no tax
+        # GR with no tax (gross_cost = estimated_amount = 200)
         conn.execute(
             """
             insert into gr_requests (
               gr_id, po_id, requester_id, estimated_amount, con_value,
-              tax_rate, status, created_by, created_at
-            ) values ('GR2', 'PO1', 'U1', 200, NULL, NULL, 'manager_confirm', 'U1', ?)
+              gross_cost, tax_rate, status, created_by, created_at
+            ) values ('GR2', 'PO1', 'U1', 200, NULL, 200, NULL, 'manager_confirm', 'U1', ?)
             """,
             (TIMESTAMP,),
         )

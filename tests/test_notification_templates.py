@@ -64,7 +64,7 @@ class TestBuildBody:
         assert "GR-2026-001" in body
         assert "GR No" in body
         assert "50,000.00" in body
-        assert "Confirmed Amount" in body
+        assert "Gross Cost" in body
         # Should NOT contain SC-specific labels
         assert "SC No" not in body
         assert "Service Period" not in body  # SC-specific

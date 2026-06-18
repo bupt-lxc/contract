@@ -50,7 +50,7 @@ def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decima
               coalesce(sum(case when gr.status = 'approved' then gr.con_value else 0 end), 0)
                 as con_value_total,
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
-                then gr.estimated_amount * (1 + coalesce(gr.tax_rate, 0) / 100.0) else 0 end), 0)
+                then coalesce(gr.gross_cost, gr.estimated_amount) else 0 end), 0)
                 as pending_total_incl_tax
             from gr_requests gr
             join pos po on po.po_id = gr.po_id
@@ -122,7 +122,7 @@ def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decima
               coalesce(sum(case when status = 'approved' then con_value else 0 end), 0)
                 as con_value_total,
               coalesce(sum(case when status in ('pending', 'manager_confirm')
-                then estimated_amount * (1 + coalesce(tax_rate, 0) / 100.0) else 0 end), 0)
+                then coalesce(gross_cost, estimated_amount) else 0 end), 0)
                 as pending_total_incl_tax
             from gr_requests
             where po_id = ?

@@ -391,7 +391,7 @@ def search_pos(
             sum(case when status = 'approved'
                       then con_value else 0 end) as con_value_total,
             sum(case when status in ('pending', 'manager_confirm')
-                      then estimated_amount * (1 + coalesce(tax_rate, 0) / 100.0)
+                      then coalesce(gross_cost, estimated_amount)
                       else 0 end) as pending_total_incl_tax
           from gr_requests
           group by po_id
@@ -510,6 +510,7 @@ def search_grs(
             "vendor.vendor_name",
             "cast(gr.estimated_amount as text)",
             "cast(gr.con_value as text)",
+            "cast(gr.gross_cost as text)",
             "cast(gr.tax_rate as text)",
             "gr.goods_service_description",
             "gr.confirmation_name",
@@ -538,6 +539,9 @@ def search_grs(
             "con_value": "gr.con_value",
             "con_value_min": "gr.con_value",
             "con_value_max": "gr.con_value",
+            "gross_cost": "gr.gross_cost",
+            "gross_cost_min": "gr.gross_cost",
+            "gross_cost_max": "gr.gross_cost",
             "tax_rate": "gr.tax_rate",
             "goods_service_description": "gr.goods_service_description",
             "confirmation_name": "gr.confirmation_name",
@@ -579,6 +583,7 @@ def search_grs(
             "vendor_name": "vendor.vendor_name",
             "estimated_amount": "gr.estimated_amount",
             "con_value": "gr.con_value",
+            "gross_cost": "gr.gross_cost",
             "tax_rate": "gr.tax_rate",
             "goods_service_description": "gr.goods_service_description",
             "confirmation_name": "gr.confirmation_name",
