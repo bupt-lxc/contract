@@ -375,7 +375,10 @@ def search_pos(
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
           po.po_amount - coalesce(gr_totals.pending_total, 0)
-            - coalesce(gr_totals.con_value_total, 0) as open_po_amount
+            - coalesce(gr_totals.con_value_total, 0) as open_po_amount,
+          coalesce(gr_totals.con_value_total, 0) as consumed_amount,
+          coalesce(gr_totals.pending_total, 0) as po_pending_total,
+          coalesce(gr_totals.pending_total_incl_tax, 0) as po_pending_total_incl_tax
         from pos po
         join sc_records sc on sc.sc_id = po.sc_id
         join users u on u.user_id = po.requester_id
@@ -383,8 +386,13 @@ def search_pos(
         left join (
           select
             po_id,
-            sum(case when status = 'pending' then estimated_amount else 0 end) as pending_total,
-            sum(case when status = 'approved' then con_value else 0 end) as con_value_total
+            sum(case when status in ('pending', 'manager_confirm')
+                      then estimated_amount else 0 end) as pending_total,
+            sum(case when status = 'approved'
+                      then con_value else 0 end) as con_value_total,
+            sum(case when status in ('pending', 'manager_confirm')
+                      then estimated_amount * (1 + coalesce(tax_rate, 0) / 100.0)
+                      else 0 end) as pending_total_incl_tax
           from gr_requests
           group by po_id
         ) gr_totals on gr_totals.po_id = po.po_id
