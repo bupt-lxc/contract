@@ -38,6 +38,9 @@
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.openPoAmount')"><AmountDisplay :value="po.open_po_amount" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('po.consumedAmount')"><AmountDisplay :value="po.consumed_amount || po.budget?.po_con_value_total" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('po.pendingExclTax')"><AmountDisplay :value="po.pending_total || po.budget?.po_pending_total" /></el-descriptions-item>
+          <el-descriptions-item :label="$t('po.pendingInclTax')"><AmountDisplay :value="po.pending_total_incl_tax || po.budget?.po_pending_total_incl_tax" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>

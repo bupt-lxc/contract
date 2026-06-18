@@ -93,12 +93,12 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
         select status, estimated_amount, con_value
         from gr_requests
         where po_id = ?
-          and status in ('pending', 'approved')
+          and status in ('pending', 'manager_confirm', 'approved')
         """,
         (po_id,),
     )
     for row in rows:
-        if row["status"] == "pending":
+        if row["status"] in ("pending", "manager_confirm"):
             usage += Decimal(str(row["estimated_amount"]))
         else:
             usage += Decimal(str(row["con_value"]))

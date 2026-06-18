@@ -245,6 +245,7 @@ def test_compute_sc_budget_sums_pending_approved_and_po_allocation(app_config):
         "sc_amount": 1000.0,
         "sc_pending_total": 100.0,
         "sc_con_value_total": 150.0,
+        "sc_pending_total_incl_tax": 100.0,
         "sc_available_amount": 750.0,
         "allocated_po_amount": 800.0,
         "unallocated_sc_amount": 200.0,
@@ -260,6 +261,7 @@ def test_compute_po_budget_derives_open_po_amount(app_config):
         "po_amount": 800.0,
         "po_pending_total": 100.0,
         "po_con_value_total": 150.0,
+        "po_pending_total_incl_tax": 100.0,
         "open_po_amount": 550.0,
     }
 
@@ -345,6 +347,7 @@ def test_compute_sc_budget_returns_zero_totals_when_sc_has_no_pos(app_config):
         "sc_amount": 1000.0,
         "sc_pending_total": 0.0,
         "sc_con_value_total": 0.0,
+        "sc_pending_total_incl_tax": 0.0,
         "sc_available_amount": 1000.0,
         "allocated_po_amount": 0.0,
         "unallocated_sc_amount": 1000.0,
@@ -360,6 +363,7 @@ def test_compute_po_budget_returns_zero_totals_when_po_has_no_grs(app_config):
         "po_amount": 800.0,
         "po_pending_total": 0.0,
         "po_con_value_total": 0.0,
+        "po_pending_total_incl_tax": 0.0,
         "open_po_amount": 800.0,
     }
 
@@ -391,6 +395,7 @@ def test_compute_sc_budget_counts_grs_once_across_multiple_pos(app_config):
         "sc_amount": 1000.0,
         "sc_pending_total": 150.0,
         "sc_con_value_total": 225.0,
+        "sc_pending_total_incl_tax": 150.0,
         "sc_available_amount": 625.0,
         "allocated_po_amount": 1000.0,
         "unallocated_sc_amount": 0.0,
@@ -444,3 +449,41 @@ def test_decimal_po_budget_uses_exact_decimal_arithmetic(app_config):
 
     assert decimal_budget["open_po_amount"] == 0
     assert float_budget["open_po_amount"] == 0.0
+
+
+def test_po_pending_total_incl_tax_applies_tax_rate(app_config):
+    """pending_total_incl_tax = estimated_amount * (1 + tax_rate/100)"""
+    from sc_gr_app.db.connection import connect
+    migrate(app_config)
+    with connect(app_config) as conn:
+        seed_user(conn)
+        seed_sc(conn, sc_amount=1000)
+        seed_vendor(conn)
+        seed_po(conn, po_amount=500)
+        # GR with 13% tax
+        conn.execute(
+            """
+            insert into gr_requests (
+              gr_id, po_id, requester_id, estimated_amount, con_value,
+              tax_rate, status, created_by, created_at
+            ) values ('GR1', 'PO1', 'U1', 100, NULL, 13, 'pending', 'U1', ?)
+            """,
+            (TIMESTAMP,),
+        )
+        # GR with no tax
+        conn.execute(
+            """
+            insert into gr_requests (
+              gr_id, po_id, requester_id, estimated_amount, con_value,
+              tax_rate, status, created_by, created_at
+            ) values ('GR2', 'PO1', 'U1', 200, NULL, NULL, 'manager_confirm', 'U1', ?)
+            """,
+            (TIMESTAMP,),
+        )
+        conn.commit()
+
+    budget = compute_po_budget(app_config, "PO1")
+
+    assert budget["po_pending_total"] == 300.0              # 100 + 200
+    assert budget["po_pending_total_incl_tax"] == 313.0     # 100*1.13 + 200*1.0
+    assert budget["po_con_value_total"] == 0.0

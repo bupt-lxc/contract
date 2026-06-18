@@ -386,7 +386,7 @@ def _validate_sc_amount_not_below_usage(config: AppConfig, sc_id: str, sc_amount
             from gr_requests gr
             join pos po on po.po_id = gr.po_id
             where po.sc_id = ?
-              and gr.status in ('pending', 'approved')
+              and gr.status in ('pending', 'manager_confirm', 'approved')
             """,
             (sc_id,),
         ).fetchall()
@@ -398,7 +398,7 @@ def _validate_sc_amount_not_below_usage(config: AppConfig, sc_id: str, sc_amount
     gr_usage = sum(
         (
             Decimal(str(row["estimated_amount"]))
-            if row["status"] == "pending"
+            if row["status"] in ("pending", "manager_confirm")
             else Decimal(str(row["con_value"]))
         )
         for row in gr_rows
@@ -1158,6 +1158,9 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     for po in pos:
         po["budget"] = compute_po_budget(config, po["po_id"])
         po["open_po_amount"] = po["budget"]["open_po_amount"]
+        po["consumed_amount"] = po["budget"]["po_con_value_total"]
+        po["pending_total"] = po["budget"]["po_pending_total"]
+        po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
 
     return {
         "sc": sc,
