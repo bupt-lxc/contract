@@ -48,19 +48,79 @@ if 26 not in _applied_versions(conn):
     conn.commit()
 ```
 
-- [ ] **Step 2: Update `sc_service.py` — create_sc_draft and submit_sc**
+- [ ] **Step 2: Update `sc_service.py` — add currency to INSERT, UPDATE, and OPTIONAL_UPDATE_FIELDS**
 
-In `create_sc_draft`, add `currency` to the INSERT. Find the INSERT statement and add the `currency` field:
+At line 28-42, add `"currency"` to `OPTIONAL_UPDATE_FIELDS`:
 
 ```python
-# In create_sc_draft, add currency to data extraction and INSERT
-currency = data.get("currency", "CNY")
-if currency not in ("CNY", "EUR", "USD"):
-    raise ValidationError("currency must be CNY, EUR, or USD")
-# ... add currency to the INSERT columns and values
+OPTIONAL_UPDATE_FIELDS = (
+    "sc_no",
+    "request_type",
+    "cost_center",
+    "sc_amount",
+    "service_period_start",
+    "service_period_end",
+    "description",
+    "asset",
+    "asset_nums",
+    "internal_system_number",
+    "currency",
+    "vendor_ids",
+)
 ```
 
-In `submit_sc`, similarly accept and persist `currency` if provided in the data.
+In `create_sc_draft` (line 510), add `currency` to the INSERT column list and values tuple. The INSERT currently has 21 columns; add `currency` as column 22:
+
+```python
+# INSERT column list — add currency after internal_system_number
+"""
+insert into sc_records (
+  sc_id, sc_no, requester_id, request_type, cost_center,
+  sc_amount, service_period_start, service_period_end,
+  status, description, created_by, created_at, updated_at,
+  approved_by, approved_at, closed_at, asset, asset_nums,
+  pending_date, approved_date, internal_system_number,
+  currency
+) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+# Values tuple — add currency as last value
+(
+    sc_id, data.get("sc_no"), data["requester_id"],
+    data.get("request_type"), data.get("cost_center"),
+    float(data["sc_amount"]) if data.get("sc_amount") not in (None, "") else None,
+    data.get("service_period_start"), data.get("service_period_end"),
+    "draft", data.get("description"), current_user["user_id"],
+    timestamp, timestamp, None, None, None,
+    data.get("asset", "N"), data.get("asset_nums"),
+    None, None, data.get("internal_system_number"),
+    data.get("currency", "CNY"),
+)
+```
+
+In `submit_sc` (line 625), add `currency` to the UPDATE statement. After `internal_system_number = ?,` add:
+
+```python
+update sc_records
+set sc_no = ?,
+    request_type = ?,
+    cost_center = ?,
+    sc_amount = ?,
+    service_period_start = ?,
+    service_period_end = ?,
+    description = ?,
+    asset = ?,
+    asset_nums = ?,
+    currency = ?,
+    internal_system_number = ?,
+    status = 'manager_confirm',
+    updated_at = ?
+where sc_id = ?
+```
+
+And add `merged.get("currency", "CNY")` to the corresponding values tuple at the right position.
+
+Also in the `update_sc` function (line 734), `currency` will now flow through `OPTIONAL_UPDATE_FIELDS` automatically — no code change needed there since it already filters by `allowed`.
 
 - [ ] **Step 3: Update `query_service.py` — include currency in SC search**
 
@@ -316,7 +376,24 @@ def search_operation_records(self, payload) -> dict:
     result = query_service.search_operation_records(self.config, ...)
 ```
 
-Also update `query_service.py` — rename `search_audit_logs` to `search_operation_records` and update the internal SQL to reference `operation_records` table.
+Also update `query_service.py` — rename `search_audit_logs` to `search_operation_records` and update ALL internal SQL references to `operation_records` table:
+
+In `query_service.py` lines 713-785+, replace every occurrence of `audit_logs` with `operation_records` in SQL strings. This includes:
+- Line 729: `audit_logs.sc_id` → `operation_records.sc_id`
+- Line 732-733: `sc.sc_id = audit_logs.sc_id` → `sc.sc_id = operation_records.sc_id`
+- Line 747: `audit_logs.sc_id` / `audit_logs.operator_id` → `operation_records.sc_id` / `operation_records.operator_id`
+- Line 751-752: `sc.sc_id = audit_logs.sc_id` → `sc.sc_id = operation_records.sc_id`
+- Line 763: `select * from audit_logs` → `select * from operation_records`
+
+Also rename the indexes for consistency (optional but recommended):
+
+```python
+# In migration v27, also recreate indexes with new names:
+conn.execute("DROP INDEX IF EXISTS idx_audit_sc")
+conn.execute("DROP INDEX IF EXISTS idx_audit_created")
+conn.execute("CREATE INDEX IF NOT EXISTS idx_operation_records_sc ON operation_records(sc_id)")
+conn.execute("CREATE INDEX IF NOT EXISTS idx_operation_records_created ON operation_records(created_at)")
+```
 
 - [ ] **Step 5: Update frontend i18n keys**
 
@@ -423,9 +500,22 @@ git commit -m "fix: format timestamps as YYYY-MM-DD HH:MM:SS in UI"
 
 Check that `sc_records` doesn't have a vendor_id column directly — it uses the `sc_vendors` junction table (v14 migration). So "SC allow no vendor" means the SC can have zero rows in `sc_vendors`. The schema already supports this since `sc_vendors` is a junction table. No migration needed.
 
-- [ ] **Step 2: Update SC form — make vendor optional**
+- [ ] **Step 2: Update SC form — make vendor optional AND remove server-side vendor requirement**
 
 In `ScFormDialog.vue` and/or `ScVendorSection.vue`, remove any `required` validation on the vendor field. The user can now submit an SC without selecting a vendor.
+
+In `sc_gr_app/services/sc_service.py`, `submit_sc` at line 658-663 currently requires at least one vendor:
+
+```python
+# REMOVE these lines (658-663 in submit_sc):
+vendor_count = conn.execute(
+    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
+).fetchone()["cnt"]
+if vendor_count == 0:
+    raise ValidationError("At least one vendor is required to submit the SC")
+```
+
+Delete this validation block entirely — SCs can now be submitted without any vendor.
 
 - [ ] **Step 3: Add bilingual vendor prompt**
 
@@ -841,7 +931,17 @@ def register_user(config: AppConfig, machine_id: str, user_name: str, email: str
 
 Add `from uuid import uuid4` import.
 
-- [ ] **Step 2: Add bridge endpoint**
+- [ ] **Step 2: Add bridge endpoints**
+
+First, add a `detect_machine_id` endpoint that works without authorization (for the registration form to display the current machine ID):
+
+```python
+def detect_machine_id(self, _payload=None) -> dict:
+    """Return the current machine ID. Works even for unregistered machines."""
+    return ok(get_7_digit_id())
+```
+
+Then add the `register_user` endpoint:
 
 ```python
 def register_user(self, payload) -> dict:
@@ -929,7 +1029,21 @@ async function doRegister() {
 }
 ```
 
-Set `detectedMachineId` during `verify()` — when the PERMISSION_DENIED error comes back, it means the machine ID was detected but not found. Store the machine ID from the error or from a separate API call.
+Set `detectedMachineId` during `verify()` — when the PERMISSION_DENIED error comes back, call `callApi('detect_machine_id')` to get the machine ID for the registration form. Add this call in the `catch` block for PERMISSION_DENIED:
+
+```js
+} catch (e) {
+    lastError.value = e.message || t('login.unableToReach')
+    if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
+      state.value = 'unauthorized'
+      // Fetch machine ID for potential registration
+      try {
+        detectedMachineId.value = await callApi('detect_machine_id')
+      } catch { /* ignore */ }
+    }
+    // ...
+}
+```
 
 - [ ] **Step 4: Add i18n keys**
 
@@ -1026,7 +1140,16 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     return f"[POMP] {action} {entity_type} from {abbr} {today}"
 ```
 
-Note: The sequence number `-NNN` should be appended by the sender since it requires DB access. Update `sender.py` to append it.
+Note: The sequence number `-NNN` requires DB access, so it is appended by `sender.py` after calling `build_subject`. In `send_entry` (and `generate_draft`), after `subject = templates.build_subject(entry, entity_info, actor_name=actor_name)`, add:
+
+```python
+# Append daily sequence number
+today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+seq = conn.execute(
+    "SELECT COUNT(*) + 1 FROM notification_queue WHERE date(created_at) = date('now')"
+).fetchone()[0]
+subject = f"{subject}-{seq:03d}"
+```
 
 - [ ] **Step 2: Simplify `build_body` — two-table format**
 
@@ -1135,9 +1258,29 @@ attachment_rows = conn.execute(
 entity_info["_attachments"] = [r["filename"] for r in attachment_rows]
 ```
 
-For reminders (threshold_date, threshold_amount, custom_schedule): ensure only the requester is in `to_recipients`, not admins. This is controlled by the notification config in engine.py — update the engine to only notify the requester for threshold/custom_schedule event types.
+For reminders (threshold_date, threshold_amount, custom_schedule): ensure only the requester is in `to_recipients`, not admins.
 
-In `engine.py`, when queuing threshold notifications, set `to_recipients` to `[requester_id]` instead of including admin recipients.
+In `sc_gr_app/notification/thresholds.py` line 57, change:
+
+```python
+# Old (line 57):
+to_ids = [requester_id] + admin_recipients
+
+# New:
+to_ids = [requester_id]
+```
+
+Also in `sc_gr_app/notification/schedules.py` line 59, make the same change:
+
+```python
+# Old (line 59):
+to_ids = [requester_id] + admin_recipients
+
+# New:
+to_ids = [requester_id]
+```
+
+No other changes needed in schedules.py.
 
 - [ ] **Step 5: Update `_STATUS_LABELS`**
 
@@ -1205,10 +1348,11 @@ def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
                                 actor_name=actor_name, requester_name=requester_name)
 
     attachment_rows = conn.execute(
-        "SELECT filename FROM attachments WHERE entity_type = ? AND entity_id = ?",
+        "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
         (entity_type, entity_id),
     ).fetchall()
     attachments = [r["filename"] for r in attachment_rows]
+    attachment_paths = [r["stored_path"] for r in attachment_rows]
 
     return {
         "subject": subject,
@@ -1216,6 +1360,7 @@ def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
         "to_addresses": to_addresses,
         "cc_addresses": cc_addresses,
         "attachments": attachments,
+        "attachment_paths": attachment_paths,
         "entry_id": entry["id"],
     }
 ```
@@ -1268,14 +1413,10 @@ def open_email_draft_in_outlook(self, payload) -> dict:
             mail.To = "; ".join(draft["to_addresses"])
             if draft["cc_addresses"]:
                 mail.CC = "; ".join(draft["cc_addresses"])
-            # Attach files
-            att_rows = conn.execute(
-                "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
-                (entry["entity_type"], entry["entity_id"]),
-            ).fetchall()
-            for att in att_rows:
+            # Use attachment_paths from generate_draft to attach files
+            for att_path in draft["attachment_paths"]:
                 try:
-                    mail.Attachments.Add(att["stored_path"])
+                    mail.Attachments.Add(att_path)
                 except Exception:
                     pass
             mail.Save()
@@ -1378,21 +1519,28 @@ const locale = saved || 'en-US'
 
 - [ ] **Step 2: Add date columns to SC list**
 
-In `ScListView.vue` or `ScTable.vue`, add columns after the existing ones:
+In `ScTable.vue`, add `service_period_start` and `service_period_end` columns. Currently the SC table has no date columns. Add after the `sc_amount` column (or between `sc_amount` and `created_at`):
 
 ```vue
-<el-table-column prop="service_period_start" :label="$t('sc.startDate')" sortable="custom" width="120" />
-<el-table-column prop="service_period_end" :label="$t('sc.endDate')" sortable="custom" width="120" />
+<el-table-column prop="service_period_start" :label="$t('sc.startDate')" sortable="custom" width="120">
+  <template #default="{ row }">{{ formatDate(row.service_period_start) }}</template>
+</el-table-column>
+<el-table-column prop="service_period_end" :label="$t('sc.endDate')" sortable="custom" width="120">
+  <template #default="{ row }">{{ formatDate(row.service_period_end) }}</template>
+</el-table-column>
 ```
 
-- [ ] **Step 3: Add date columns to PO list**
+- [ ] **Step 3: Rename PO date column labels**
 
-In `PoListView.vue` or `PoTable.vue`, add:
+`PoTable.vue` already has `contract_from` and `contract_to` columns (lines 28-33). They currently use i18n keys `po.contractFrom` and `po.contractTo`. Change the column props to use `$t('po.startDate')` and `$t('po.contractEndDate')` respectively.
 
+Current code at line 28-33:
 ```vue
-<el-table-column prop="contract_from" :label="$t('po.startDate')" sortable="custom" width="120" />
-<el-table-column prop="contract_to" :label="$t('po.contractEndDate')" sortable="custom" width="130" />
+<el-table-column prop="contract_from" :label="$t('po.contractFrom')" width="120" sortable>
+<el-table-column prop="contract_to" :label="$t('po.contractTo')" width="120" sortable>
 ```
+
+Change `$t('po.contractFrom')` → `$t('po.startDate')` and `$t('po.contractTo')` → `$t('po.contractEndDate')`.
 
 - [ ] **Step 4: Update i18n keys**
 
