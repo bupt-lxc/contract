@@ -78,10 +78,7 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
                 # Auto-generate vendor_id if not provided: V + 6-digit sequence
                 vendor_id = data.get("vendor_id", "").strip()
                 if not vendor_id:
-                    row = conn.execute(
-                        "SELECT COALESCE(MAX(CAST(SUBSTR(vendor_id, 2) AS INTEGER)), 0) + 1 AS next_id FROM vendors"
-                    ).fetchone()
-                    vendor_id = f"V{row['next_id']:06d}"
+                    vendor_id = _generate_vendor_id(conn)
                 else:
                     # Verify vendor_id is not already taken
                     existing = conn.execute(
