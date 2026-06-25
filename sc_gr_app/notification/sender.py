@@ -256,19 +256,26 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     requester_id = entity_info.get("requester_id") or ""
     requester_name = resolve_user_name(conn, requester_id) if requester_id else ""
 
-    # Monthly summary: body and subject are pre-rendered and stored in app_settings
-    if entry["event_type"] == "monthly_summary":
-        body, subject = _get_monthly_content(conn, entry)
-    else:
-        subject = templates.build_subject(entry, entity_info)
-        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
-                                    actor_name=actor_name, requester_name=requester_name)
-
-    # Look up attachments for this entity
+    # Look up attachments — used for both display names and Outlook attachment files
     attachment_rows = conn.execute(
         "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
         (entity_type, entity_id),
     ).fetchall()
+    entity_info["_attachments"] = [r["filename"] for r in attachment_rows]
+
+    # Monthly summary: body and subject are pre-rendered and stored in app_settings
+    if entry["event_type"] == "monthly_summary":
+        body, subject = _get_monthly_content(conn, entry)
+    else:
+        subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
+        # Append daily sequence number
+        today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        seq = conn.execute(
+            "SELECT COUNT(*) + 1 FROM notification_queue WHERE date(created_at) = date('now')"
+        ).fetchone()[0]
+        subject = f"{subject}-{seq:03d}"
+        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
+                                    actor_name=actor_name, requester_name=requester_name)
 
     pythoncom.CoInitialize()
     try:

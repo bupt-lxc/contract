@@ -26,7 +26,6 @@ def check_custom_schedules(conn: sqlite3.Connection) -> int:
     """Check all active POs for custom schedule matches against today.
     Returns number of events queued.
     """
-    admin_recipients = cfg.get_admin_recipients(conn)
     today = date.today()
     timestamp = _utc_now()
     count = 0
@@ -56,7 +55,7 @@ def check_custom_schedules(conn: sqlite3.Connection) -> int:
 
         # Build recipients (same pattern as thresholds.py)
         requester_id = schedule["requester_id"]
-        to_ids = [requester_id] + admin_recipients
+        to_ids = [requester_id]
         to_ids = list(dict.fromkeys([uid for uid in to_ids if uid]))
 
         cc_ids = entity_config["cc_user_ids"] if entity_config else []

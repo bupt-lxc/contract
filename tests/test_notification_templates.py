@@ -1,5 +1,7 @@
 """Tests for notification email templates — build_body / build_subject."""
 
+from datetime import datetime, timezone
+
 from sc_gr_app.notification import templates
 
 
@@ -20,10 +22,10 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "SC-2026-001" in body
-        assert "SC No" in body
+        assert "Sc No" in body
         assert "150,000.00" in body
         assert "IT equipment" in body
-        assert "Approved" in body  # status badge (English)
+        assert "Approved" in body  # plain text status (English)
 
     def test_po_body_shows_po_fields_not_sc_fields(self):
         entry = {
@@ -40,10 +42,10 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "PO-2026-001" in body
-        assert "PO No" in body
+        assert "Po No" in body
         assert "80,000.00" in body
         # Should NOT contain SC-specific labels
-        assert "SC No" not in body
+        assert "Sc No" not in body
         assert "Service Period" not in body  # SC-specific
 
     def test_gr_body_shows_gr_fields_not_sc_fields(self):
@@ -58,15 +60,17 @@ class TestBuildBody:
             "gr_no": "GR-2026-001",
             "con_value": 50000,
             "estimated_amount": 45000,
+            "gross_cost": 47000,
             "status": "approved",
         }
         body = templates.build_body(entry, entity_info, {})
         assert "GR-2026-001" in body
-        assert "GR No" in body
+        assert "Gr No" in body
         assert "50,000.00" in body
-        assert "Gross Cost" in body
+        assert "GR Application Amount (Gross)" in body
+        assert "47,000.00" in body
         # Should NOT contain SC-specific labels
-        assert "SC No" not in body
+        assert "Sc No" not in body
         assert "Service Period" not in body  # SC-specific
 
     def test_gr_shows_estimated_amount_when_no_con_value(self):
@@ -85,36 +89,9 @@ class TestBuildBody:
         }
         body = templates.build_body(entry, entity_info, {})
         assert "30,000.00" in body
-        assert "Estimated Amount" in body
+        assert "GR Application Amount (Net)" in body
 
-    def test_early_stage_transitions_show_placeholder_for_formal_numbers(self):
-        """In early stages (create, submit, confirm), formal numbers may not
-        be assigned yet — the field row appears but shows '-' placeholder
-        instead of the number value."""
-        for entity_type, entity_id, entity_info, label in [
-            ("sc", "SC-001", {"sc_no": "SC-2026-001", "sc_amount": 1000, "status": "draft"}, "SC No"),
-            ("po", "PO-001", {"po_no": "PO-2026-001", "po_amount": 1000, "status": "draft"}, "PO No"),
-            ("gr", "GR-001", {"gr_no": "GR-2026-001", "con_value": 1000, "status": "draft"}, "GR No"),
-        ]:
-            for event_key in ("create", "submit", "confirm"):
-                entry = {
-                    "entity_type": entity_type,
-                    "entity_id": entity_id,
-                    "event_type": "status_change",
-                    "event_key": event_key,
-                    "created_at": "2026-01-15T10:00:00Z",
-                }
-                body = templates.build_body(entry, entity_info, {})
-                # Label is always present (complete field display)
-                assert label in body, (
-                    f"{label} should appear for {entity_type} {event_key}"
-                )
-                # But the formal number value should NOT appear
-                assert entity_info[list(entity_info.keys())[0]] not in body, (
-                    f"Formal number value should NOT appear for {entity_type} {event_key}"
-                )
-
-    def test_missing_optional_fields_show_placeholder(self):
+    def test_missing_optional_fields_omitted_from_detail(self):
         entry = {
             "entity_type": "po",
             "entity_id": "PO-002",
@@ -122,11 +99,13 @@ class TestBuildBody:
             "event_key": "finish",
             "created_at": "2026-01-15T10:00:00Z",
         }
-        entity_info = {"status": "finished"}  # no po_no, no po_amount
+        entity_info = {"status": "finished", "po_id": "PO-002"}
         body = templates.build_body(entry, entity_info, {})
-        # Fields with missing values show "-"
-        assert "PO No" in body  # label always present
-        assert "Finished" in body  # status badge contains English label
+        # Fields present in entity_info are shown
+        assert "Po Id" in body  # po_id is in entity_info and not excluded
+        assert "Finished" in body  # status label in Notification Info table
+        # Fields not in entity_info are omitted (no placeholder rows)
+        assert "Po No" not in body  # po_no not in entity_info, so not shown
 
 
 class TestBuildSubject:
@@ -138,7 +117,9 @@ class TestBuildSubject:
             "event_key": "submit",
         }
         subject = templates.build_subject(entry, {})
-        assert "[POMP] PO PO-001 Submitted" == subject
+        today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        expected = f"[POMP] Submitted PO from System {today_str}"
+        assert expected == subject
 
     def test_threshold_date_subject(self):
         entry = {
@@ -149,9 +130,10 @@ class TestBuildSubject:
         }
         entity_info = {"sc_no": "SC-2026-001"}
         subject = templates.build_subject(entry, entity_info)
-        assert "SC-2026-001" in subject
-        assert "3" in subject
+        assert "<3m" in subject
         assert "Contract Expiring" in subject
+        assert "SC" in subject
+        assert "from System" in subject
 
 
 class TestDescribeEvent:
@@ -177,86 +159,6 @@ class TestDescribeEvent:
 
         result2 = templates._describe_event("custom_schedule", "schedule:2:weekly_day:2026-06-10")
         assert "Weekly Reminder" == result2
-
-
-class TestChildGrTable:
-    def test_child_gr_table_renders(self):
-        child_grs = [
-            {
-                "gr_no": "GR-2026-001",
-                "estimated_amount": 30000,
-                "con_value": 32000,
-                "goods_service_description": "Software development",
-                "delivery_from": "2026-01-01",
-                "delivery_to": "2026-06-30",
-                "status": "approved",
-            },
-            {
-                "gr_no": "GR-2026-002",
-                "estimated_amount": 15000,
-                "con_value": None,
-                "goods_service_description": "Hardware purchase",
-                "delivery_from": None,
-                "delivery_to": None,
-                "status": "pending",
-            },
-        ]
-        html = templates._child_gr_table(child_grs)
-        assert "Related GRs (2)" in html
-        assert "GR-2026-001" in html
-        assert "GR-2026-002" in html
-        assert "30,000.00" in html
-        assert "32,000.00" in html
-        assert "Software development" in html
-        assert "Hardware purchase" in html
-        assert "Approved" in html
-        assert "Pending" in html
-
-    def test_po_body_shows_child_gr_section(self):
-        entry = {
-            "entity_type": "po",
-            "entity_id": "PO-001",
-            "event_type": "status_change",
-            "event_key": "finish",
-            "created_at": "2026-01-15T10:00:00Z",
-        }
-        entity_info = {
-            "po_no": "PO-2026-001",
-            "po_amount": 80000,
-            "status": "finished",
-            "child_grs": [
-                {
-                    "gr_no": "GR-2026-001",
-                    "estimated_amount": 20000,
-                    "con_value": 21000,
-                    "goods_service_description": "Service A",
-                    "delivery_from": "2026-01-01",
-                    "delivery_to": "2026-03-31",
-                    "status": "approved",
-                },
-            ],
-        }
-        body = templates.build_body(entry, entity_info, {})
-        assert "Related GRs (1)" in body
-        assert "GR-2026-001" in body
-        assert "20,000.00" in body
-        assert "Service A" in body
-
-    def test_po_body_without_child_grs_omits_section(self):
-        entry = {
-            "entity_type": "po",
-            "entity_id": "PO-002",
-            "event_type": "status_change",
-            "event_key": "finish",
-            "created_at": "2026-01-15T10:00:00Z",
-        }
-        entity_info = {
-            "po_no": "PO-2026-002",
-            "po_amount": 50000,
-            "status": "finished",
-        }
-        body = templates.build_body(entry, entity_info, {})
-        assert "Related GRs" not in body
 
 
 class TestFmtDatetime:

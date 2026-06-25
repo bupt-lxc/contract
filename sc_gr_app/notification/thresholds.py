@@ -25,7 +25,6 @@ def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
              AND po.po_amount IS NOT NULL"""
     ).fetchall()
 
-    admin_recipients = cfg.get_admin_recipients(conn)
     today = date.today()
     timestamp = _utc_now()
     date_count = 0
@@ -54,7 +53,7 @@ def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
         cc_ids = entity_config["cc_user_ids"] if entity_config else []
         requester_id = po["requester_id"]
 
-        to_ids = [requester_id] + admin_recipients
+        to_ids = [requester_id]
         to_ids = list(dict.fromkeys([uid for uid in to_ids if uid]))
 
         # Date check — use contract_to
