@@ -67,6 +67,18 @@
       <el-form-item :label="$t('sc.description')">
         <el-input v-model="form.description" type="textarea" :rows="3" />
       </el-form-item>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px">
+        <template #title>
+          <div>
+            <p style="margin:0 0 8px 0;line-height:1.6">
+              中文：如果需要采购遴选供应商，可在PO生成后再补充供应商信息。如不需要采购审核，需要填写经比价确定或唯一指定的供应商信息（请将比价证明或唯一指定证明材料作为附件上传）
+            </p>
+            <p style="margin:0;line-height:1.6;color:#64748b">
+              English: If procurement vendor selection is required, vendor information can be supplemented after PO creation. If procurement review is not required, please provide vendor information determined through price comparison or sole-source designation (please upload price comparison proof or sole-source designation documents as attachments)
+            </p>
+          </div>
+        </template>
+      </el-alert>
       <el-form-item :label="$t('sc.vendors')">
         <el-select
           v-model="form.vendor_ids"

@@ -669,13 +669,6 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 after = _get_sc(conn, sc_id)
                 _sync_sc_vendors(conn, sc_id, merged.get("vendor_ids"))
 
-                # At least one vendor must be associated
-                vendor_count = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
-                ).fetchone()["cnt"]
-                if vendor_count == 0:
-                    raise ValidationError("At least one vendor is required to submit the SC")
-
                 write_operation_record(
                     conn,
                     action_type="submit_sc",
