@@ -14,8 +14,7 @@
         <el-collapse class="vendor-collapse" :model-value="expandedNames">
           <el-collapse-item :name="v.vendor_id">
             <template #title>
-              <span class="vendor-title">{{ v.vendor_name }}</span>
-              <el-tag size="small" type="info" style="margin-left:8px">{{ v.vendor_id }}</el-tag>
+              <span class="vendor-title">{{ v.vendor_name }} - {{ v.company_name_cn || '-' }} - {{ v.vendor_id }} - {{ v.ksrm_vendor_code || '-' }}</span>
             </template>
             <div class="vendor-detail-grid">
               <div class="vendor-field" v-if="v.company_name_cn">

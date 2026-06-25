@@ -25,10 +25,10 @@
     <el-table-column prop="open_po_amount" :label="$t('po.openCon')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.open_po_amount" /></template>
     </el-table-column>
-    <el-table-column prop="contract_from" :label="$t('po.contractFrom')" width="120" sortable>
+    <el-table-column prop="contract_from" :label="$t('po.startDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_from) }}</template>
     </el-table-column>
-    <el-table-column prop="contract_to" :label="$t('po.contractTo')" width="120" sortable>
+    <el-table-column prop="contract_to" :label="$t('po.contractEndDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_to) }}</template>
     </el-table-column>
     <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120" sortable>

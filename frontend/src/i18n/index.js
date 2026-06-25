@@ -3,7 +3,7 @@ import enUS from './locales/en-US.js'
 import zhCN from './locales/zh-CN.js'
 
 const saved = localStorage.getItem('app-locale')
-const locale = saved || 'zh-CN'
+const locale = saved || 'en-US'
 
 const i18n = createI18n({
   legacy: false,

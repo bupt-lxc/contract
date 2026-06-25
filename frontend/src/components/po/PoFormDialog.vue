@@ -35,7 +35,7 @@
       </el-row>
       <el-form-item :label="$t('po.vendor')" prop="vendor_id">
         <el-select v-model="form.vendor_id" filterable>
-          <el-option v-for="v in vendors" :key="v.vendor_id" :label="`${v.vendor_name} — KSRM: ${v.ksrm_vendor_code || '-'}`" :value="v.vendor_id" />
+          <el-option v-for="v in vendors" :key="v.vendor_id" :label="`${v.vendor_name} - ${v.company_name_cn || '-'} - ${v.vendor_id} - ${v.ksrm_vendor_code || '-'}`" :value="v.vendor_id" />
         </el-select>
       </el-form-item>
       <el-row :gutter="16">
