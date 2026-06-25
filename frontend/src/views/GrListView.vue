@@ -10,6 +10,12 @@
       <el-button type="primary" @click="openCreateGrDialog">
         <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
       </el-button>
+      <el-button @click="importVisible = true">
+        <el-icon><Upload /></el-icon> Import
+      </el-button>
+      <el-button @click="downloadTemplate">
+        <el-icon><Download /></el-icon> Template
+      </el-button>
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
@@ -111,6 +117,31 @@
       @save="handleGrSave"
     />
 
+    <el-dialog v-model="importVisible" title="Import GR" width="500px">
+      <el-upload
+        :auto-upload="false"
+        :on-change="handleFileSelect"
+        :limit="1"
+        accept=".xlsx,.xls"
+        drag
+      >
+        <el-icon :size="40"><UploadFilled /></el-icon>
+        <div>Drop file here or click to upload</div>
+        <template #tip>
+          <div>Only .xlsx/.xls files</div>
+        </template>
+      </el-upload>
+      <div v-if="importResult" style="margin-top:12px">
+        <el-alert v-if="importResult.ok" type="success" :title="`Imported ${importResult.count} records`" closable @close="importResult = null" />
+        <el-alert v-else type="error" closable @close="importResult = null">
+          <div v-for="e in importResult.errors" :key="e.row">Row {{ e.row }}: {{ e.field }} - {{ e.message }}</div>
+        </el-alert>
+      </div>
+      <template #footer>
+        <el-button @click="importVisible = false">Cancel</el-button>
+      </template>
+    </el-dialog>
+
     <BatchProgressModal
       :visible="batchState.active"
       :title="batchTitle"
@@ -123,7 +154,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { useI18n } from 'vue-i18n'
 import { callApi } from '@/api/bridge.js'
 import { useGr } from '@/composables/useGr.js'
@@ -369,6 +401,42 @@ async function handleExport() {
   } finally {
     exporting.value = false
   }
+}
+
+// GR import
+const importVisible = ref(false)
+const importResult = ref(null)
+
+async function handleFileSelect(uploadFile) {
+  importResult.value = null
+  const file = uploadFile.raw
+  try {
+    const data = await file.arrayBuffer()
+    const wb = XLSX.read(data, { type: 'array' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+    importResult.value = await callApi('import_grs', { rows })
+    if (importResult.value.ok) {
+      importVisible.value = false
+      searchGrs()
+    }
+  } catch (e) {
+    importResult.value = { ok: false, errors: [{ row: '-', field: '', message: e.message }] }
+  }
+}
+
+async function downloadTemplate() {
+  const result = await callApi('download_gr_template')
+  const binary = atob(result.data)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = result.filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 onMounted(async () => {
