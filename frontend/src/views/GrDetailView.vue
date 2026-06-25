@@ -47,7 +47,7 @@
           <el-descriptions-item :label="$t('gr.confirmedAt')">{{ (gr.confirmed_at || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.created')">{{ gr.created_at?.slice(0, 19) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.created')">{{ (gr.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -72,7 +72,7 @@
         </div>
         <el-table :data="grOperationRecords" stripe border size="small">
           <el-table-column prop="created_at" :label="$t('record.created')" width="160">
-            <template #default="{ row }">{{ row.created_at?.slice(0, 19) }}</template>
+            <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) }}</template>
           </el-table-column>
           <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
           <el-table-column prop="object_type" :label="$t('record.object')" width="100" />

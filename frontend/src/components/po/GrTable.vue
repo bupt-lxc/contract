@@ -22,7 +22,7 @@
     </el-table-column>
     <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip sortable />
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
-      <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+      <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
     </el-table-column>
     <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>

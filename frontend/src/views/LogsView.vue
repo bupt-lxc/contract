@@ -14,7 +14,7 @@
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="created_at" :label="$t('record.created')" width="160" sortable="custom">
-        <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
+        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) }}</template>
       </el-table-column>
       <el-table-column prop="action_type" :label="$t('record.action')" width="150" />
       <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -78,7 +78,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
       { key: 'action_type', label: t('record.action') },
       { key: 'object_type', label: t('record.objectType') },
       { key: 'object_id', label: t('record.objectId') },
