@@ -27,7 +27,7 @@ export default {
     grList: '收货记录列表',
     grDetail: '收货记录详情',
     vendorList: '供应商列表',
-    auditLogs: '审计日志',
+    operationRecords: '操作记录',
     emailLogs: '邮件日志',
     emailSettings: '邮件通知设置',
     system: '系统'
@@ -116,7 +116,11 @@ export default {
     adminPanelDesc: '全部功能 & 系统管理',
     requesterPanel: '申请人面板',
     requesterPanelDesc: '申请 & 查看',
-    switchRole: '切换角色'
+    switchRole: '切换角色',
+    register: '注册',
+    machineId: '机器ID',
+    userName: '姓名',
+    email: '邮箱'
   },
 
 home: {
@@ -399,9 +403,9 @@ home: {
     userList: '用户列表'
   },
 
-  audit: {
-    auditLogs: '审计日志',
-    audit: '审计',
+  record: {
+    recordLogs: '操作记录',
+    record: '操作记录',
     action: '操作',
     object: '对象',
     objectType: '对象类型',
@@ -409,10 +413,11 @@ home: {
     operator: '操作者',
     machine: '机器',
     mode: '模式',
-    noRecords: '暂无审计日志。',
-    noRecordsInSc: '暂无审计记录。',
+    noRecords: '暂无操作记录。',
+    noRecordsInSc: '暂无操作记录。',
     changes: '变更详情',
     scId: 'SC ID',
+    created: '创建时间',
     exportSuccess: '导出成功',
     exportFailed: '导出失败'
   },

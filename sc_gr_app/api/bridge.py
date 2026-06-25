@@ -7,7 +7,7 @@ from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
 from sc_gr_app.services.record_service import format_timestamp, write_operation_record
-from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
+from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id, register_user
 
 
 def _require_payload_field(payload: dict, field: str):
@@ -96,6 +96,30 @@ class ApiBridge:
             return fail(PermissionDenied(f"Machine {machine_id} is not authorized"))
         except Exception as exc:
             return fail(exc)
+
+    def detect_machine_id(self, _payload=None) -> dict:
+        """Return the current machine ID. Works for unregistered machines."""
+        return ok(get_7_digit_id())
+
+    def register_user(self, payload) -> dict:
+        """Register a new user. No auth required — only for unregistered machines."""
+        try:
+            payload = self._required_payload(payload)
+            machine_id = get_7_digit_id()
+            user_name = _require_payload_field(payload, "user_name")
+            email = _require_payload_field(payload, "email")
+
+            # Verify this machine is NOT already registered
+            try:
+                get_user_by_machine_id(self.config, machine_id)
+                return fail(ValidationError("This machine is already registered."))
+            except PermissionDenied:
+                pass  # Expected — machine not registered yet
+
+            user = register_user(self.config, machine_id, user_name, email)
+            return ok(_format_entity_timestamps(user))
+        except ValidationError as e:
+            return fail(e)
 
     def _auto_create_dev_user(self, machine_id: str) -> dict:
         from sc_gr_app.db.connection import connect

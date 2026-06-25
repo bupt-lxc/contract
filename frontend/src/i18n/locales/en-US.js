@@ -27,7 +27,7 @@ export default {
     grList: 'GR List',
     grDetail: 'GR Detail',
     vendorList: 'Vendor List',
-    auditLogs: 'Audit Logs',
+    operationRecords: 'Operation Records',
     emailLogs: 'Email Logs',
     emailSettings: 'Email Settings',
     system: 'System'
@@ -116,7 +116,11 @@ export default {
     adminPanelDesc: 'Full access & system management',
     requesterPanel: 'Requester Panel',
     requesterPanelDesc: 'Submit & review requests',
-    switchRole: 'Switch role'
+    switchRole: 'Switch role',
+    register: 'Register',
+    machineId: 'Machine ID',
+    userName: 'Name',
+    email: 'Email'
   },
 
 home: {
@@ -399,9 +403,9 @@ home: {
     userList: 'User List'
   },
 
-  audit: {
-    auditLogs: 'Audit Logs',
-    audit: 'Audit',
+  record: {
+    recordLogs: 'Operation Records',
+    record: 'Operation Record',
     action: 'Action',
     object: 'Object',
     objectType: 'Object Type',
@@ -409,10 +413,11 @@ home: {
     operator: 'Operator',
     machine: 'Machine',
     mode: 'Mode',
-    noRecords: 'No audit logs found.',
-    noRecordsInSc: 'No audit records.',
+    noRecords: 'No operation records found.',
+    noRecordsInSc: 'No operation records.',
     changes: 'Changes',
     scId: 'SC ID',
+    created: 'Created',
     exportSuccess: 'Exported successfully',
     exportFailed: 'Export failed'
   },
