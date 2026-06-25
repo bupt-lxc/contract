@@ -765,6 +765,69 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def generate_email_draft(self, payload) -> dict:
+        """Generate email content for preview. Returns draft data."""
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entry_id = _require_payload_field(payload, "entry_id")
+
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    "SELECT * FROM notification_queue WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if not entry:
+                    return fail(NotFound(f"Queue entry {entry_id} not found"))
+                draft = sender.generate_draft(conn, dict(entry))
+                return ok(draft)
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
+    def open_email_draft_in_outlook(self, payload) -> dict:
+        """Generate email via Outlook COM and open in Outlook for manual send."""
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entry_id = _require_payload_field(payload, "entry_id")
+
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    "SELECT * FROM notification_queue WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if not entry:
+                    return fail(NotFound(f"Queue entry {entry_id} not found"))
+                draft = sender.generate_draft(conn, dict(entry))
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+
+            return ok({"message": "Draft opened in Outlook"})
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
     # ── Attachment APIs ──────────────────────────────────────────────
 
     def _attachments_dir(self) -> Path:

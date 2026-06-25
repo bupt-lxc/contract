@@ -447,7 +447,10 @@ home: {
     eventAmount: '金额',
     noRecords: '暂无邮件通知记录。',
     exportSuccess: '导出成功',
-    exportFailed: '导出失败'
+    exportFailed: '导出失败',
+    previewSend: '预览并发送',
+    openInOutlook: '在Outlook中打开',
+    autoSend: '自动'
   },
 
   notification: {

@@ -70,6 +70,18 @@
       <el-table-column prop="error_msg" :label="$t('email.error')" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ row.error_msg || '-' }}</template>
       </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="140" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            v-if="row.status === 'pending' && row.event_type === 'status_change'"
+            type="primary" link size="small"
+            @click="previewEntry = row; previewVisible = true"
+          >{{ $t('email.previewSend') }}</el-button>
+          <span v-else style="color:#94a3b8;font-size:12px">
+            {{ row.status === 'sent' ? $t('email.sent') : row.status === 'failed' ? $t('email.failed') : $t('email.autoSend') }}
+          </span>
+        </template>
+      </el-table-column>
       <template #empty><el-empty :description="state.queueError || $t('email.noRecords')" /></template>
     </el-table>
 
@@ -82,6 +94,8 @@
       @current-change="handlePageChange"
       style="margin-top:12px;justify-content:flex-end"
     />
+
+    <EmailPreviewDialog v-model="previewVisible" :entry-id="previewEntry?.id" @sent="loadQueue" />
   </div>
 </template>
 
@@ -89,6 +103,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download, ArrowLeft } from '@element-plus/icons-vue'
+import EmailPreviewDialog from '@/components/notification/EmailPreviewDialog.vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'
@@ -100,6 +115,8 @@ const { exportAll } = useExport()
 const pageSize = 50
 const currentPage = ref(1)
 const exporting = ref(false)
+const previewVisible = ref(false)
+const previewEntry = ref(null)
 
 const filters = reactive({
   status: '',

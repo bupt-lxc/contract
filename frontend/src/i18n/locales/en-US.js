@@ -447,7 +447,10 @@ home: {
     eventAmount: 'Amount',
     noRecords: 'No email notifications found.',
     exportSuccess: 'Exported successfully',
-    exportFailed: 'Export failed'
+    exportFailed: 'Export failed',
+    previewSend: 'Preview & Send',
+    openInOutlook: 'Open in Outlook',
+    autoSend: 'Auto'
   },
 
   notification: {
