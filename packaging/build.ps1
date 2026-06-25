@@ -171,6 +171,27 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 
 Write-Host "Pushed version $version to $sharedReleases" -ForegroundColor Green
 
+# 10. Release directory: non-versioned copy + history archive (for auto-update)
+if (Test-Path $guiPath) {
+    $releaseDir = Join-Path $distDir "release"
+    if (-not (Test-Path $releaseDir)) {
+        New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+    }
+
+    # Non-versioned installer (overwrite)
+    $nonVersioned = Join-Path $releaseDir "POMP_Setup.exe"
+    Copy-Item -Path $guiPath -Destination $nonVersioned -Force
+    Write-Host "Non-versioned installer: $nonVersioned" -ForegroundColor Green
+
+    # Versioned installer in history
+    $historyDir = Join-Path $releaseDir "history"
+    if (-not (Test-Path $historyDir)) {
+        New-Item -ItemType Directory -Path $historyDir -Force | Out-Null
+    }
+    Copy-Item -Path $guiPath -Destination (Join-Path $historyDir $guiInstaller) -Force
+    Write-Host "History installer: $historyDir\$guiInstaller" -ForegroundColor Green
+}
+
 $installerDir = Join-Path $distDir "installer"
 Write-Host "=== Done ===" -ForegroundColor Green
 Write-Host "App:    $distApp"
