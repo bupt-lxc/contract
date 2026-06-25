@@ -343,6 +343,7 @@ home: {
     vendor: 'Vendor',
     vendorId: 'Vendor ID',
     vendorName: 'Vendor Name',
+    vendorNameFull: 'Vendor Name (Full Name Required)',
     ksrmCode: 'KSRM Code',
     serviceScope: 'Service Scope',
     contact: 'Contact',

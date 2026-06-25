@@ -47,7 +47,6 @@ def test_create_and_search_vendor(app_config):
         app_config,
         current_user=USER,
         data={
-            "vendor_id": "V1",
             "vendor_name": "Alpha Logistics",
             "ksrm_vendor_code": "K001",
             "service_scope": "Transportation",
@@ -56,7 +55,7 @@ def test_create_and_search_vendor(app_config):
 
     results = search_vendors(app_config, text="alpha")
 
-    assert created["vendor_id"] == "V1"
+    assert created["vendor_id"] == "V000001"
     assert results[0]["vendor_name"] == "Alpha Logistics"
 
 
@@ -68,7 +67,6 @@ def test_vendor_creation_requires_authorized_role(app_config):
             app_config,
             current_user=UNAUTHORIZED,
             data={
-                "vendor_id": "V1",
                 "vendor_name": "Alpha Logistics",
                 "service_scope": "Transportation",
             },
@@ -84,7 +82,6 @@ def test_vendor_creation_validates_required_fields(app_config):
             app_config,
             current_user=USER,
             data={
-                "vendor_id": "V1",
                 "service_scope": "Transportation",
             },
         )
@@ -99,7 +96,6 @@ def test_vendor_creation_validates_service_scope(app_config):
             app_config,
             current_user=USER,
             data={
-                "vendor_id": "V1",
                 "vendor_name": "Alpha Logistics",
                 "service_scope": "Unsupported Scope",
             },
@@ -114,7 +110,6 @@ def test_vendor_write_is_audited(app_config):
         app_config,
         current_user=USER,
         data={
-            "vendor_id": "V1",
             "vendor_name": "Alpha Logistics",
             "service_scope": "Transportation",
         },
@@ -129,7 +124,7 @@ def test_vendor_write_is_audited(app_config):
         {
             "action_type": "create_vendor",
             "object_type": "vendor",
-            "object_id": "V1",
+            "object_id": "V000001",
             "sc_id": None,
         }
     ]

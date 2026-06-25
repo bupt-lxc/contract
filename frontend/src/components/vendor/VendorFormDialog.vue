@@ -15,13 +15,13 @@
     />
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
-        <el-col :span="12">
+        <el-col :span="12" v-if="mode === 'edit'">
           <el-form-item :label="$t('vendor.vendorId')" prop="vendor_id">
-            <el-input v-model="form.vendor_id" :disabled="mode === 'edit'" />
+            <el-input v-model="form.vendor_id" disabled />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item :label="$t('vendor.vendorName')" prop="vendor_name">
+          <el-form-item :label="mode === 'create' ? $t('vendor.vendorNameFull') : $t('vendor.vendorName')" prop="vendor_name">
             <el-input v-model="form.vendor_name" />
           </el-form-item>
         </el-col>
@@ -110,7 +110,6 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const rules = {
-  vendor_id: [{ required: true, message: t('vendor.vendorIdRequired'), trigger: 'blur' }],
   vendor_name: [{ required: true, message: t('vendor.vendorNameRequired'), trigger: 'blur' }],
   service_scope: [{ required: true, message: t('vendor.serviceScopeRequired'), trigger: 'change' }]
 }

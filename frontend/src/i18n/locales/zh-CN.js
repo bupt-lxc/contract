@@ -343,6 +343,7 @@ home: {
     vendor: '供应商',
     vendorId: '供应商ID',
     vendorName: '供应商名称',
+    vendorNameFull: '供应商名称（需全称）',
     ksrmCode: 'KSRM代码',
     serviceScope: '服务范围',
     contact: '联系人',
