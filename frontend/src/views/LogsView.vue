@@ -13,16 +13,16 @@
     </div>
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
-      <el-table-column prop="created_at" :label="$t('audit.created')" width="160" sortable="custom">
+      <el-table-column prop="created_at" :label="$t('record.created')" width="160" sortable="custom">
         <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
       </el-table-column>
-      <el-table-column prop="action_type" :label="$t('audit.action')" width="150" />
-      <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
-      <el-table-column prop="object_id" :label="$t('audit.objectId')" width="130" />
-      <el-table-column prop="sc_id" :label="$t('audit.scId')" width="130" />
-      <el-table-column prop="operator_id" :label="$t('audit.operator')" width="130" />
-      <el-table-column prop="machine_id" :label="$t('audit.machine')" min-width="130" />
-      <template #empty><el-empty :description="state.error || $t('audit.noRecords')" /></template>
+      <el-table-column prop="action_type" :label="$t('record.action')" width="150" />
+      <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+      <el-table-column prop="object_id" :label="$t('record.objectId')" width="130" />
+      <el-table-column prop="sc_id" :label="$t('record.scId')" width="130" />
+      <el-table-column prop="operator_id" :label="$t('record.operator')" width="130" />
+      <el-table-column prop="machine_id" :label="$t('record.machine')" min-width="130" />
+      <template #empty><el-empty :description="state.error || $t('record.noRecords')" /></template>
     </el-table>
 
     <el-pagination
@@ -53,13 +53,13 @@ const { t } = useI18n()
 const exporting = ref(false)
 
 const logsFilterConfig = [
-  { name: 'action_type', label: t('audit.action'), type: 'input' },
-  { name: 'object_type', label: t('audit.objectType'), type: 'input' },
-  { name: 'object_id', label: t('audit.objectId'), type: 'input' },
-  { name: 'sc_id', label: t('audit.scId'), type: 'input' },
-  { name: 'operator_id', label: t('audit.operator'), type: 'input' },
-  { name: 'machine_id', label: t('audit.machine'), type: 'input' },
-  { name: 'operation_mode', label: t('audit.mode'), type: 'input' },
+  { name: 'action_type', label: t('record.action'), type: 'input' },
+  { name: 'object_type', label: t('record.objectType'), type: 'input' },
+  { name: 'object_id', label: t('record.objectId'), type: 'input' },
+  { name: 'sc_id', label: t('record.scId'), type: 'input' },
+  { name: 'operator_id', label: t('record.operator'), type: 'input' },
+  { name: 'machine_id', label: t('record.machine'), type: 'input' },
+  { name: 'operation_mode', label: t('record.mode'), type: 'input' },
 ]
 
 function handleFilter({ text, filters }) {
@@ -78,22 +78,22 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'created_at', label: t('audit.created'), getValue: r => (r.created_at || '').slice(0, 19) },
-      { key: 'action_type', label: t('audit.action') },
-      { key: 'object_type', label: t('audit.objectType') },
-      { key: 'object_id', label: t('audit.objectId') },
-      { key: 'sc_id', label: t('audit.scId') },
-      { key: 'operator_id', label: t('audit.operator') },
-      { key: 'machine_id', label: t('audit.machine') }
+      { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'action_type', label: t('record.action') },
+      { key: 'object_type', label: t('record.objectType') },
+      { key: 'object_id', label: t('record.objectId') },
+      { key: 'sc_id', label: t('record.scId') },
+      { key: 'operator_id', label: t('record.operator') },
+      { key: 'machine_id', label: t('record.machine') }
     ]
-    await exportAll('search_audit_logs', {
+    await exportAll('search_operation_records', {
       filters: state.filters,
       sort: state.sort,
       direction: state.direction
-    }, columns, `Audit_Logs_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success(t('audit.exportSuccess'))
+    }, columns, `Operation_Records_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success(t('record.exportSuccess'))
   } catch (e) {
-    ElMessage.error(e.message || t('audit.exportFailed'))
+    ElMessage.error(e.message || t('record.exportFailed'))
   } finally {
     exporting.value = false
   }

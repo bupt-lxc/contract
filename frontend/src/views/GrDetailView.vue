@@ -68,18 +68,18 @@
 
       <div class="section-card">
         <div class="section-header">
-          <h3>{{ $t('audit.audit') }}</h3>
+          <h3>{{ $t('record.record') }}</h3>
         </div>
-        <el-table :data="grAuditLogs" stripe border size="small">
-          <el-table-column prop="created_at" :label="$t('audit.created')" width="160">
+        <el-table :data="grOperationRecords" stripe border size="small">
+          <el-table-column prop="created_at" :label="$t('record.created')" width="160">
             <template #default="{ row }">{{ row.created_at?.slice(0, 19) }}</template>
           </el-table-column>
-          <el-table-column prop="action_type" :label="$t('audit.action')" width="140" />
-          <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
-          <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
-          <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
-          <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
+          <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
+          <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+          <el-table-column prop="object_id" :label="$t('record.objectId')" width="120" />
+          <el-table-column prop="operator_id" :label="$t('record.operator')" width="120" />
+          <el-table-column prop="changes_summary" :label="$t('record.changes')" min-width="220" />
+          <template #empty><el-empty :description="$t('record.noRecordsInSc')" /></template>
         </el-table>
       </div>
     </template>
@@ -126,8 +126,8 @@ const gr = computed(() => {
   const allGrs = scDetail.value?.grs || []
   return allGrs.find(g => String(g.gr_id) === String(grId.value)) || {}
 })
-const grAuditLogs = computed(() => {
-  const logs = scDetail.value?.audit_logs || []
+const grOperationRecords = computed(() => {
+  const logs = scDetail.value?.operation_records || []
   return logs.filter(l => l.object_type === 'gr' && l.object_id === grId.value)
 })
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)

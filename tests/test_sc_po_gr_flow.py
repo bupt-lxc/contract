@@ -732,7 +732,7 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
         actions = [
             row["action_type"]
             for row in conn.execute(
-                "select action_type from audit_logs order by created_at"
+                "select action_type from operation_records order by created_at"
             )
         ]
 
@@ -1000,7 +1000,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     assert detail["budget"]["sc_amount"] == 1000
     assert [po["po_id"] for po in detail["pos"]] == [po_id]
     assert [gr["gr_id"] for gr in detail["grs"]] == [gr_id]
-    assert "create_sc" in [log["action_type"] for log in detail["audit_logs"]]
+    assert "create_sc" in [log["action_type"] for log in detail["operation_records"]]
     assert detail["permissions"] == {
         "is_admin": True,
         "can_edit_sc": True,
@@ -1338,7 +1338,7 @@ def test_po_update_approve_finish_are_audited(app_config):
         actions = [
             row["action_type"]
             for row in conn.execute(
-                "select action_type from audit_logs order by created_at"
+                "select action_type from operation_records order by created_at"
             )
         ]
 
@@ -1536,7 +1536,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
             for row in conn.execute(
                 """
                 select sc_id
-                from audit_logs
+                from operation_records
                 where action_type = 'update_gr' and object_id = ?
                 order by sc_id
                 """,
@@ -2071,7 +2071,7 @@ class TestTransferSc:
         transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
         with connect(app_config) as conn:
             row = conn.execute(
-                "SELECT * FROM audit_logs WHERE action_type = 'transfer_sc' AND object_id = ?",
+                "SELECT * FROM operation_records WHERE action_type = 'transfer_sc' AND object_id = ?",
                 (sc["sc_id"],),
             ).fetchone()
         assert row is not None

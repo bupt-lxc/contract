@@ -84,21 +84,21 @@
 
       <div class="section-card">
         <div class="section-header">
-          <h3>{{ $t('audit.audit') }}</h3>
+          <h3>{{ $t('record.record') }}</h3>
           <el-button size="small" @click="handleExportAudit">
             <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
         </div>
-        <el-table :data="detail.audit_logs || []" stripe border size="small">
-          <el-table-column prop="created_at" :label="$t('audit.created')" width="160">
+        <el-table :data="detail.operation_records || []" stripe border size="small">
+          <el-table-column prop="created_at" :label="$t('record.created')" width="160">
             <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
           </el-table-column>
-          <el-table-column prop="action_type" :label="$t('audit.action')" width="140" />
-          <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
-          <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
-          <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
-          <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
+          <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
+          <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+          <el-table-column prop="object_id" :label="$t('record.objectId')" width="120" />
+          <el-table-column prop="operator_id" :label="$t('record.operator')" width="120" />
+          <el-table-column prop="changes_summary" :label="$t('record.changes')" min-width="220" />
+          <template #empty><el-empty :description="$t('record.noRecordsInSc')" /></template>
         </el-table>
       </div>
 
@@ -409,15 +409,15 @@ async function handleExportPos() {
 
 async function handleExportAudit() {
   const columns = [
-    { key: 'created_at', label: t('audit.created'), getValue: r => (r.created_at || '').slice(0, 19) },
-    { key: 'action_type', label: t('audit.action') },
-    { key: 'object_type', label: t('audit.objectType') },
-    { key: 'object_id', label: t('audit.objectId') },
-    { key: 'operator_id', label: t('audit.operator') },
-    { key: 'machine_id', label: t('audit.machine') }
+    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+    { key: 'action_type', label: t('record.action') },
+    { key: 'object_type', label: t('record.objectType') },
+    { key: 'object_id', label: t('record.objectId') },
+    { key: 'operator_id', label: t('record.operator') },
+    { key: 'machine_id', label: t('record.machine') }
   ]
   const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
-  await exportRows(detail.value.audit_logs || [], columns, `${scNo}_Audit`)
+  await exportRows(detail.value.operation_records || [], columns, `${scNo}_Records`)
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 

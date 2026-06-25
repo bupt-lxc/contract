@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   last_delivery TEXT
 );
 
-CREATE TABLE IF NOT EXISTS audit_logs (
+CREATE TABLE IF NOT EXISTS operation_records (
   log_id TEXT PRIMARY KEY,
   action_type TEXT NOT NULL,
   object_type TEXT NOT NULL,
@@ -141,5 +141,5 @@ CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status);
 CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id);
 CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status);
-CREATE INDEX IF NOT EXISTS idx_audit_sc ON audit_logs(sc_id);
-CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_operation_records_sc ON operation_records(sc_id);
+CREATE INDEX IF NOT EXISTS idx_operation_records_created ON operation_records(created_at);

@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
@@ -215,7 +215,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ),
                 )
                 created = _get_po(conn, po_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_po",
                     object_type="po",
@@ -261,7 +261,7 @@ def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
             (timestamp, timestamp, po_id),
         )
         after = _get_po_or_raise(conn, po_id)
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="submit_po",
             object_type="po",
@@ -441,7 +441,7 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     ),
                 )
                 after = _get_po_or_raise(conn, po_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="update_po",
                     object_type="po",
@@ -492,7 +492,7 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     (timestamp, po_id),
                 )
                 after = _get_po_or_raise(conn, po_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="finish_po",
                     object_type="po",
@@ -559,7 +559,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     (timestamp, po_id),
                 )
                 after = _get_po_or_raise(conn, po_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="revoke_po",
                     object_type="po",
@@ -632,7 +632,7 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 conn.execute("DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?", (po_id,))
                 conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
 
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_po",
                     object_type="po",

@@ -117,7 +117,7 @@ def test_vendor_write_is_audited(app_config):
 
     with connect(app_config) as conn:
         rows = conn.execute(
-            "select action_type, object_type, object_id, sc_id from audit_logs"
+            "select action_type, object_type, object_id, sc_id from operation_records"
         ).fetchall()
 
     assert [dict(row) for row in rows] == [

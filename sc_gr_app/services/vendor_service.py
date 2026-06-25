@@ -7,7 +7,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ValidationError
 from sc_gr_app.rbac import require_requester_or_admin
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services.lock_service import LeaseLock
 
 
@@ -122,7 +122,7 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ),
                 )
                 created = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_vendor",
                     object_type="vendor",
@@ -190,7 +190,7 @@ def update_vendor(config: AppConfig, current_user: dict, vendor_id: str, data: d
                         )
 
                 after = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="update_vendor",
                     object_type="vendor",
@@ -223,7 +223,7 @@ def disable_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dic
                     (timestamp, vendor_id)
                 )
                 after = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="disable_vendor",
                     object_type="vendor",
@@ -261,7 +261,7 @@ def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict
                         f"Please delete the related POs first."
                     )
                 conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_vendor",
                     object_type="vendor",
@@ -520,7 +520,7 @@ def execute_import(
                         timestamp,
                     ),
                 )
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="import_vendor",
                     object_type="vendor",

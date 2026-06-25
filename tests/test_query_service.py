@@ -5,7 +5,7 @@ from sc_gr_app.errors import ValidationError
 from sc_gr_app.services.gr_service import approve_gr, create_gr
 from sc_gr_app.services.po_service import create_po
 from sc_gr_app.services.query_service import (
-    search_audit_logs,
+    search_operation_records,
     search_grs,
     search_pos,
     search_scs,
@@ -171,11 +171,11 @@ def test_search_grs_finds_by_remark(app_config):
     assert rows[0]["vendor_name"] == "Alpha Vendor"
 
 
-def test_search_audit_logs_returns_audit_rows(app_config):
+def test_search_operation_records_returns_audit_rows(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
-    rows = search_audit_logs(
+    rows = search_operation_records(
         app_config,
         filters={"object_type": "gr"},
         sort="action_type",
@@ -185,25 +185,25 @@ def test_search_audit_logs_returns_audit_rows(app_config):
     assert [row["action_type"] for row in rows] == ["approve_gr", "create_gr"]
 
 
-def test_search_audit_logs_searches_text_fields(app_config):
+def test_search_operation_records_searches_text_fields(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
-    assert search_audit_logs(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
-    assert search_audit_logs(app_config, text=gr_id.lower())[0]["object_id"] == gr_id
-    assert search_audit_logs(app_config, text="90")[0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text=gr_id.lower())[0]["object_id"] == gr_id
+    assert search_operation_records(app_config, text="90")[0]["action_type"] == "approve_gr"
 
 
-def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
+def test_search_operation_records_scopes_draft_sc_rows_to_owner(app_config):
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     draft_sc_id = created["sc_id"]
 
-    admin_rows = search_audit_logs(app_config, current_user=ADMIN, limit=100)
-    owner_rows = search_audit_logs(app_config, current_user=USER, limit=100)
-    other_rows = search_audit_logs(app_config, current_user=OTHER_USER, limit=100)
+    admin_rows = search_operation_records(app_config, current_user=ADMIN, limit=100)
+    owner_rows = search_operation_records(app_config, current_user=USER, limit=100)
+    other_rows = search_operation_records(app_config, current_user=OTHER_USER, limit=100)
 
     assert [row["object_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["object_id"] for row in owner_rows] == [draft_sc_id]
@@ -217,7 +217,7 @@ def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
         (search_vendors, {"unknown": "Alpha Vendor"}),
         (search_pos, {"bad_filter": "PO1"}),
         (search_grs, {"vendor_name": "Alpha Vendor"}),
-        (search_audit_logs, {"before_json": "{}"}),
+        (search_operation_records, {"before_json": "{}"}),
     ],
 )
 def test_invalid_filter_name_raises_validation_error(app_config, search_func, filters):

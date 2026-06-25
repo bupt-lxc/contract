@@ -7,10 +7,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from sc_gr_app.config import default_config
 from sc_gr_app.services import (
     user_service, vendor_service, sc_service, po_service,
-    gr_service, notification_service, budget_service, audit_service
+    gr_service, notification_service, budget_service, record_service
 )
 from sc_gr_app.services.query_service import (
-    search_scs, search_pos, search_grs, search_vendors, search_audit_logs
+    search_scs, search_pos, search_grs, search_vendors, search_operation_records
 )
 
 config = default_config()
@@ -309,7 +309,7 @@ except Exception as e:
 # ============================================
 hr('Section 7: Audit Logs')
 # ============================================
-log_rows = search_audit_logs(config, filters={})
+log_rows = search_operation_records(config, filters={})
 check('7.1 Audit logs', len(log_rows) > 0, f'{len(log_rows)} entries')
 actions = [l.get('action_type') for l in log_rows[:40]]
 expected = ['create_sc','submit_sc','approve_sc','close_sc','deny_sc',
@@ -426,4 +426,4 @@ print(f'    POs: {len(search_pos(config,filters={}))}')
 print(f'    GRs: {len(search_grs(config,filters={}))}')
 print(f'    Vendors: {len(search_vendors(config,filters={}))}')
 print(f'    Active Users: {len(user_service.list_active_users(config))}')
-print(f'    Audit Logs: {len(search_audit_logs(config,filters={}))}')
+print(f'    Audit Logs: {len(search_operation_records(config,filters={}))}')
