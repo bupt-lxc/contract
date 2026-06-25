@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import format_timestamp, write_operation_record
 from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
 
 
@@ -27,6 +27,26 @@ def _attachment_sc_id(entity_type: str, entity_id: str,
     if entity_type == "gr":
         return parent_sc_id or None
     return None
+
+
+def _format_entity_timestamps(entity: dict) -> dict:
+    """Format timestamp fields in an entity dict for display."""
+    _TIMESTAMP_FIELDS = (
+        "created_at", "updated_at", "pending_date", "approved_date",
+        "closed_at", "cancelled_at", "confirmed_at", "activing_date",
+        "approved_at", "sent_at",
+    )
+    for f in _TIMESTAMP_FIELDS:
+        if f in entity and entity[f]:
+            entity[f] = format_timestamp(entity[f])
+    return entity
+
+
+def _format_list_timestamps(items: list) -> list:
+    """Format timestamps in each entity of a list."""
+    if not items:
+        return items
+    return [_format_entity_timestamps(item) for item in items]
 
 
 class ApiBridge:
@@ -61,18 +81,18 @@ class ApiBridge:
                 )
                 conn.commit()
             user = get_user_by_machine_id(self.config, machine_id)
-            return ok(user)
+            return ok(_format_entity_timestamps(user))
         except Exception as exc:
             return fail(exc)
 
     def current_user(self, payload=None) -> dict:
         try:
             machine_id = get_7_digit_id()
-            return ok(get_user_by_machine_id(self.config, machine_id))
+            return ok(_format_entity_timestamps(get_user_by_machine_id(self.config, machine_id)))
         except PermissionDenied:
             machine_id = get_7_digit_id()
             if os.getenv("SC_GR_DEV") == "1":
-                return ok(self._auto_create_dev_user(machine_id))
+                return ok(_format_entity_timestamps(self._auto_create_dev_user(machine_id)))
             return fail(PermissionDenied(f"Machine {machine_id} is not authorized"))
         except Exception as exc:
             return fail(exc)
@@ -122,7 +142,15 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.get_sc_detail(self.config, current_user, sc_id))
+            result = sc_service.get_sc_detail(self.config, current_user, sc_id)
+            if isinstance(result, dict):
+                for key in ("sc",):
+                    if key in result:
+                        result[key] = _format_entity_timestamps(result[key])
+                for key in ("pos", "grs", "operation_records"):
+                    if key in result:
+                        result[key] = _format_list_timestamps(result[key])
+            return ok(result)
         except Exception as exc:
             return fail(exc)
 
@@ -131,7 +159,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.create_sc_draft(self.config, current_user, data))
+            return ok(_format_entity_timestamps(sc_service.create_sc_draft(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -141,7 +169,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.submit_sc(self.config, current_user, sc_id, data))
+            return ok(_format_entity_timestamps(sc_service.submit_sc(self.config, current_user, sc_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -151,7 +179,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.update_sc(self.config, current_user, sc_id, data))
+            return ok(_format_entity_timestamps(sc_service.update_sc(self.config, current_user, sc_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -161,7 +189,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             cascade_pos = payload.get("cascade_pos", False)
-            return ok(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos))
+            return ok(_format_entity_timestamps(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)))
         except Exception as exc:
             return fail(exc)
 
@@ -170,7 +198,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.deny_sc(self.config, current_user, sc_id))
+            return ok(_format_entity_timestamps(sc_service.deny_sc(self.config, current_user, sc_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -179,7 +207,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.close_sc(self.config, current_user, sc_id))
+            return ok(_format_entity_timestamps(sc_service.close_sc(self.config, current_user, sc_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -189,7 +217,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.confirm_sc(self.config, current_user, sc_id))
+            return ok(_format_entity_timestamps(sc_service.confirm_sc(self.config, current_user, sc_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -199,7 +227,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.revoke_sc(self.config, current_user, sc_id))
+            return ok(_format_entity_timestamps(sc_service.revoke_sc(self.config, current_user, sc_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -220,7 +248,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             new_requester_id = _require_payload_field(payload, "new_requester_id")
-            return ok(sc_service.transfer_sc(self.config, current_user, sc_id, new_requester_id))
+            return ok(_format_entity_timestamps(sc_service.transfer_sc(self.config, current_user, sc_id, new_requester_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -229,7 +257,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(po_service.create_po(self.config, current_user, data))
+            return ok(_format_entity_timestamps(po_service.create_po(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -239,7 +267,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             data = _require_payload_field(payload, "data")
-            return ok(po_service.update_po(self.config, current_user, po_id, data))
+            return ok(_format_entity_timestamps(po_service.update_po(self.config, current_user, po_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -248,7 +276,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.finish_po(self.config, current_user, po_id))
+            return ok(_format_entity_timestamps(po_service.finish_po(self.config, current_user, po_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -258,7 +286,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.submit_po(self.config, current_user, po_id))
+            return ok(_format_entity_timestamps(po_service.submit_po(self.config, current_user, po_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -268,7 +296,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.revoke_po(self.config, current_user, po_id))
+            return ok(_format_entity_timestamps(po_service.revoke_po(self.config, current_user, po_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -287,7 +315,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(gr_service.create_gr(self.config, current_user, data))
+            return ok(_format_entity_timestamps(gr_service.create_gr(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -297,7 +325,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             data = _require_payload_field(payload, "data")
-            return ok(gr_service.update_gr(self.config, current_user, gr_id, data))
+            return ok(_format_entity_timestamps(gr_service.update_gr(self.config, current_user, gr_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -307,7 +335,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             con_value = payload.get("con_value")  # optional — auto-calculated from tax_rate if omitted
-            return ok(gr_service.approve_gr(self.config, current_user, gr_id, con_value))
+            return ok(_format_entity_timestamps(gr_service.approve_gr(self.config, current_user, gr_id, con_value)))
         except Exception as exc:
             return fail(exc)
 
@@ -316,7 +344,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+            return ok(_format_entity_timestamps(gr_service.cancel_gr(self.config, current_user, gr_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -326,7 +354,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.confirm_gr(self.config, current_user, gr_id))
+            return ok(_format_entity_timestamps(gr_service.confirm_gr(self.config, current_user, gr_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -336,7 +364,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.submit_gr(self.config, current_user, gr_id))
+            return ok(_format_entity_timestamps(gr_service.submit_gr(self.config, current_user, gr_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -346,7 +374,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.revoke_gr(self.config, current_user, gr_id))
+            return ok(_format_entity_timestamps(gr_service.revoke_gr(self.config, current_user, gr_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -364,7 +392,15 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             current_user = self._require_current_user()
-            return ok(query_service.workbench_data(self.config, current_user))
+            result = query_service.workbench_data(self.config, current_user)
+            # Format timestamps in workbench rows (e.g., gr.created_at)
+            for category in ("sc", "po", "gr"):
+                if category in result:
+                    for status_key in result[category]:
+                        result[category][status_key]["rows"] = _format_list_timestamps(
+                            result[category][status_key]["rows"]
+                        )
+            return ok(result)
         except Exception as exc:
             return fail(exc)
 
@@ -373,7 +409,7 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_scs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_scs(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -381,7 +417,7 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             self._require_current_user()
-            return ok(query_service.search_vendors(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_vendors(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -390,7 +426,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(vendor_service.create_vendor(self.config, current_user, data))
+            return ok(_format_entity_timestamps(vendor_service.create_vendor(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -400,7 +436,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             vendor_id = _require_payload_field(payload, "vendor_id")
             data = _require_payload_field(payload, "data")
-            return ok(vendor_service.update_vendor(self.config, current_user, vendor_id, data))
+            return ok(_format_entity_timestamps(vendor_service.update_vendor(self.config, current_user, vendor_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -499,7 +535,7 @@ class ApiBridge:
         try:
             self._require_current_user()
             from sc_gr_app.services.user_service import list_active_users
-            return ok(list_active_users(self.config))
+            return ok(_format_list_timestamps(list_active_users(self.config)))
         except Exception as exc:
             return fail(exc)
 
@@ -509,7 +545,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             from sc_gr_app.services.user_service import create_user
-            return ok(create_user(self.config, current_user, data))
+            return ok(_format_entity_timestamps(create_user(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -520,7 +556,7 @@ class ApiBridge:
             machine_id = _require_payload_field(payload, "machine_id")
             data = _require_payload_field(payload, "data")
             from sc_gr_app.services.user_service import update_user
-            return ok(update_user(self.config, current_user, machine_id, data))
+            return ok(_format_entity_timestamps(update_user(self.config, current_user, machine_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -530,7 +566,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             machine_id = _require_payload_field(payload, "machine_id")
             from sc_gr_app.services.user_service import disable_user
-            return ok(disable_user(self.config, current_user, machine_id))
+            return ok(_format_entity_timestamps(disable_user(self.config, current_user, machine_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -539,7 +575,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             machine_id = _require_payload_field(payload, "machine_id")
-            return ok(enable_user(self.config, current_user, machine_id))
+            return ok(_format_entity_timestamps(enable_user(self.config, current_user, machine_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -548,7 +584,7 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_pos(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_pos(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -557,16 +593,16 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_grs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_grs(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
-    def search_audit_logs(self, payload=None) -> dict:
+    def search_operation_records(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_audit_logs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_operation_records(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -606,7 +642,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(notification_service.get_po_custom_schedules(self.config, po_id))
+            return ok(_format_list_timestamps(notification_service.get_po_custom_schedules(self.config, po_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -691,7 +727,7 @@ class ApiBridge:
         try:
             payload = self._payload(payload) or {}
             current_user = self._require_current_user()
-            return ok(notification_service.list_notification_queue(
+            result = notification_service.list_notification_queue(
                 self.config,
                 sc_id=payload.get("sc_id"),
                 status=payload.get("status"),
@@ -699,7 +735,9 @@ class ApiBridge:
                 entity_id=payload.get("entity_id"),
                 limit=payload.get("limit", 50),
                 offset=payload.get("offset", 0),
-            ))
+            )
+            result["items"] = _format_list_timestamps(result["items"])
+            return ok(result)
         except Exception as exc:
             return fail(exc)
 
@@ -851,7 +889,7 @@ class ApiBridge:
                         "created_at": timestamp,
                     }
                     results.append(attach_record)
-                    write_audit_log(
+                    write_operation_record(
                         conn,
                         action_type="add_attachment",
                         object_type="attachment",
@@ -962,7 +1000,7 @@ class ApiBridge:
                         "created_at": timestamp,
                     }
                     results.append(attach_record)
-                    write_audit_log(
+                    write_operation_record(
                         conn,
                         action_type="add_attachment",
                         object_type="attachment",
@@ -994,7 +1032,7 @@ class ApiBridge:
                     "ORDER BY created_at DESC",
                     (entity_type, entity_id),
                 ).fetchall()
-            return ok([{
+            return ok(_format_list_timestamps([{
                 "id": r["id"],
                 "entity_type": r["entity_type"],
                 "entity_id": r["entity_id"],
@@ -1002,7 +1040,7 @@ class ApiBridge:
                 "file_size": r["file_size"],
                 "created_by": r["created_by"],
                 "created_at": r["created_at"],
-            } for r in rows])
+            } for r in rows]))
         except Exception as exc:
             return fail(exc)
 
@@ -1052,7 +1090,7 @@ class ApiBridge:
                     "created_by": row["created_by"],
                     "created_at": row["created_at"],
                 }
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_attachment",
                     object_type="attachment",
