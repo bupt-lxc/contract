@@ -1156,3 +1156,92 @@ class ApiBridge:
             return ok({"opened": True})
         except Exception as exc:
             return fail(exc)
+
+    def import_scs(self, payload) -> dict:
+        """Import SC records from Excel rows."""
+        try:
+            from sc_gr_app.services import import_service
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            result = import_service.import_scs(self.config, user, rows)
+            return ok(result)
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def download_sc_template(self, _payload=None) -> dict:
+        """Return SC import template as base64-encoded xlsx data."""
+        import io
+        import base64
+        import zipfile
+
+        headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
+                   "sc_amount", "service_period_start", "service_period_end", "status",
+                   "description", "currency", "internal_system_number"]
+        hints = ["Required", "Optional (auto-generated if empty)", "Required (user ID)",
+                 "material/service/fixed_asset/FC", "Cost center number",
+                 "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
+                 "draft/pending/approved/closed/denied/manager_confirm", "Optional",
+                 "CNY/EUR/USD", "Optional (FC only)"]
+
+        def _col_letter(i):
+            """Convert 0-based column index to Excel column letter(s)."""
+            s = ""
+            n = i
+            while n >= 0:
+                s = chr(ord('A') + n % 26) + s
+                n = n // 26 - 1
+            return s
+
+        # Build inlineStr cells for header and hint rows
+        def _inline_str_cell(col, row_num, text):
+            ref = f"{_col_letter(col)}{row_num}"
+            return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
+
+        def _xml_escape(s):
+            return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+
+        sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">{header_cells}</row>
+    <row r="2">{hint_cells}</row>
+  </sheetData>
+</worksheet>"""
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                '</Types>')
+            zf.writestr("_rels/.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/workbook.xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="SC Import" sheetId="1" r:id="rId1"/></sheets>'
+                '</workbook>')
+            zf.writestr("xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode("ascii")
+        return ok({"filename": "SC_Import_Template.xlsx", "data": b64})
