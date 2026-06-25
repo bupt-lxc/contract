@@ -214,6 +214,7 @@ home: {
     transferOwnerHint: '将 {no} 的所有者从 {old} 转移给：',
     selectNewOwner: '选择新所有者',
     ownerTransferred: '所有者已转移',
+    currency: '货币',
   },
 
   po: {

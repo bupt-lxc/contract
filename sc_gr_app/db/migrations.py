@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1034,6 +1034,15 @@ def _migrate_v25(conn) -> None:
     _record(conn, 25)
 
 
+def _migrate_v26(conn) -> None:
+    """Add currency column to sc_records."""
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "currency" not in existing:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'")
+    _record(conn, 26)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1169,6 +1178,10 @@ def migrate(config: AppConfig) -> None:
             if 25 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v25(conn)
+                conn.commit()
+            if 26 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v26(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

@@ -214,6 +214,7 @@ home: {
     transferOwnerHint: 'Transfer ownership of {no} from {old} to:',
     selectNewOwner: 'Select new owner',
     ownerTransferred: 'Owner transferred',
+    currency: 'Currency',
   },
 
   po: {

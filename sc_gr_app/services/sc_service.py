@@ -38,6 +38,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "asset",
     "asset_nums",
     "internal_system_number",
+    "currency",
     "vendor_ids",
 )
 _VENDOR_SNAPSHOT_FIELDS = (
@@ -459,8 +460,9 @@ def create_sc(
                       asset_nums,
                       pending_date,
                       approved_date,
-                      internal_system_number
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      internal_system_number,
+                      currency
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -484,6 +486,7 @@ def create_sc(
                         timestamp,
                         timestamp if status == "approved" else None,
                         data.get("internal_system_number"),
+                        data.get("currency", "CNY"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -546,8 +549,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       asset_nums,
                       pending_date,
                       approved_date,
-                      internal_system_number
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      internal_system_number,
+                      currency
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -575,6 +579,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         None,
                         data.get("internal_system_number"),
+                        data.get("currency", "CNY"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -634,6 +639,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         description = ?,
                         asset = ?,
                         asset_nums = ?,
+                        currency = ?,
                         status = 'manager_confirm',
                         updated_at = ?
                     where sc_id = ?
@@ -648,6 +654,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("description"),
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
+                        merged.get("currency", "CNY"),
                         timestamp,
                         sc_id,
                     ),
@@ -774,6 +781,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset = ?,
                         asset_nums = ?,
                         internal_system_number = ?,
+                        currency = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -792,6 +800,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset"),
                         merged.get("asset_nums"),
                         merged.get("internal_system_number"),
+                        merged.get("currency"),
                         timestamp,
                         sc_id,
                     ),

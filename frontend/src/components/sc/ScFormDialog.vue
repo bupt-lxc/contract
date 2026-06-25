@@ -43,6 +43,17 @@
       </el-row>
       <el-row :gutter="16">
         <el-col :span="12">
+          <el-form-item :label="$t('sc.currency')" prop="currency">
+            <el-select v-model="form.currency">
+              <el-option label="¥ CNY" value="CNY" />
+              <el-option label="€ EUR" value="EUR" />
+              <el-option label="$ USD" value="USD" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
           <el-form-item :label="$t('sc.servicePeriodStart')" prop="service_period_start">
             <el-date-picker v-model="form.service_period_start" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
@@ -156,7 +167,8 @@ const emptyForm = () => ({
   vendor_ids: [],
   asset: 'N',
   asset_nums: '',
-  internal_system_number: ''
+  internal_system_number: '',
+  currency: 'CNY'
 })
 
 const form = reactive(emptyForm())
