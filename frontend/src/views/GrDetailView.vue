@@ -26,7 +26,7 @@
           <el-descriptions-item :label="$t('gr.grId')">{{ gr.gr_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.grNo')">{{ gr.gr_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.status')"><StatusBadge :status="gr.status" /></el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.requesterId')">{{ gr.requester_id }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.requesterId')">{{ gr.requester_name || gr.requester_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.poNo')">
             <router-link :to="`/sc/${scId}/po/${gr.po_id}`">{{ po.po_no || gr.po_id }}</router-link>
           </el-descriptions-item>

@@ -494,11 +494,13 @@ def search_grs(
           po.sc_id,
           sc.sc_no,
           vendor.vendor_id,
-          vendor.vendor_name
+          vendor.vendor_name,
+          requester.user_name as requester_name
         from gr_requests gr
         join pos po on po.po_id = gr.po_id
         join sc_records sc on sc.sc_id = po.sc_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
+        left join users requester on requester.user_id = gr.requester_id
         """,
         text=text,
         text_columns=(

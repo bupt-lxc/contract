@@ -31,7 +31,7 @@
             <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
           </el-descriptions-item>
           <el-descriptions-item :label="$t('sc.scNo')">{{ scDetail.sc?.sc_no || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_name || scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
           <el-descriptions-item />
           <el-descriptions-item :label="$t('po.poId')">{{ po.po_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poNo')">{{ po.po_no || '-' }}</el-descriptions-item>
