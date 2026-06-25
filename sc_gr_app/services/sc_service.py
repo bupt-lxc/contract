@@ -26,6 +26,7 @@ REQUIRED_FIELDS = (
     "service_period_end",
 )
 SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
+SUPPORTED_CURRENCIES = {"CNY", "EUR", "USD"}
 SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "closed"}
 OPTIONAL_UPDATE_FIELDS = (
     "sc_no",
@@ -120,6 +121,9 @@ def _require_submit_fields(data: dict) -> None:
     _require_fields(data, REQUIRED_BUSINESS_FIELDS)
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
+    currency = data.get("currency", "CNY")
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
     _positive_number(data["sc_amount"], "sc_amount")
     _validate_service_period(data)
 
@@ -418,6 +422,9 @@ def create_sc(
     _require_fields(data, REQUIRED_FIELDS)
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
+    currency = data.get("currency", "CNY")
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
     sc_amount = _positive_number(data["sc_amount"], "sc_amount")
 
     if operation_mode == "normal":
@@ -757,6 +764,11 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     and merged["request_type"] not in SUPPORTED_REQUEST_TYPES
                 ):
                     raise ValidationError("request_type is invalid")
+                if (
+                    merged.get("currency") not in (None, "")
+                    and merged["currency"] not in SUPPORTED_CURRENCIES
+                ):
+                    raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
                 if merged.get("sc_amount") not in (None, ""):
                     _positive_number(merged["sc_amount"], "sc_amount")
                 _validate_service_period(merged)
