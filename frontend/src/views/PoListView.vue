@@ -334,17 +334,14 @@ async function handleFileSelect(uploadFile) {
 }
 
 async function downloadTemplate() {
-  const result = await callApi('download_po_template')
-  const binary = atob(result.data)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = result.filename
-  a.click()
-  URL.revokeObjectURL(url)
+  try {
+    const result = await callApi('download_po_template')
+    const saveResult = await callApi('save_file', { filename: result.filename, data: result.data })
+    if (saveResult?.cancelled) return
+    ElMessage.success('Template downloaded')
+  } catch (e) {
+    ElMessage.error(e.message || 'Failed to download template')
+  }
 }
 
 onMounted(async () => {
