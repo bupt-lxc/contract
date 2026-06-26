@@ -1269,11 +1269,15 @@ class ApiBridge:
         headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
                    "description", "currency", "internal_system_number"]
-        hints = ["Required", "Optional (auto-generated if empty)", "Required (user ID)",
+        hints = ["Optional (auto-generated if empty)", "Optional",
+                 "Required (user ID)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "draft/pending/approved/closed/denied/manager_confirm", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)"]
+        sample = ["[EXAMPLE]", "", "U-0000000", "material", "12345",
+                  "50000", "2026-01-01", "2026-12-31", "draft",
+                  "Sample SC description", "CNY", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1284,7 +1288,7 @@ class ApiBridge:
                 n = n // 26 - 1
             return s
 
-        # Build inlineStr cells for header and hint rows
+        # Build inlineStr cells for header, hint, and sample rows
         def _inline_str_cell(col, row_num, text):
             ref = f"{_col_letter(col)}{row_num}"
             return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
@@ -1294,12 +1298,14 @@ class ApiBridge:
 
         header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
         hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData>
     <row r="1">{header_cells}</row>
     <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 
@@ -1359,11 +1365,15 @@ class ApiBridge:
                    "po_amount", "status", "contract_from", "contract_to", "contract_no",
                    "payment_frequency", "contract_pos", "contract_type", "cost_center",
                    "purchaser"]
-        hints = ["Required", "Required (must exist)", "Optional (must exist if provided)",
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                 "Optional (must exist if provided)",
                  "Optional", "Optional", "Required",
                  "draft/activing/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
+        sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
+                  "50000", "draft", "2026-01-01", "2026-12-31", "",
+                  "monthly", "", "", "", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1383,12 +1393,14 @@ class ApiBridge:
 
         header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
         hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData>
     <row r="1">{header_cells}</row>
     <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 
@@ -1448,11 +1460,16 @@ class ApiBridge:
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
                    "delivery_from", "delivery_to", "last_delivery"]
-        hints = ["Required", "Required (must exist)", "Optional", "Optional",
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                 "Optional", "Optional",
                  "Required", "Optional",
                  "draft/manager_confirm/pending/approved/cancelled", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
                  "YYYY-MM-DD", "YYYY-MM-DD", "YYYY-MM-DD"]
+        sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
+                  "10000", "", "draft", "", "13",
+                  "", "Sample goods description", "",
+                  "2026-01-01", "2026-12-31", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1472,12 +1489,14 @@ class ApiBridge:
 
         header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
         hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData>
     <row r="1">{header_cells}</row>
     <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 

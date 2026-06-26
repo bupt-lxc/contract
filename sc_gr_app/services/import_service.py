@@ -14,11 +14,71 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _generate_sc_id(conn, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"SC-{machine_id}-{today}-%"
+    row = conn.execute(
+        "SELECT sc_id FROM sc_records WHERE sc_id LIKE ? ORDER BY sc_id DESC LIMIT 1",
+        (pattern,),
+    ).fetchone()
+    if row:
+        last_seq = int(row["sc_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"SC-{machine_id}-{today}-{seq:03d}"
+
+
+def _generate_po_id(conn, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"PO-{machine_id}-{today}-%"
+    row = conn.execute(
+        "SELECT po_id FROM pos WHERE po_id LIKE ? ORDER BY po_id DESC LIMIT 1",
+        (pattern,),
+    ).fetchone()
+    if row:
+        last_seq = int(row["po_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"PO-{machine_id}-{today}-{seq:03d}"
+
+
+def _generate_gr_id(conn, machine_id: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    pattern = f"GR-{machine_id}-{today}-%"
+    row = conn.execute(
+        "SELECT gr_id FROM gr_requests WHERE gr_id LIKE ? ORDER BY gr_id DESC LIMIT 1",
+        (pattern,),
+    ).fetchone()
+    if row:
+        last_seq = int(row["gr_id"].rsplit("-", 1)[-1])
+        seq = last_seq + 1
+    else:
+        seq = 1
+    return f"GR-{machine_id}-{today}-{seq:03d}"
+
+
+def _is_template_meta_row(row: dict, id_field: str) -> bool:
+    """Check if this is a template meta row (hint or sample) that should be skipped."""
+    val = row.get(id_field, "").strip()
+    if val == "[EXAMPLE]":
+        return True
+    # Hint rows have ID values that look like instructions rather than real IDs.
+    # Real IDs are empty, alphanumeric+hyphens, or match the format XX-NNNNNNN-NNNNNNNN-NNN.
+    # Hint text (like "Optional (auto-generated...)") contains spaces and parens.
+    if " " in val or "(" in val:
+        return True
+    return False
+
+
 def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all SC rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        for field in ["sc_id", "requester_id", "sc_amount", "status"]:
+        if _is_template_meta_row(row, "sc_id"):
+            continue
+        for field in ["requester_id", "sc_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -30,19 +90,19 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "requester_id", "message": f"User {row['requester_id']} not found"})
-        if row.get("sc_id"):
-            exists = conn.execute(
-                "SELECT 1 FROM sc_records WHERE sc_id = ?", (row["sc_id"],)
-            ).fetchone()
-            if exists:
-                errors.append({"row": i, "field": "sc_id", "message": f"SC {row['sc_id']} already exists"})
     return errors
 
 
 def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
-    """Import SC records with direct status writes."""
+    """Import SC records with direct status writes.
+
+    ID fields are optional and auto-generated when empty.
+    Duplicate IDs are silently skipped.
+    Sample rows (ID = [EXAMPLE]) are silently skipped.
+    """
     timestamp = utc_now()
-    with LeaseLock(config.lock_dir, "import:lock", current_user["machine_id"]):
+    machine_id = current_user["machine_id"]
+    with LeaseLock(config.lock_dir, "import:lock", machine_id):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -52,7 +112,20 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                     return {"ok": False, "errors": errors}
 
                 imported = 0
+                skipped_duplicate = 0
                 for row in rows:
+                    if _is_template_meta_row(row, "sc_id"):
+                        continue
+                    sc_id = (row.get("sc_id") or "").strip()
+                    if sc_id:
+                        exists = conn.execute(
+                            "SELECT 1 FROM sc_records WHERE sc_id = ?", (sc_id,)
+                        ).fetchone()
+                        if exists:
+                            skipped_duplicate += 1
+                            continue
+                    else:
+                        sc_id = _generate_sc_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO sc_records (
                           sc_id, sc_no, requester_id, request_type, cost_center,
@@ -61,7 +134,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           created_by, created_at, updated_at, asset
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
                         (
-                            row["sc_id"],
+                            sc_id,
                             row.get("sc_no"),
                             row["requester_id"],
                             row.get("request_type"),
@@ -82,17 +155,17 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         conn,
                         action_type="import_sc",
                         object_type="sc",
-                        object_id=row["sc_id"],
-                        sc_id=row["sc_id"],
+                        object_id=sc_id,
+                        sc_id=sc_id,
                         operator_id=current_user["user_id"],
-                        machine_id=current_user["machine_id"],
+                        machine_id=machine_id,
                         before=None,
                         after=dict(row),
                     )
                     imported += 1
 
                 conn.commit()
-                return {"ok": True, "count": imported}
+                return {"ok": True, "count": imported, "skipped_duplicate": skipped_duplicate}
             except Exception:
                 conn.rollback()
                 raise
@@ -105,7 +178,9 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all PO rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        for field in ["po_id", "sc_id", "po_amount", "status"]:
+        if _is_template_meta_row(row, "po_id"):
+            continue
+        for field in ["sc_id", "po_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -123,19 +198,19 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "vendor_id", "message": f"Vendor {row['vendor_id']} not found"})
-        if row.get("po_id"):
-            exists = conn.execute(
-                "SELECT 1 FROM pos WHERE po_id = ?", (row["po_id"],)
-            ).fetchone()
-            if exists:
-                errors.append({"row": i, "field": "po_id", "message": f"PO {row['po_id']} already exists"})
     return errors
 
 
 def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
-    """Import PO records with direct status writes."""
+    """Import PO records with direct status writes.
+
+    ID fields are optional and auto-generated when empty.
+    Duplicate IDs are silently skipped.
+    Sample rows (ID = [EXAMPLE]) are silently skipped.
+    """
     timestamp = utc_now()
-    with LeaseLock(config.lock_dir, "import:lock", current_user["machine_id"]):
+    machine_id = current_user["machine_id"]
+    with LeaseLock(config.lock_dir, "import:lock", machine_id):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -145,7 +220,20 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                     return {"ok": False, "errors": errors}
 
                 imported = 0
+                skipped_duplicate = 0
                 for row in rows:
+                    if _is_template_meta_row(row, "po_id"):
+                        continue
+                    po_id = (row.get("po_id") or "").strip()
+                    if po_id:
+                        exists = conn.execute(
+                            "SELECT 1 FROM pos WHERE po_id = ?", (po_id,)
+                        ).fetchone()
+                        if exists:
+                            skipped_duplicate += 1
+                            continue
+                    else:
+                        po_id = _generate_po_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO pos (
                           po_id, sc_id, vendor_id, po_no, requester_id,
@@ -154,7 +242,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           purchaser, activing_date, created_at, updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            row["po_id"],
+                            po_id,
                             row["sc_id"],
                             row.get("vendor_id"),
                             row.get("po_no"),
@@ -178,17 +266,17 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         conn,
                         action_type="import_po",
                         object_type="po",
-                        object_id=row["po_id"],
+                        object_id=po_id,
                         sc_id=row["sc_id"],
                         operator_id=current_user["user_id"],
-                        machine_id=current_user["machine_id"],
+                        machine_id=machine_id,
                         before=None,
                         after=dict(row),
                     )
                     imported += 1
 
                 conn.commit()
-                return {"ok": True, "count": imported}
+                return {"ok": True, "count": imported, "skipped_duplicate": skipped_duplicate}
             except Exception:
                 conn.rollback()
                 raise
@@ -201,7 +289,9 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all GR rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        for field in ["gr_id", "po_id", "estimated_amount", "status"]:
+        if _is_template_meta_row(row, "gr_id"):
+            continue
+        for field in ["po_id", "estimated_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -213,19 +303,19 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "po_id", "message": f"PO {row['po_id']} not found"})
-        if row.get("gr_id"):
-            exists = conn.execute(
-                "SELECT 1 FROM gr_requests WHERE gr_id = ?", (row["gr_id"],)
-            ).fetchone()
-            if exists:
-                errors.append({"row": i, "field": "gr_id", "message": f"GR {row['gr_id']} already exists"})
     return errors
 
 
 def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
-    """Import GR records with direct status writes."""
+    """Import GR records with direct status writes.
+
+    ID fields are optional and auto-generated when empty.
+    Duplicate IDs are silently skipped.
+    Sample rows (ID = [EXAMPLE]) are silently skipped.
+    """
     timestamp = utc_now()
-    with LeaseLock(config.lock_dir, "import:lock", current_user["machine_id"]):
+    machine_id = current_user["machine_id"]
+    with LeaseLock(config.lock_dir, "import:lock", machine_id):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -235,7 +325,20 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                     return {"ok": False, "errors": errors}
 
                 imported = 0
+                skipped_duplicate = 0
                 for row in rows:
+                    if _is_template_meta_row(row, "gr_id"):
+                        continue
+                    gr_id = (row.get("gr_id") or "").strip()
+                    if gr_id:
+                        exists = conn.execute(
+                            "SELECT 1 FROM gr_requests WHERE gr_id = ?", (gr_id,)
+                        ).fetchone()
+                        if exists:
+                            skipped_duplicate += 1
+                            continue
+                    else:
+                        gr_id = _generate_gr_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO gr_requests (
                           gr_id, po_id, gr_no, requester_id,
@@ -245,7 +348,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           created_by, created_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            row["gr_id"],
+                            gr_id,
                             row["po_id"],
                             row.get("gr_no"),
                             row.get("requester_id"),
@@ -268,17 +371,17 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         conn,
                         action_type="import_gr",
                         object_type="gr",
-                        object_id=row["gr_id"],
+                        object_id=gr_id,
                         sc_id=None,
                         operator_id=current_user["user_id"],
-                        machine_id=current_user["machine_id"],
+                        machine_id=machine_id,
                         before=None,
                         after=dict(row),
                     )
                     imported += 1
 
                 conn.commit()
-                return {"ok": True, "count": imported}
+                return {"ok": True, "count": imported, "skipped_duplicate": skipped_duplicate}
             except Exception:
                 conn.rollback()
                 raise
