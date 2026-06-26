@@ -1270,12 +1270,12 @@ class ApiBridge:
                    "sc_amount", "service_period_start", "service_period_end", "status",
                    "description", "currency", "internal_system_number"]
         hints = ["Optional (auto-generated if empty)", "Optional",
-                 "Required (user ID)",
+                 "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "draft/pending/approved/closed/denied/manager_confirm", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)"]
-        sample = ["[EXAMPLE]", "", "U-0000000", "material", "12345",
+        sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
                   "Sample SC description", "CNY", ""]
 
@@ -1367,7 +1367,7 @@ class ApiBridge:
                    "purchaser"]
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional (must exist if provided)",
-                 "Optional", "Optional", "Required",
+                 "Optional", "Optional (defaults to importer)", "Required",
                  "draft/activing/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
@@ -1461,7 +1461,7 @@ class ApiBridge:
                    "gross_cost", "goods_service_description", "confirmation_name",
                    "delivery_from", "delivery_to", "last_delivery"]
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
-                 "Optional", "Optional",
+                 "Optional", "Optional (defaults to importer)",
                  "Required", "Optional",
                  "draft/manager_confirm/pending/approved/cancelled", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",

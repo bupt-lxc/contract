@@ -78,7 +78,7 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "sc_id"):
             continue
-        for field in ["requester_id", "sc_amount", "status"]:
+        for field in ["sc_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -136,7 +136,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         (
                             sc_id,
                             row.get("sc_no"),
-                            row["requester_id"],
+                            row.get("requester_id") or current_user["user_id"],
                             row.get("request_type"),
                             row.get("cost_center"),
                             float(row["sc_amount"]) if row.get("sc_amount") else None,
@@ -246,7 +246,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row["sc_id"],
                             row.get("vendor_id"),
                             row.get("po_no"),
-                            row.get("requester_id"),
+                            row.get("requester_id") or current_user["user_id"],
                             float(row["po_amount"]) if row.get("po_amount") else None,
                             row.get("status", "draft"),
                             row.get("contract_from"),
@@ -351,7 +351,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             gr_id,
                             row["po_id"],
                             row.get("gr_no"),
-                            row.get("requester_id"),
+                            row.get("requester_id") or current_user["user_id"],
                             float(row["estimated_amount"]) if row.get("estimated_amount") else None,
                             float(row["con_value"]) if row.get("con_value") else None,
                             row.get("status", "draft"),
