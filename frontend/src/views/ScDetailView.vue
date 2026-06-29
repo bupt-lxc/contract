@@ -14,7 +14,7 @@
         <el-button v-if="permissions.can_confirm_sc" type="primary" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
         <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
-        <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
+        <el-button v-if="permissions.can_recall_sc" type="warning" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
         <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
         <el-button v-if="permissions.can_transfer_sc" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
@@ -279,11 +279,11 @@ async function handleClose() {
   }
 }
 
-async function handleRevoke() {
+async function handleRecall() {
   try {
-    await ElMessageBox.confirm(t('sc.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
-    await callApi('revoke_sc', { sc_id: scId.value })
-    ElMessage.success(t('sc.revoked'))
+    await ElMessageBox.confirm(t('sc.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
+    await callApi('recall_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.recalled'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

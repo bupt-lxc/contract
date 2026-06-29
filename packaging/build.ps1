@@ -98,7 +98,7 @@ if (Test-Path $iscc) {
         -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion ""$version""" `
         -replace 'AppId=\{\{[^}]*\}\}', "AppId=$appId" `
         -replace 'OutputBaseFilename=.*-Setup', "OutputBaseFilename=$setupPrefix-$version-Setup" `
-        -replace 'DefaultDirName=\{localappdata\}\\[^}]*\}', "DefaultDirName={localappdata}\PO Management Platform$appSuffix}" `
+        -replace 'DefaultDirName=\{localappdata\}\\.*', "DefaultDirName={localappdata}\PO Management Platform$appSuffix" `
         | Set-Content -NoNewline $setupIss
     & $iscc $setupIss
     if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }

@@ -274,12 +274,6 @@ def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
     attachment_paths = [r["stored_path"] for r in attachment_rows]
 
     subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
-    # Append daily sequence
-    today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    seq = conn.execute(
-        "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
-    ).fetchone()[0]
-    subject = f"{subject}-{seq:03d}"
     body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
                                 actor_name=actor_name, requester_name=requester_name)
 
@@ -357,12 +351,6 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         body, subject = _get_monthly_content(conn, entry)
     else:
         subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
-        # Append daily sequence number
-        today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-        seq = conn.execute(
-            "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
-        ).fetchone()[0]
-        subject = f"{subject}-{seq:03d}"
         body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
                                     actor_name=actor_name, requester_name=requester_name)
 

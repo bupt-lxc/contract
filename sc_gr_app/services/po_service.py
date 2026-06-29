@@ -226,10 +226,6 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     before=None,
                     after=created,
                 )
-                notification_service.queue_status_change(
-                    conn, "po", po_id, "create",
-                    {"requester_id": sc["requester_id"]}, current_user
-                )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -519,8 +515,9 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     return after
 
 
-def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Revoke PO back to draft. Only the SC requester can revoke, and only from activing."""
+def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Recall PO back to draft. Only the SC requester can recall, and only from activing.
+    Requires that the PO has no non-draft GRs."""
 
     with connect(config) as lookup_conn:
         po = _get_po_or_raise(lookup_conn, po_id)
@@ -533,7 +530,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     if sc is None:
         raise NotFound(f"SC {sc_id} not found")
     if sc["requester_id"] != current_user["user_id"]:
-        raise PermissionDenied("Only the SC requester can revoke POs")
+        raise PermissionDenied("Only the SC requester can recall POs")
     if sc["status"] == "closed":
         raise ConflictError("Closed SC cannot be edited")
 
@@ -544,14 +541,14 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 before = _get_po_or_raise(conn, po_id)
 
                 if before["status"] != "activing":
-                    raise ConflictError("Only activing PO can be revoked back to draft")
+                    raise ConflictError("Only activing PO can be recalled back to draft")
 
-                gr_count = conn.execute(
-                    "select count(*) from gr_requests where po_id = ?",
+                non_draft_gr_count = conn.execute(
+                    "select count(*) from gr_requests where po_id = ? and status != 'draft'",
                     (po_id,),
                 ).fetchone()[0]
-                if gr_count > 0:
-                    raise ConflictError("Cannot revoke PO with existing GRs")
+                if non_draft_gr_count > 0:
+                    raise ConflictError("Cannot recall PO with existing non-draft GRs")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -561,7 +558,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 after = _get_po_or_raise(conn, po_id)
                 write_operation_record(
                     conn,
-                    action_type="revoke_po",
+                    action_type="recall_po",
                     object_type="po",
                     object_id=po_id,
                     sc_id=sc_id,
@@ -575,7 +572,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     (before["sc_id"],),
                 ).fetchone()
                 notification_service.queue_status_change(
-                    conn, "po", po_id, "revoke",
+                    conn, "po", po_id, "recall",
                     {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
                 )
                 conn.commit()
@@ -587,7 +584,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Delete a draft, po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
+    """Delete a draft PO and its GRs/attachments. Admin or SC owner."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -599,8 +596,8 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                if before["status"] not in {"draft", "activing", "finished"}:
-                    raise ConflictError("Only draft, activing or finished PO can be deleted")
+                if before["status"] != "draft":
+                    raise ConflictError("Only draft PO can be deleted")
                 sc = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),

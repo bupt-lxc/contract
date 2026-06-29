@@ -10,8 +10,8 @@
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
-        <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" @click="handleRevoke">{{ $t('gr.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_gr && (gr.status === 'manager_confirm' || gr.status === 'pending' || gr.status === 'cancelled')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" @click="handleRecall">{{ $t('gr.recall') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_gr && gr.status === 'draft'" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -199,11 +199,11 @@ async function handleCancel() {
   }
 }
 
-async function handleRevoke() {
+async function handleRecall() {
   try {
-    await ElMessageBox.confirm(t('gr.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
-    await callApi('revoke_gr', { gr_id: grId.value })
-    ElMessage.success(t('gr.revoked'))
+    await ElMessageBox.confirm(t('gr.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
+    await callApi('recall_gr', { gr_id: grId.value })
+    ElMessage.success(t('gr.recalled'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

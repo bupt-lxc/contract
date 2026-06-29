@@ -9,8 +9,8 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="isRequester && po.status === 'activing'" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'activing' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="isRequester && po.status === 'activing'" type="warning" @click="handleRecall">{{ $t('po.recall') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -214,11 +214,11 @@ async function handleFinish() {
   }
 }
 
-async function handleRevoke() {
+async function handleRecall() {
   try {
-    await ElMessageBox.confirm(t('po.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
-    await callApi('revoke_po', { po_id: poId.value })
-    ElMessage.success(t('po.revoked'))
+    await ElMessageBox.confirm(t('po.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
+    await callApi('recall_po', { po_id: poId.value })
+    ElMessage.success(t('po.recalled'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

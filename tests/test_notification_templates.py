@@ -1,7 +1,5 @@
 """Tests for notification email templates — build_body / build_subject."""
 
-from datetime import datetime, timezone
-
 from sc_gr_app.notification import templates
 
 
@@ -117,9 +115,7 @@ class TestBuildSubject:
             "event_key": "submit",
         }
         subject = templates.build_subject(entry, {})
-        today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-        expected = f"[POMP] Submitted PO from System {today_str}"
-        assert expected == subject
+        assert subject == "[POMP] Submitted PO-001 from System"
 
     def test_threshold_date_subject(self):
         entry = {
@@ -133,6 +129,7 @@ class TestBuildSubject:
         assert "<3m" in subject
         assert "Contract Expiring" in subject
         assert "SC" in subject
+        assert "SC-001" in subject
         assert "from System" in subject
 
 

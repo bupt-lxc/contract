@@ -285,10 +285,11 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (sc_id,),
                 ).fetchone()
-                notification_service.queue_status_change(
-                    conn, "gr", gr_id, "create",
-                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
-                )
+                if not is_draft:
+                    notification_service.queue_status_change(
+                        conn, "gr", gr_id, "submit",
+                        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    )
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -897,8 +898,8 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Revoke GR back to draft. Only the SC requester can revoke, and only from manager_confirm or pending."""
+def recall_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    """Recall GR back to draft. Only the SC requester can recall, and only from manager_confirm or pending."""
 
     with connect(config) as lookup_conn:
         sc_id = _get_gr_sc_id(lookup_conn, gr_id)
@@ -910,7 +911,7 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     if sc is None:
         raise NotFound(f"SC {sc_id} not found")
     if sc["requester_id"] != current_user["user_id"]:
-        raise PermissionDenied("Only the SC requester can revoke GRs")
+        raise PermissionDenied("Only the SC requester can recall GRs")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -920,18 +921,18 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 before = _get_gr(conn, gr_id)
 
                 if before["status"] not in ("manager_confirm", "pending"):
-                    raise ConflictError("Only manager_confirm or pending GR can be revoked back to draft")
+                    raise ConflictError("Only manager_confirm or pending GR can be recalled back to draft")
 
                 timestamp = utc_now()
                 conn.execute(
-                    "update gr_requests set status = 'draft', confirmed_at = NULL, pending_date = NULL, updated_at = ? where gr_id = ?",
-                    (timestamp, gr_id),
+                    "update gr_requests set status = 'draft', confirmed_at = NULL, pending_date = NULL where gr_id = ?",
+                    (gr_id,),
                 )
 
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
                     conn,
-                    action_type="revoke_gr",
+                    action_type="recall_gr",
                     object_type="gr",
                     object_id=gr_id,
                     sc_id=sc_id,
@@ -940,13 +941,13 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     before=before,
                     after=after,
                 )
-                sc = conn.execute(
+                sc_rec = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (sc_id,),
                 ).fetchone()
                 notification_service.queue_status_change(
-                    conn, "gr", gr_id, "revoke",
-                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    conn, "gr", gr_id, "recall",
+                    {"requester_id": sc_rec["requester_id"]} if sc_rec else {}, current_user
                 )
                 conn.commit()
             except Exception:
@@ -957,7 +958,7 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
 
 
 def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Delete a draft, pending or cancelled GR and its attachments. Admin or GR owner."""
+    """Delete a draft GR and its attachments. Admin or GR owner."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -968,8 +969,8 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_gr(conn, gr_id)
-                if before["status"] not in {"draft", "manager_confirm", "pending", "cancelled"}:
-                    raise ConflictError("Only draft, manager_confirm, pending or cancelled GR can be deleted")
+                if before["status"] != "draft":
+                    raise ConflictError("Only draft GR can be deleted")
                 if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the GR owner or admin can delete")
 

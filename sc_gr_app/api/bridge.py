@@ -255,13 +255,13 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def revoke_sc(self, payload) -> dict:
-        """Move a pending SC back to draft."""
+    def recall_sc(self, payload) -> dict:
+        """Recall SC back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            result = sc_service.revoke_sc(self.config, current_user, sc_id)
+            result = sc_service.recall_sc(self.config, current_user, sc_id)
             self._auto_open_outlook_draft("sc", sc_id)
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
@@ -332,20 +332,20 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def revoke_po(self, payload) -> dict:
-        """Roll back PO status (admin only)."""
+    def recall_po(self, payload) -> dict:
+        """Recall PO back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            result = po_service.revoke_po(self.config, current_user, po_id)
+            result = po_service.recall_po(self.config, current_user, po_id)
             self._auto_open_outlook_draft("po", po_id)
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
     def delete_po(self, payload) -> dict:
-        """Delete a po_pending or finished PO (admin or SC owner)."""
+        """Delete a draft PO (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
@@ -422,20 +422,20 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def revoke_gr(self, payload) -> dict:
-        """Roll back GR status (admin only)."""
+    def recall_gr(self, payload) -> dict:
+        """Recall GR back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            result = gr_service.revoke_gr(self.config, current_user, gr_id)
+            result = gr_service.recall_gr(self.config, current_user, gr_id)
             self._auto_open_outlook_draft("gr", gr_id)
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
     def delete_gr(self, payload) -> dict:
-        """Delete a pending or cancelled GR (admin or GR owner)."""
+        """Delete a draft GR (admin or GR owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()

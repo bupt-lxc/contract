@@ -7,6 +7,8 @@ custom_schedule, monthly_summary) share a unified HTML template with:
   - Plain-text status display
 """
 
+import re
+
 from datetime import datetime, timezone, timedelta
 
 # ---------------------------------------------------------------------------
@@ -118,9 +120,11 @@ _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
 # ---------------------------------------------------------------
 
 def _abbreviate_name(name: str) -> str:
-    """Abbreviate: 'Zhou, Liwei' → 'ZLiwei', 'Liwei Zhou' → 'LZhou'"""
+    """Abbreviate: 'Li, Xingchen (C/EV-L)' → 'LXingchen', 'Liwei Zhou' → 'LZhou'"""
     if not name:
         return "Unknown"
+    # Strip trailing parenthetical content (e.g. cost center)
+    name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
     if "," in name:
         parts = [p.strip() for p in name.split(",", 1)]
         surname = parts[0]
@@ -317,10 +321,9 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
 def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     """Build email subject line.
 
-    Format: [POMP] <action> <entity_type> from <abbreviation> <YYYYMMDD>
-    The -NNN daily sequence is appended by sender.py.
+    Format: [POMP] <action> <entity_id> from <abbreviation>
     """
-    entity_type = entry["entity_type"].upper()
+    entity_id = entry.get("entity_id", "")
     event_type = entry.get("event_type", "")
     event_key = entry.get("event_key", "")
 
@@ -338,8 +341,7 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
         action = event_key
 
     abbr = _abbreviate_name(actor_name) if actor_name else "System"
-    today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    return f"[POMP] {action} {entity_type} from {abbr} {today_str}"
+    return f"[POMP] {action} {entity_id} from {abbr}"
 
 
 def build_body(entry: dict, entity_info: dict, user_emails: dict,
