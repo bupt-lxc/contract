@@ -3,16 +3,16 @@ from datetime import datetime
 
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 
 
-def test_write_audit_log_inserts_metadata_and_json_payloads(app_config):
+def test_write_operation_record_inserts_metadata_and_json_payloads(app_config):
     migrate(app_config)
     before = {"status": "pending", "note": "旧值"}
     after = {"status": "approved", "note": "新值"}
 
     with connect(app_config) as conn:
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="approve",
             object_type="gr_request",
@@ -26,7 +26,7 @@ def test_write_audit_log_inserts_metadata_and_json_payloads(app_config):
         )
         conn.commit()
 
-        row = conn.execute("select * from audit_logs").fetchone()
+        row = conn.execute("select * from operation_records").fetchone()
 
     assert row["log_id"]
     assert row["action_type"] == "approve"
@@ -43,11 +43,11 @@ def test_write_audit_log_inserts_metadata_and_json_payloads(app_config):
     assert "新值" in row["after_json"]
 
 
-def test_write_audit_log_stores_none_payloads_as_sql_null(app_config):
+def test_write_operation_record_stores_none_payloads_as_sql_null(app_config):
     migrate(app_config)
 
     with connect(app_config) as conn:
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="view",
             object_type="sc_record",
@@ -61,7 +61,7 @@ def test_write_audit_log_stores_none_payloads_as_sql_null(app_config):
         conn.commit()
 
         row = conn.execute(
-            "select before_json, after_json from audit_logs"
+            "select before_json, after_json from operation_records"
         ).fetchone()
 
     assert row["before_json"] is None

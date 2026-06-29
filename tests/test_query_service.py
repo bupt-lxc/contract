@@ -5,7 +5,7 @@ from sc_gr_app.errors import ValidationError
 from sc_gr_app.services.gr_service import approve_gr, create_gr
 from sc_gr_app.services.po_service import create_po
 from sc_gr_app.services.query_service import (
-    search_audit_logs,
+    search_operation_records,
     search_grs,
     search_pos,
     search_scs,
@@ -37,23 +37,23 @@ def seed_query_data(app_config):
     )
     sc_id = created_sc["sc_id"]
     approve_sc(app_config, ADMIN, sc_id)
-    create_vendor(
+    vendor = create_vendor(
         app_config,
         USER,
         {
-            "vendor_id": "V1",
             "vendor_name": "Alpha Vendor",
             "ksrm_vendor_code": "KV-1",
             "service_scope": "General Service",
         },
     )
-    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
+    vendor_id = vendor["vendor_id"]
+    add_sc_vendor(app_config, ADMIN, sc_id, vendor_id)
     created_po = create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_no": "PO-ALPHA",
             "po_amount": 800,
             "status": "activing",
@@ -71,7 +71,7 @@ def seed_query_data(app_config):
         },
     )
     gr_id = created_gr["gr_id"]
-    return sc_id, po_id, gr_id
+    return sc_id, po_id, gr_id, vendor_id
 
 
 def test_query_service_searches_seeded_sc_vendor_and_po(app_config):
@@ -92,7 +92,7 @@ def test_search_pos_returns_derived_open_po_amount(app_config):
 
 
 def test_search_pos_returns_zero_for_fully_consumed_po(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=800)
 
     row = search_pos(app_config, filters={"po_id": po_id})[0]
@@ -133,7 +133,7 @@ def test_invalid_query_controls_raise_validation_error(app_config, kwargs, messa
 
 
 def test_filters_and_pagination_work_for_scs(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     create_sc(
         app_config,
         USER,
@@ -161,7 +161,7 @@ def test_filters_and_pagination_work_for_scs(app_config):
 
 
 def test_search_grs_finds_by_remark(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
     rows = search_grs(app_config, text="remark")
 
@@ -171,11 +171,11 @@ def test_search_grs_finds_by_remark(app_config):
     assert rows[0]["vendor_name"] == "Alpha Vendor"
 
 
-def test_search_audit_logs_returns_audit_rows(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+def test_search_operation_records_returns_audit_rows(app_config):
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
-    rows = search_audit_logs(
+    rows = search_operation_records(
         app_config,
         filters={"object_type": "gr"},
         sort="action_type",
@@ -185,25 +185,25 @@ def test_search_audit_logs_returns_audit_rows(app_config):
     assert [row["action_type"] for row in rows] == ["approve_gr", "create_gr"]
 
 
-def test_search_audit_logs_searches_text_fields(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+def test_search_operation_records_searches_text_fields(app_config):
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
-    assert search_audit_logs(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
-    assert search_audit_logs(app_config, text=gr_id.lower())[0]["object_id"] == gr_id
-    assert search_audit_logs(app_config, text="90")[0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text=gr_id.lower())[0]["object_id"] == gr_id
+    assert search_operation_records(app_config, text="90")[0]["action_type"] == "approve_gr"
 
 
-def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
+def test_search_operation_records_scopes_draft_sc_rows_to_owner(app_config):
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     draft_sc_id = created["sc_id"]
 
-    admin_rows = search_audit_logs(app_config, current_user=ADMIN, limit=100)
-    owner_rows = search_audit_logs(app_config, current_user=USER, limit=100)
-    other_rows = search_audit_logs(app_config, current_user=OTHER_USER, limit=100)
+    admin_rows = search_operation_records(app_config, current_user=ADMIN, limit=100)
+    owner_rows = search_operation_records(app_config, current_user=USER, limit=100)
+    other_rows = search_operation_records(app_config, current_user=OTHER_USER, limit=100)
 
     assert [row["object_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["object_id"] for row in owner_rows] == [draft_sc_id]
@@ -217,7 +217,7 @@ def test_search_audit_logs_scopes_draft_sc_rows_to_owner(app_config):
         (search_vendors, {"unknown": "Alpha Vendor"}),
         (search_pos, {"bad_filter": "PO1"}),
         (search_grs, {"vendor_name": "Alpha Vendor"}),
-        (search_audit_logs, {"before_json": "{}"}),
+        (search_operation_records, {"before_json": "{}"}),
     ],
 )
 def test_invalid_filter_name_raises_validation_error(app_config, search_func, filters):
@@ -276,7 +276,7 @@ def test_invalid_pagination_values_raise_validation_error(
 
 
 def test_pagination_accepts_ints_and_canonical_digit_strings(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
     rows = search_scs(app_config, limit="10", offset="0")
 
@@ -284,7 +284,7 @@ def test_pagination_accepts_ints_and_canonical_digit_strings(app_config):
 
 
 def test_limit_is_clamped_to_max_limit(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
     rows = search_scs(app_config, limit=501)
 
@@ -327,7 +327,7 @@ def test_sc_search_without_current_user_hides_drafts(app_config):
 
 
 def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
-    sc_id, po_id, gr_id = seed_query_data(app_config)
+    sc_id, po_id, gr_id, vendor_id = seed_query_data(app_config)
     seed_other_user(app_config)
     created_sc2 = create_sc(
         app_config,
@@ -344,13 +344,13 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     )
     sc2_id = created_sc2["sc_id"]
     approve_sc(app_config, ADMIN, sc2_id)
-    add_sc_vendor(app_config, ADMIN, sc2_id, "V1")
+    add_sc_vendor(app_config, ADMIN, sc2_id, vendor_id)
     created_po2 = create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc2_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_no": "PO-BETA",
             "po_amount": 300,
             "status": "activing",

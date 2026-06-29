@@ -494,11 +494,13 @@ def search_grs(
           po.sc_id,
           sc.sc_no,
           vendor.vendor_id,
-          vendor.vendor_name
+          vendor.vendor_name,
+          requester.user_name as requester_name
         from gr_requests gr
         join pos po on po.po_id = gr.po_id
         join sc_records sc on sc.sc_id = po.sc_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
+        left join users requester on requester.user_id = gr.requester_id
         """,
         text=text,
         text_columns=(
@@ -710,7 +712,7 @@ def workbench_data(
     return {"sc": sc_data, "po": po_data, "gr": gr_data}
 
 
-def search_audit_logs(
+def search_operation_records(
     config: AppConfig,
     text: str | None = None,
     filters: dict | None = None,
@@ -726,11 +728,11 @@ def search_audit_logs(
         base_clauses = [
             """
             (
-              audit_logs.sc_id is null
+              operation_records.sc_id is null
               or exists (
                 select 1
                 from sc_records sc
-                where sc.sc_id = audit_logs.sc_id
+                where sc.sc_id = operation_records.sc_id
                   and sc.status != 'draft'
               )
             )
@@ -744,11 +746,11 @@ def search_audit_logs(
         base_clauses = [
             """
             (
-              (audit_logs.sc_id is null and audit_logs.operator_id = ?)
+              (operation_records.sc_id is null and operation_records.operator_id = ?)
               or exists (
                 select 1
                 from sc_records sc
-                where sc.sc_id = audit_logs.sc_id
+                where sc.sc_id = operation_records.sc_id
                   and sc.requester_id = ?
               )
             )
@@ -760,7 +762,7 @@ def search_audit_logs(
 
     return _search(
         config,
-        select_sql="select * from audit_logs",
+        select_sql="select * from operation_records",
         text=text,
         text_columns=(
             "action_type",

@@ -26,7 +26,7 @@ export function useLogs(pageSize = 50) {
         limit: state.pageSize,
         offset: (state.currentPage - 1) * state.pageSize
       }
-      const result = await callApi('search_audit_logs', payload)
+      const result = await callApi('search_operation_records', payload)
       state.rows = result.rows || result
       state.total = result.total || state.rows.length
     } catch (e) {

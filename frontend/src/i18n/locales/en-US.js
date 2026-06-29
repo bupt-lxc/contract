@@ -27,7 +27,7 @@ export default {
     grList: 'GR List',
     grDetail: 'GR Detail',
     vendorList: 'Vendor List',
-    auditLogs: 'Audit Logs',
+    operationRecords: 'Operation Records',
     emailLogs: 'Email Logs',
     emailSettings: 'Email Settings',
     system: 'System'
@@ -35,6 +35,7 @@ export default {
 
   common: {
     save: 'Save',
+    saved: 'Saved',
     cancel: 'Cancel',
     edit: 'Edit',
     delete: 'Delete',
@@ -116,7 +117,11 @@ export default {
     adminPanelDesc: 'Full access & system management',
     requesterPanel: 'Requester Panel',
     requesterPanelDesc: 'Submit & review requests',
-    switchRole: 'Switch role'
+    switchRole: 'Switch role',
+    register: 'Register',
+    machineId: 'Machine ID',
+    userName: 'Name',
+    email: 'Email'
   },
 
 home: {
@@ -129,7 +134,7 @@ home: {
     colRequester: 'Requester',
     colPoNo: 'PO No',
     colGrId: 'GR ID',
-    colDeadline: 'Deadline',
+    colDeadline: 'Contract End Date',
     colCreatedAt: 'Created',
     viewAllOfType: 'View all of this type',
   },
@@ -149,6 +154,8 @@ home: {
     requestType: 'Request Type',
     costCenter: 'Cost Center',
     scAmount: 'SC Amount',
+    startDate: 'Start Date',
+    endDate: 'End Date',
     servicePeriodStart: 'Service Period Start',
     servicePeriodEnd: 'Service Period End',
     description: 'Description',
@@ -214,6 +221,7 @@ home: {
     transferOwnerHint: 'Transfer ownership of {no} from {old} to:',
     selectNewOwner: 'Select new owner',
     ownerTransferred: 'Owner transferred',
+    currency: 'Currency',
   },
 
   po: {
@@ -232,6 +240,8 @@ home: {
     vendorName: 'Vendor Name',
     poAmount: 'PO Amount',
     openPoAmount: 'Open PO Amount',
+    startDate: 'Start Date',
+    contractEndDate: 'Contract End Date',
     consumedAmount: 'Consumed Amount',
     pendingExclTax: 'Pending Est. Amount (excl. tax)',
     pendingInclTax: 'Pending Est. Amount (incl. tax)',
@@ -286,12 +296,14 @@ home: {
     requesterId: 'Requester ID',
     estimated: 'Net cost',
     estimatedAmount: 'Net cost',
-    conValue: 'Contract Value',
+    conValue: 'GR Value',
     grossCost: 'Gross Cost (Tax incl.)',
     estAmount: 'Net cost',
     taxRate: 'VAT(%)',
     remark: 'Remark',
     created: 'Created',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
     actions: 'Actions',
     edit: 'Edit',
     approve: 'Approve',
@@ -300,6 +312,7 @@ home: {
     scNo: 'SC No',
     vendor: 'Vendor',
     poId: 'PO ID',
+    vendorId: 'Vendor ID',
     scId: 'SC ID',
     noRecords: 'No GR records found.',
     noRecordsForPo: 'No GRs for this PO.',
@@ -342,6 +355,7 @@ home: {
     vendor: 'Vendor',
     vendorId: 'Vendor ID',
     vendorName: 'Vendor Name',
+    vendorNameFull: 'Vendor Name (Full Name Required)',
     ksrmCode: 'KSRM Code',
     serviceScope: 'Service Scope',
     contact: 'Contact',
@@ -397,9 +411,9 @@ home: {
     userList: 'User List'
   },
 
-  audit: {
-    auditLogs: 'Audit Logs',
-    audit: 'Audit',
+  record: {
+    recordLogs: 'Operation Records',
+    record: 'Operation Record',
     action: 'Action',
     object: 'Object',
     objectType: 'Object Type',
@@ -407,10 +421,11 @@ home: {
     operator: 'Operator',
     machine: 'Machine',
     mode: 'Mode',
-    noRecords: 'No audit logs found.',
-    noRecordsInSc: 'No audit records.',
+    noRecords: 'No operation records found.',
+    noRecordsInSc: 'No operation records.',
     changes: 'Changes',
     scId: 'SC ID',
+    created: 'Created',
     exportSuccess: 'Exported successfully',
     exportFailed: 'Export failed'
   },
@@ -436,7 +451,10 @@ home: {
     eventAmount: 'Amount',
     noRecords: 'No email notifications found.',
     exportSuccess: 'Exported successfully',
-    exportFailed: 'Export failed'
+    exportFailed: 'Export failed',
+    previewSend: 'Preview & Send',
+    openInOutlook: 'Open in Outlook',
+    autoSend: 'Auto'
   },
 
   notification: {
@@ -525,7 +543,7 @@ home: {
     contractTo: 'Contract To',
     grId: 'GR ID',
     estimated: 'Net cost',
-    conValue: 'Contract Value',
+    conValue: 'GR Value',
     grossCost: 'Gross Cost (Tax incl.)',
     remark: 'Remark',
     action: 'Action',
@@ -569,7 +587,7 @@ home: {
     grId: 'GR ID',
     requester: 'Requester',
     estimatedAmount: 'Net cost',
-    conValue: 'Contract Value',
+    conValue: 'GR Value',
     grossCost: 'Gross Cost (Tax incl.)',
     action: 'Action',
     objectType: 'Object Type',
@@ -581,6 +599,8 @@ home: {
     contractType: 'Contract Type',
     purchaser: 'Purchaser',
     activingDate: 'Activing Date',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
     deadline: 'Deadline',
     unlimited: 'Unlimited',
     within3Years: 'Within 3 Years',
@@ -672,7 +692,7 @@ home: {
     contractTo: 'Contract To',
     grId: 'GR ID',
     estimated: 'Net cost',
-    conValue: 'Contract Value',
+    conValue: 'GR Value',
     grossCost: 'Gross Cost (Tax incl.)',
     remark: 'Remark',
     action: 'Action',
@@ -683,6 +703,8 @@ home: {
     asset: 'Asset',
     assetNums: 'Asset Numbers',
     internalSystemNumber: 'Internal System Number',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
     activingDate: 'Activing Date',
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',

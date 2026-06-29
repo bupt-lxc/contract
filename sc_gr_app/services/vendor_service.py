@@ -7,11 +7,11 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ValidationError
 from sc_gr_app.rbac import require_requester_or_admin
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("vendor_id", "vendor_name", "service_scope")
+REQUIRED_FIELDS = ("vendor_name", "service_scope")
 SUPPORTED_SERVICE_SCOPES = {
     "Transportation",
     "engineering Service",
@@ -70,12 +70,23 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
         raise ValidationError("service_scope is invalid")
 
     timestamp = utc_now()
-    vendor_id = data["vendor_id"]
 
     with LeaseLock(config.lock_dir, "system", current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                # Auto-generate vendor_id if not provided: V + 6-digit sequence
+                vendor_id = data.get("vendor_id", "").strip()
+                if not vendor_id:
+                    vendor_id = _generate_vendor_id(conn)
+                else:
+                    # Verify vendor_id is not already taken
+                    existing = conn.execute(
+                        "SELECT 1 FROM vendors WHERE vendor_id = ?", (vendor_id,)
+                    ).fetchone()
+                    if existing:
+                        raise ValidationError(f"vendor_id '{vendor_id}' already exists")
+
                 conn.execute(
                     """
                     insert into vendors (
@@ -111,7 +122,7 @@ def create_vendor(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ),
                 )
                 created = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_vendor",
                     object_type="vendor",
@@ -179,7 +190,7 @@ def update_vendor(config: AppConfig, current_user: dict, vendor_id: str, data: d
                         )
 
                 after = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="update_vendor",
                     object_type="vendor",
@@ -212,7 +223,7 @@ def disable_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dic
                     (timestamp, vendor_id)
                 )
                 after = _get_vendor(conn, vendor_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="disable_vendor",
                     object_type="vendor",
@@ -250,7 +261,7 @@ def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict
                         f"Please delete the related POs first."
                     )
                 conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_vendor",
                     object_type="vendor",
@@ -433,10 +444,11 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
 
 
 def _generate_vendor_id(conn) -> str:
-    """Generate a unique vendor_id from current UTC timestamp."""
-    from datetime import datetime, timezone
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-    return f"V{ts}"
+    """Generate a unique vendor_id as V + 6-digit sequence, picking up after max existing."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(CAST(SUBSTR(vendor_id, 2) AS INTEGER)), 0) + 1 AS next_id FROM vendors"
+    ).fetchone()
+    return f"V{row['next_id']:06d}"
 
 
 def execute_import(
@@ -508,7 +520,7 @@ def execute_import(
                         timestamp,
                     ),
                 )
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="import_vendor",
                     object_type="vendor",

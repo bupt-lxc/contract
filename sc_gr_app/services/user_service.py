@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 
 
 SEED_USERS = [
@@ -85,7 +85,7 @@ def create_user(config: AppConfig, current_user: dict, data: dict) -> dict:
             """,
             (user_id, machine_id, user_name, role, email, timestamp, timestamp),
         )
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="create_user",
             object_type="user",
@@ -122,7 +122,7 @@ def update_user(config: AppConfig, current_user: dict, machine_id: str, data: di
             (user_name, email, role, timestamp, machine_id),
         )
         after = {**before, "user_name": user_name, "email": email, "role": role, "updated_at": timestamp}
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="update_user",
             object_type="user",
@@ -156,7 +156,7 @@ def disable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict
             (timestamp, machine_id),
         )
         after = {**before, "status": "disabled", "updated_at": timestamp}
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="disable_user",
             object_type="user",
@@ -188,7 +188,7 @@ def enable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict:
             (timestamp, machine_id),
         )
         after = {**before, "status": "active", "updated_at": timestamp}
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="enable_user",
             object_type="user",
@@ -201,3 +201,43 @@ def enable_user(config: AppConfig, current_user: dict, machine_id: str) -> dict:
         )
         conn.commit()
     return after
+
+
+def register_user(config: AppConfig, machine_id: str, user_name: str, email: str) -> dict:
+    """Register a new user with requester role. Only for unregistered machines."""
+    with connect(config) as conn:
+        existing = conn.execute(
+            "SELECT user_id, status FROM users WHERE machine_id = ?",
+            (machine_id,),
+        ).fetchone()
+        if existing:
+            raise ValidationError(
+                f"Machine ID {machine_id} is already registered. Contact an administrator."
+            )
+
+        timestamp = now()
+        user_id = f"U-{machine_id}"
+
+        conn.execute(
+            """INSERT INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at)
+               VALUES (?, ?, ?, 'requester', ?, 'active', ?, ?)""",
+            (user_id, machine_id, user_name, email, timestamp, timestamp),
+        )
+        write_operation_record(
+            conn,
+            action_type="register",
+            object_type="user",
+            object_id=user_id,
+            sc_id=None,
+            operator_id=user_id,
+            machine_id=machine_id,
+            before=None,
+            after={"user_id": user_id, "machine_id": machine_id, "user_name": user_name, "role": "requester", "email": email},
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT user_id, machine_id, user_name, role, email, status, created_at FROM users WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        return dict(row)

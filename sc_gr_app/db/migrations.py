@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 27
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1034,6 +1034,28 @@ def _migrate_v25(conn) -> None:
     _record(conn, 25)
 
 
+def _migrate_v26(conn) -> None:
+    """Add currency column to sc_records."""
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "currency" not in existing:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'")
+    _record(conn, 26)
+
+
+def _migrate_v27(conn) -> None:
+    """Rename audit_logs to operation_records."""
+    if _table_exists(conn, "audit_logs") and not _table_exists(conn, "operation_records"):
+        conn.execute("ALTER TABLE audit_logs RENAME TO operation_records")
+    # Rename indexes for consistency (only if the target table exists)
+    conn.execute("DROP INDEX IF EXISTS idx_audit_sc")
+    conn.execute("DROP INDEX IF EXISTS idx_audit_created")
+    if _table_exists(conn, "operation_records"):
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operation_records_sc ON operation_records(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operation_records_created ON operation_records(created_at)")
+    _record(conn, 27)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1169,6 +1191,14 @@ def migrate(config: AppConfig) -> None:
             if 25 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v25(conn)
+                conn.commit()
+            if 26 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v26(conn)
+                conn.commit()
+            if 27 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v27(conn)
                 conn.commit()
         except Exception:
             conn.rollback()

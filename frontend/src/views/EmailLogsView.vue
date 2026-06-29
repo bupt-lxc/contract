@@ -62,13 +62,23 @@
         </template>
       </el-table-column>
       <el-table-column prop="created_at" :label="$t('email.created')" width="160">
-        <template #default="{ row }">{{ (row.created_at || '').slice(0, 19) }}</template>
+        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) }}</template>
       </el-table-column>
       <el-table-column prop="sent_at" :label="$t('email.sent')" width="160">
-        <template #default="{ row }">{{ (row.sent_at || '').slice(0, 19) || '-' }}</template>
+        <template #default="{ row }">{{ (row.sent_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
       </el-table-column>
       <el-table-column prop="error_msg" :label="$t('email.error')" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ row.error_msg || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="140" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            v-if="row.status !== 'sent'"
+            type="primary" link size="small"
+            @click="previewEntry = row; previewVisible = true"
+          >{{ $t('email.previewSend') }}</el-button>
+          <span v-else style="color:#94a3b8;font-size:12px">{{ $t('email.sent') }}</span>
+        </template>
       </el-table-column>
       <template #empty><el-empty :description="state.queueError || $t('email.noRecords')" /></template>
     </el-table>
@@ -82,6 +92,8 @@
       @current-change="handlePageChange"
       style="margin-top:12px;justify-content:flex-end"
     />
+
+    <EmailPreviewDialog v-model="previewVisible" :entry-id="previewEntry?.id" @sent="loadQueue" />
   </div>
 </template>
 
@@ -89,6 +101,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download, ArrowLeft } from '@element-plus/icons-vue'
+import EmailPreviewDialog from '@/components/notification/EmailPreviewDialog.vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { useExport } from '@/composables/useExport.js'
 import { callApi } from '@/api/bridge.js'
@@ -100,6 +113,8 @@ const { exportAll } = useExport()
 const pageSize = 50
 const currentPage = ref(1)
 const exporting = ref(false)
+const previewVisible = ref(false)
+const previewEntry = ref(null)
 
 const filters = reactive({
   status: '',
@@ -159,8 +174,8 @@ async function handleExport() {
       { key: 'to_recipients', label: t('email.to'), getValue: r => formatRecipients(r.to_recipients) },
       { key: 'cc_recipients', label: t('email.cc'), getValue: r => formatRecipients(r.cc_recipients) },
       { key: 'status', label: t('email.status') },
-      { key: 'created_at', label: t('email.created'), getValue: r => (r.created_at || '').slice(0, 19) },
-      { key: 'sent_at', label: t('email.sent'), getValue: r => (r.sent_at || '').slice(0, 19) || '-' },
+      { key: 'created_at', label: t('email.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+      { key: 'sent_at', label: t('email.sent'), getValue: r => (r.sent_at || '').replace('T', ' ').slice(0, 19) || '-' },
       { key: 'error_msg', label: t('email.error'), getValue: r => r.error_msg || '-' }
     ]
     await exportAll('list_notification_queue', {

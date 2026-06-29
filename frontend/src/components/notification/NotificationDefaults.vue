@@ -93,15 +93,15 @@
       <div style="margin-bottom:16px">
         <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultDateThresholds') }}</label>
         <el-checkbox-group v-model="local.date_thresholds" @change="emitSave" class="month-grid">
-          <el-checkbox v-for="m in 12" :key="m" :label="13 - m">{{ 13 - m }} {{ $t('notification.months') }}</el-checkbox>
+          <el-checkbox v-for="m in 12" :key="m" :value="13 - m">{{ 13 - m }} {{ $t('notification.months') }}</el-checkbox>
         </el-checkbox-group>
       </div>
       <div>
         <label style="font-size:13px;color:#64748b;display:block;margin-bottom:4px">{{ $t('notification.defaultAmountThresholds') }}</label>
         <el-checkbox-group v-model="local.amount_thresholds" @change="emitSave">
-          <el-checkbox :label="50">{{ $t('notification.fiftyPercent') }}</el-checkbox>
-          <el-checkbox :label="30">{{ $t('notification.thirtyPercent') }}</el-checkbox>
-          <el-checkbox :label="10">{{ $t('notification.tenPercent') }}</el-checkbox>
+          <el-checkbox :value="50">{{ $t('notification.fiftyPercent') }}</el-checkbox>
+          <el-checkbox :value="30">{{ $t('notification.thirtyPercent') }}</el-checkbox>
+          <el-checkbox :value="10">{{ $t('notification.tenPercent') }}</el-checkbox>
         </el-checkbox-group>
       </div>
     </template>

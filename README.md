@@ -42,7 +42,7 @@ sc_gr_app/
     vendor_service.py   # Vendor CRUD
     budget_service.py   # Derived budget math (Decimal-based)
     query_service.py    # Unified search with range filter support (_from/_to/_min/_max suffixes)
-    audit_service.py    # Audit log writes with before/after snapshots
+    record_service.py   # Operation record writes with before/after snapshots
     lock_service.py     # File-based lease lock with TTL and heartbeat
     notification_service.py  # Queue writer, recipient resolution, config CRUD
   notification/         # Standalone notification script (runs on dedicated machine)
@@ -103,7 +103,7 @@ Every SC/PO/GR mutation follows this pattern:
 3. Re-read current state (never trust stale UI data)
 4. Validate business rules + permissions
 5. Execute write
-6. `write_audit_log()` with before/after snapshots
+6. `write_operation_record()` with before/after snapshots
 7. `COMMIT` (rollback on any error)
 8. Release lock
 

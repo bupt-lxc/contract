@@ -8,7 +8,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import (
     compute_po_budget,
@@ -26,6 +26,7 @@ REQUIRED_FIELDS = (
     "service_period_end",
 )
 SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
+SUPPORTED_CURRENCIES = {"CNY", "EUR", "USD"}
 SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "closed"}
 OPTIONAL_UPDATE_FIELDS = (
     "sc_no",
@@ -38,6 +39,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "asset",
     "asset_nums",
     "internal_system_number",
+    "currency",
     "vendor_ids",
 )
 _VENDOR_SNAPSHOT_FIELDS = (
@@ -119,6 +121,9 @@ def _require_submit_fields(data: dict) -> None:
     _require_fields(data, REQUIRED_BUSINESS_FIELDS)
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
+    currency = data.get("currency", "CNY")
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
     _positive_number(data["sc_amount"], "sc_amount")
     _validate_service_period(data)
 
@@ -293,7 +298,7 @@ def add_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_id: 
                 )
 
                 updated_vendors = _fetch_sc_vendors(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="add_sc_vendor",
                     object_type="sc_vendor",
@@ -345,7 +350,7 @@ def remove_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_i
                     raise NotFound(f"Vendor {vendor_id} is not associated with SC {sc_id}")
 
                 updated_vendors = _fetch_sc_vendors(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="remove_sc_vendor",
                     object_type="sc_vendor",
@@ -417,6 +422,9 @@ def create_sc(
     _require_fields(data, REQUIRED_FIELDS)
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
+    currency = data.get("currency", "CNY")
+    if currency not in SUPPORTED_CURRENCIES:
+        raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
     sc_amount = _positive_number(data["sc_amount"], "sc_amount")
 
     if operation_mode == "normal":
@@ -459,8 +467,9 @@ def create_sc(
                       asset_nums,
                       pending_date,
                       approved_date,
-                      internal_system_number
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      internal_system_number,
+                      currency
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -484,10 +493,11 @@ def create_sc(
                         timestamp,
                         timestamp if status == "approved" else None,
                         data.get("internal_system_number"),
+                        data.get("currency", "CNY"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_sc",
                     object_type="sc",
@@ -546,8 +556,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       asset_nums,
                       pending_date,
                       approved_date,
-                      internal_system_number
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      internal_system_number,
+                      currency
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -575,11 +586,12 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         None,
                         data.get("internal_system_number"),
+                        data.get("currency", "CNY"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
                 _sync_sc_vendors(conn, sc_id, data.get("vendor_ids"))
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_sc_draft",
                     object_type="sc",
@@ -634,6 +646,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         description = ?,
                         asset = ?,
                         asset_nums = ?,
+                        currency = ?,
                         status = 'manager_confirm',
                         updated_at = ?
                     where sc_id = ?
@@ -648,6 +661,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("description"),
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
+                        merged.get("currency", "CNY"),
                         timestamp,
                         sc_id,
                     ),
@@ -655,14 +669,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 after = _get_sc(conn, sc_id)
                 _sync_sc_vendors(conn, sc_id, merged.get("vendor_ids"))
 
-                # At least one vendor must be associated
-                vendor_count = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
-                ).fetchone()["cnt"]
-                if vendor_count == 0:
-                    raise ValidationError("At least one vendor is required to submit the SC")
-
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="submit_sc",
                     object_type="sc",
@@ -709,7 +716,7 @@ def confirm_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     (timestamp, timestamp, timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="confirm_sc",
                     object_type="sc",
@@ -750,6 +757,11 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     and merged["request_type"] not in SUPPORTED_REQUEST_TYPES
                 ):
                     raise ValidationError("request_type is invalid")
+                if (
+                    merged.get("currency") not in (None, "")
+                    and merged["currency"] not in SUPPORTED_CURRENCIES
+                ):
+                    raise ValidationError(f"currency must be one of: {', '.join(sorted(SUPPORTED_CURRENCIES))}")
                 if merged.get("sc_amount") not in (None, ""):
                     _positive_number(merged["sc_amount"], "sc_amount")
                 _validate_service_period(merged)
@@ -774,6 +786,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset = ?,
                         asset_nums = ?,
                         internal_system_number = ?,
+                        currency = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -792,6 +805,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset"),
                         merged.get("asset_nums"),
                         merged.get("internal_system_number"),
+                        merged.get("currency"),
                         timestamp,
                         sc_id,
                     ),
@@ -799,7 +813,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 after = _get_sc(conn, sc_id)
                 if "vendor_ids" in allowed:
                     _sync_sc_vendors(conn, sc_id, allowed["vendor_ids"])
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="update_sc",
                     object_type="sc",
@@ -840,7 +854,7 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     (timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="deny_sc",
                     object_type="sc",
@@ -912,7 +926,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     (timestamp, timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="close_sc",
                     object_type="sc",
@@ -966,7 +980,7 @@ def transfer_sc(config: AppConfig, current_user: dict, sc_id: str, new_requester
 
                 after = _get_sc(conn, sc_id)
 
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="transfer_sc",
                     object_type="sc",
@@ -1006,7 +1020,7 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     (timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="revoke_sc",
                     object_type="sc",
@@ -1088,7 +1102,7 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
                 conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
 
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_sc",
                     object_type="sc",
@@ -1142,12 +1156,12 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 (sc_id,),
             )
         ]
-        audit_logs = [
+        records = [
             _row_to_dict(row)
             for row in conn.execute(
                 """
                 select *
-                from audit_logs
+                from operation_records
                 where sc_id = ?
                 order by created_at desc
                 """,
@@ -1167,7 +1181,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         "budget": compute_sc_budget(config, sc_id),
         "pos": pos,
         "grs": grs,
-        "audit_logs": audit_logs,
+        "operation_records": records,
         "permissions": _sc_permissions(current_user, sc),
         "vendors": _fetch_sc_vendors(conn, sc_id),
     }
@@ -1207,7 +1221,7 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
                     (current_user["user_id"], timestamp, timestamp, timestamp, sc_id),
                 )
                 after = _get_sc(conn, sc_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="approve_sc",
                     object_type="sc",

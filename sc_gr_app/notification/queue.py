@@ -8,15 +8,21 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_pending(conn: sqlite3.Connection) -> list[dict]:
+    """Fetch pending entries excluding status_change events.
+
+    Status-change emails are opened as Outlook drafts immediately after
+    each operation via _auto_open_outlook_draft(). The notification poll
+    script only handles reminders (thresholds, schedules, monthly summaries).
+    """
     rows = conn.execute(
-        "SELECT * FROM notification_queue WHERE status = 'pending' ORDER BY created_at ASC"
+        "SELECT * FROM notification_queue WHERE status = 'pending' AND event_type != 'status_change' ORDER BY created_at ASC"
     ).fetchall()
     return [dict(r) for r in rows]
 
 
 def fetch_failed(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT * FROM notification_queue WHERE status = 'failed' ORDER BY created_at ASC"
+        "SELECT * FROM notification_queue WHERE status = 'failed' AND event_type != 'status_change' ORDER BY created_at ASC"
     ).fetchall()
     return [dict(r) for r in rows]
 

@@ -76,9 +76,28 @@
           </template>
           <template #extra>
             <el-button @click="verify">{{ $t('common.retry') }}</el-button>
+            <el-button type="primary" @click="showRegister = true">{{ $t('login.register') }}</el-button>
           </template>
         </el-result>
       </div>
+
+    <el-dialog v-model="showRegister" :title="$t('login.register')" width="420px" @closed="registerForm = { user_name: '', email: '' }">
+      <el-form :model="registerForm" label-position="top" @submit.prevent="doRegister">
+        <el-form-item :label="$t('login.machineId')">
+          <el-input :model-value="detectedMachineId" disabled />
+        </el-form-item>
+        <el-form-item :label="$t('login.userName')" required>
+          <el-input v-model="registerForm.user_name" placeholder="Your full name" />
+        </el-form-item>
+        <el-form-item :label="$t('login.email')" required>
+          <el-input v-model="registerForm.email" type="email" placeholder="your.email@example.com" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRegister = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doRegister" :loading="registering">{{ $t('login.register') }}</el-button>
+      </template>
+    </el-dialog>
     </el-card>
     <p class="login-version">{{ versionText }}</p>
   </div>
@@ -102,6 +121,10 @@ const lastError = ref('')
 const retryCount = ref(0)
 const MAX_RETRIES = 10
 let retryTimer = null
+const showRegister = ref(false)
+const detectedMachineId = ref('')
+const registering = ref(false)
+const registerForm = ref({ user_name: '', email: '' })
 
 const versionText = computed(() => t('app.version', { version: appVersion.value || '?' }))
 
@@ -147,6 +170,7 @@ async function verify() {
     lastError.value = e.message || t('login.unableToReach')
     if (e instanceof ApiError && e.code === 'PERMISSION_DENIED') {
       state.value = 'unauthorized'
+      try { detectedMachineId.value = await callApi('detect_machine_id') } catch { /* ignore */ }
     } else if (retryCount.value >= MAX_RETRIES) {
       state.value = 'unauthorized'
       lastError.value = t('login.serverUnreachable')
@@ -176,6 +200,27 @@ function enterApp() {
   stopRetry()
   const redirect = router.currentRoute.value.query?.redirect || '/workbench'
   router.push(redirect)
+}
+
+async function doRegister() {
+  registering.value = true
+  try {
+    user.value = await callApi('register_user', {
+      user_name: registerForm.value.user_name,
+      email: registerForm.value.email,
+    })
+    window.__currentUser = user.value
+    // After registration, also fetch dev/beta/version info
+    try { isDev.value = await callApi('is_dev') } catch { isDev.value = false }
+    try { isBeta.value = await callApi('is_beta'); window.__isBeta = isBeta.value } catch { isBeta.value = false; window.__isBeta = false }
+    try { appVersion.value = await callApi('get_version') } catch { appVersion.value = '?' }
+    state.value = 'authorized'
+    showRegister.value = false
+  } catch (e) {
+    lastError.value = e.message
+  } finally {
+    registering.value = false
+  }
 }
 
 onMounted(verify)

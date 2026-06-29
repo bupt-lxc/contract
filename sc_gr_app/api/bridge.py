@@ -6,8 +6,8 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
-from sc_gr_app.services.audit_service import write_audit_log
-from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id
+from sc_gr_app.services.record_service import format_timestamp, write_operation_record
+from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id, register_user
 
 
 def _require_payload_field(payload: dict, field: str):
@@ -27,6 +27,26 @@ def _attachment_sc_id(entity_type: str, entity_id: str,
     if entity_type == "gr":
         return parent_sc_id or None
     return None
+
+
+def _format_entity_timestamps(entity: dict) -> dict:
+    """Format timestamp fields in an entity dict for display."""
+    _TIMESTAMP_FIELDS = (
+        "created_at", "updated_at", "pending_date", "approved_date",
+        "closed_at", "cancelled_at", "confirmed_at", "activing_date",
+        "approved_at", "sent_at",
+    )
+    for f in _TIMESTAMP_FIELDS:
+        if f in entity and entity[f]:
+            entity[f] = format_timestamp(entity[f])
+    return entity
+
+
+def _format_list_timestamps(items: list) -> list:
+    """Format timestamps in each entity of a list."""
+    if not items:
+        return items
+    return [_format_entity_timestamps(item) for item in items]
 
 
 class ApiBridge:
@@ -61,21 +81,45 @@ class ApiBridge:
                 )
                 conn.commit()
             user = get_user_by_machine_id(self.config, machine_id)
-            return ok(user)
+            return ok(_format_entity_timestamps(user))
         except Exception as exc:
             return fail(exc)
 
     def current_user(self, payload=None) -> dict:
         try:
             machine_id = get_7_digit_id()
-            return ok(get_user_by_machine_id(self.config, machine_id))
+            return ok(_format_entity_timestamps(get_user_by_machine_id(self.config, machine_id)))
         except PermissionDenied:
             machine_id = get_7_digit_id()
             if os.getenv("SC_GR_DEV") == "1":
-                return ok(self._auto_create_dev_user(machine_id))
+                return ok(_format_entity_timestamps(self._auto_create_dev_user(machine_id)))
             return fail(PermissionDenied(f"Machine {machine_id} is not authorized"))
         except Exception as exc:
             return fail(exc)
+
+    def detect_machine_id(self, _payload=None) -> dict:
+        """Return the current machine ID. Works for unregistered machines."""
+        return ok(get_7_digit_id())
+
+    def register_user(self, payload) -> dict:
+        """Register a new user. No auth required — only for unregistered machines."""
+        try:
+            payload = self._required_payload(payload)
+            machine_id = get_7_digit_id()
+            user_name = _require_payload_field(payload, "user_name")
+            email = _require_payload_field(payload, "email")
+
+            # Verify this machine is NOT already registered
+            try:
+                get_user_by_machine_id(self.config, machine_id)
+                return fail(ValidationError("This machine is already registered."))
+            except PermissionDenied:
+                pass  # Expected — machine not registered yet
+
+            user = register_user(self.config, machine_id, user_name, email)
+            return ok(_format_entity_timestamps(user))
+        except ValidationError as e:
+            return fail(e)
 
     def _auto_create_dev_user(self, machine_id: str) -> dict:
         from sc_gr_app.db.connection import connect
@@ -122,7 +166,15 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.get_sc_detail(self.config, current_user, sc_id))
+            result = sc_service.get_sc_detail(self.config, current_user, sc_id)
+            if isinstance(result, dict):
+                for key in ("sc",):
+                    if key in result:
+                        result[key] = _format_entity_timestamps(result[key])
+                for key in ("pos", "grs", "operation_records"):
+                    if key in result:
+                        result[key] = _format_list_timestamps(result[key])
+            return ok(result)
         except Exception as exc:
             return fail(exc)
 
@@ -131,7 +183,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.create_sc_draft(self.config, current_user, data))
+            return ok(_format_entity_timestamps(sc_service.create_sc_draft(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -141,7 +193,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.submit_sc(self.config, current_user, sc_id, data))
+            result = sc_service.submit_sc(self.config, current_user, sc_id, data)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -151,7 +205,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
-            return ok(sc_service.update_sc(self.config, current_user, sc_id, data))
+            return ok(_format_entity_timestamps(sc_service.update_sc(self.config, current_user, sc_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -161,7 +215,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             cascade_pos = payload.get("cascade_pos", False)
-            return ok(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos))
+            result = sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -170,7 +226,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.deny_sc(self.config, current_user, sc_id))
+            result = sc_service.deny_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -179,7 +237,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.close_sc(self.config, current_user, sc_id))
+            result = sc_service.close_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -189,7 +249,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.confirm_sc(self.config, current_user, sc_id))
+            result = sc_service.confirm_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -199,7 +261,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(sc_service.revoke_sc(self.config, current_user, sc_id))
+            result = sc_service.revoke_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -220,7 +284,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             new_requester_id = _require_payload_field(payload, "new_requester_id")
-            return ok(sc_service.transfer_sc(self.config, current_user, sc_id, new_requester_id))
+            return ok(_format_entity_timestamps(sc_service.transfer_sc(self.config, current_user, sc_id, new_requester_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -229,7 +293,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(po_service.create_po(self.config, current_user, data))
+            result = po_service.create_po(self.config, current_user, data)
+            self._auto_open_outlook_draft("po", result["po_id"])
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -239,7 +305,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             data = _require_payload_field(payload, "data")
-            return ok(po_service.update_po(self.config, current_user, po_id, data))
+            return ok(_format_entity_timestamps(po_service.update_po(self.config, current_user, po_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -248,7 +314,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.finish_po(self.config, current_user, po_id))
+            result = po_service.finish_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -258,7 +326,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.submit_po(self.config, current_user, po_id))
+            result = po_service.submit_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -268,7 +338,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(po_service.revoke_po(self.config, current_user, po_id))
+            result = po_service.revoke_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -287,7 +359,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(gr_service.create_gr(self.config, current_user, data))
+            result = gr_service.create_gr(self.config, current_user, data)
+            self._auto_open_outlook_draft("gr", result["gr_id"])
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -297,7 +371,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             data = _require_payload_field(payload, "data")
-            return ok(gr_service.update_gr(self.config, current_user, gr_id, data))
+            return ok(_format_entity_timestamps(gr_service.update_gr(self.config, current_user, gr_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -307,7 +381,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             con_value = payload.get("con_value")  # optional — auto-calculated from tax_rate if omitted
-            return ok(gr_service.approve_gr(self.config, current_user, gr_id, con_value))
+            result = gr_service.approve_gr(self.config, current_user, gr_id, con_value)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -316,7 +392,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.cancel_gr(self.config, current_user, gr_id))
+            result = gr_service.cancel_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -326,7 +404,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.confirm_gr(self.config, current_user, gr_id))
+            result = gr_service.confirm_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -336,7 +416,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.submit_gr(self.config, current_user, gr_id))
+            result = gr_service.submit_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -346,7 +428,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(gr_service.revoke_gr(self.config, current_user, gr_id))
+            result = gr_service.revoke_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -364,7 +448,15 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             current_user = self._require_current_user()
-            return ok(query_service.workbench_data(self.config, current_user))
+            result = query_service.workbench_data(self.config, current_user)
+            # Format timestamps in workbench rows (e.g., gr.created_at)
+            for category in ("sc", "po", "gr"):
+                if category in result:
+                    for status_key in result[category]:
+                        result[category][status_key]["rows"] = _format_list_timestamps(
+                            result[category][status_key]["rows"]
+                        )
+            return ok(result)
         except Exception as exc:
             return fail(exc)
 
@@ -373,7 +465,7 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_scs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_scs(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -381,7 +473,7 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             self._require_current_user()
-            return ok(query_service.search_vendors(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_vendors(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -390,7 +482,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(vendor_service.create_vendor(self.config, current_user, data))
+            return ok(_format_entity_timestamps(vendor_service.create_vendor(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -400,7 +492,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             vendor_id = _require_payload_field(payload, "vendor_id")
             data = _require_payload_field(payload, "data")
-            return ok(vendor_service.update_vendor(self.config, current_user, vendor_id, data))
+            return ok(_format_entity_timestamps(vendor_service.update_vendor(self.config, current_user, vendor_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -499,7 +591,7 @@ class ApiBridge:
         try:
             self._require_current_user()
             from sc_gr_app.services.user_service import list_active_users
-            return ok(list_active_users(self.config))
+            return ok(_format_list_timestamps(list_active_users(self.config)))
         except Exception as exc:
             return fail(exc)
 
@@ -509,7 +601,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             from sc_gr_app.services.user_service import create_user
-            return ok(create_user(self.config, current_user, data))
+            return ok(_format_entity_timestamps(create_user(self.config, current_user, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -520,7 +612,7 @@ class ApiBridge:
             machine_id = _require_payload_field(payload, "machine_id")
             data = _require_payload_field(payload, "data")
             from sc_gr_app.services.user_service import update_user
-            return ok(update_user(self.config, current_user, machine_id, data))
+            return ok(_format_entity_timestamps(update_user(self.config, current_user, machine_id, data)))
         except Exception as exc:
             return fail(exc)
 
@@ -530,7 +622,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             machine_id = _require_payload_field(payload, "machine_id")
             from sc_gr_app.services.user_service import disable_user
-            return ok(disable_user(self.config, current_user, machine_id))
+            return ok(_format_entity_timestamps(disable_user(self.config, current_user, machine_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -539,7 +631,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             machine_id = _require_payload_field(payload, "machine_id")
-            return ok(enable_user(self.config, current_user, machine_id))
+            return ok(_format_entity_timestamps(enable_user(self.config, current_user, machine_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -548,7 +640,7 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_pos(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_pos(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -557,16 +649,16 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_grs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_grs(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
-    def search_audit_logs(self, payload=None) -> dict:
+    def search_operation_records(self, payload=None) -> dict:
         try:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(query_service.search_audit_logs(self.config, **payload))
+            return ok(_format_list_timestamps(query_service.search_operation_records(self.config, **payload)))
         except Exception as exc:
             return fail(exc)
 
@@ -606,7 +698,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(notification_service.get_po_custom_schedules(self.config, po_id))
+            return ok(_format_list_timestamps(notification_service.get_po_custom_schedules(self.config, po_id)))
         except Exception as exc:
             return fail(exc)
 
@@ -691,7 +783,7 @@ class ApiBridge:
         try:
             payload = self._payload(payload) or {}
             current_user = self._require_current_user()
-            return ok(notification_service.list_notification_queue(
+            result = notification_service.list_notification_queue(
                 self.config,
                 sc_id=payload.get("sc_id"),
                 status=payload.get("status"),
@@ -699,9 +791,116 @@ class ApiBridge:
                 entity_id=payload.get("entity_id"),
                 limit=payload.get("limit", 50),
                 offset=payload.get("offset", 0),
-            ))
+            )
+            result["items"] = _format_list_timestamps(result["items"])
+            return ok(result)
         except Exception as exc:
             return fail(exc)
+
+    def generate_email_draft(self, payload) -> dict:
+        """Generate email content for preview. Returns draft data."""
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entry_id = _require_payload_field(payload, "entry_id")
+
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    "SELECT * FROM notification_queue WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if not entry:
+                    return fail(NotFound(f"Queue entry {entry_id} not found"))
+                draft = sender.generate_draft(conn, dict(entry))
+                return ok(draft)
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
+    def open_email_draft_in_outlook(self, payload) -> dict:
+        """Generate email via Outlook COM and open in Outlook for manual send."""
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entry_id = _require_payload_field(payload, "entry_id")
+
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    "SELECT * FROM notification_queue WHERE id = ?", (entry_id,)
+                ).fetchone()
+                if not entry:
+                    return fail(NotFound(f"Queue entry {entry_id} not found"))
+                draft = sender.generate_draft(conn, dict(entry))
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+
+            return ok({"message": "Draft opened in Outlook"})
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
+    def _auto_open_outlook_draft(self, entity_type: str, entity_id: str) -> None:
+        """After a status transition, find the latest pending queue entry
+        and open the email draft in Outlook. Best-effort — failures are
+        logged but never raise."""
+        try:
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    """SELECT * FROM notification_queue
+                       WHERE entity_type = ? AND entity_id = ? AND status = 'pending'
+                       ORDER BY id DESC LIMIT 1""",
+                    (entity_type, entity_id),
+                ).fetchone()
+                if not entry:
+                    return
+                draft = sender.generate_draft(conn, dict(entry))
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+        except Exception:
+            pass  # best-effort; don't block the operation
 
     # ── Attachment APIs ──────────────────────────────────────────────
 
@@ -851,7 +1050,7 @@ class ApiBridge:
                         "created_at": timestamp,
                     }
                     results.append(attach_record)
-                    write_audit_log(
+                    write_operation_record(
                         conn,
                         action_type="add_attachment",
                         object_type="attachment",
@@ -962,7 +1161,7 @@ class ApiBridge:
                         "created_at": timestamp,
                     }
                     results.append(attach_record)
-                    write_audit_log(
+                    write_operation_record(
                         conn,
                         action_type="add_attachment",
                         object_type="attachment",
@@ -994,7 +1193,7 @@ class ApiBridge:
                     "ORDER BY created_at DESC",
                     (entity_type, entity_id),
                 ).fetchall()
-            return ok([{
+            return ok(_format_list_timestamps([{
                 "id": r["id"],
                 "entity_type": r["entity_type"],
                 "entity_id": r["entity_id"],
@@ -1002,7 +1201,7 @@ class ApiBridge:
                 "file_size": r["file_size"],
                 "created_by": r["created_by"],
                 "created_at": r["created_at"],
-            } for r in rows])
+            } for r in rows]))
         except Exception as exc:
             return fail(exc)
 
@@ -1052,7 +1251,7 @@ class ApiBridge:
                     "created_by": row["created_by"],
                     "created_at": row["created_at"],
                 }
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_attachment",
                     object_type="attachment",
@@ -1118,3 +1317,289 @@ class ApiBridge:
             return ok({"opened": True})
         except Exception as exc:
             return fail(exc)
+
+    def import_scs(self, payload) -> dict:
+        """Import SC records from Excel rows."""
+        try:
+            from sc_gr_app.services import import_service
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            result = import_service.import_scs(self.config, user, rows)
+            return ok(result)
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def download_sc_template(self, _payload=None) -> dict:
+        """Return SC import template as base64-encoded xlsx data."""
+        import io
+        import base64
+        import zipfile
+
+        headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
+                   "sc_amount", "service_period_start", "service_period_end", "status",
+                   "description", "currency", "internal_system_number"]
+        hints = ["Optional (auto-generated if empty)", "Optional",
+                 "Optional (defaults to importer)",
+                 "material/service/fixed_asset/FC", "Cost center number",
+                 "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
+                 "draft/pending/approved/closed/denied/manager_confirm", "Optional",
+                 "CNY/EUR/USD", "Optional (FC only)"]
+        sample = ["[EXAMPLE]", "", "", "material", "12345",
+                  "50000", "2026-01-01", "2026-12-31", "draft",
+                  "Sample SC description", "CNY", ""]
+
+        def _col_letter(i):
+            """Convert 0-based column index to Excel column letter(s)."""
+            s = ""
+            n = i
+            while n >= 0:
+                s = chr(ord('A') + n % 26) + s
+                n = n // 26 - 1
+            return s
+
+        # Build inlineStr cells for header, hint, and sample rows
+        def _inline_str_cell(col, row_num, text):
+            ref = f"{_col_letter(col)}{row_num}"
+            return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
+
+        def _xml_escape(s):
+            return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+
+        sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">{header_cells}</row>
+    <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
+  </sheetData>
+</worksheet>"""
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                '</Types>')
+            zf.writestr("_rels/.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/workbook.xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="SC Import" sheetId="1" r:id="rId1"/></sheets>'
+                '</workbook>')
+            zf.writestr("xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode("ascii")
+        return ok({"filename": "SC_Import_Template.xlsx", "data": b64})
+
+    def import_pos(self, payload) -> dict:
+        """Import PO records from Excel rows."""
+        try:
+            from sc_gr_app.services import import_service
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            result = import_service.import_pos(self.config, user, rows)
+            return ok(result)
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def download_po_template(self, _payload=None) -> dict:
+        """Return PO import template as base64-encoded xlsx data."""
+        import io
+        import base64
+        import zipfile
+
+        headers = ["po_id", "sc_id", "vendor_id", "po_no", "requester_id",
+                   "po_amount", "status", "contract_from", "contract_to", "contract_no",
+                   "payment_frequency", "contract_pos", "contract_type", "cost_center",
+                   "purchaser"]
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                 "Optional (must exist if provided)",
+                 "Optional", "Optional (defaults to importer)", "Required",
+                 "draft/activing/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
+                 "Optional"]
+        sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
+                  "50000", "draft", "2026-01-01", "2026-12-31", "",
+                  "monthly", "", "", "", ""]
+
+        def _col_letter(i):
+            """Convert 0-based column index to Excel column letter(s)."""
+            s = ""
+            n = i
+            while n >= 0:
+                s = chr(ord('A') + n % 26) + s
+                n = n // 26 - 1
+            return s
+
+        def _inline_str_cell(col, row_num, text):
+            ref = f"{_col_letter(col)}{row_num}"
+            return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
+
+        def _xml_escape(s):
+            return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+
+        sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">{header_cells}</row>
+    <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
+  </sheetData>
+</worksheet>"""
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                '</Types>')
+            zf.writestr("_rels/.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/workbook.xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="PO Import" sheetId="1" r:id="rId1"/></sheets>'
+                '</workbook>')
+            zf.writestr("xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode("ascii")
+        return ok({"filename": "PO_Import_Template.xlsx", "data": b64})
+
+    def import_grs(self, payload) -> dict:
+        """Import GR records from Excel rows."""
+        try:
+            from sc_gr_app.services import import_service
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            result = import_service.import_grs(self.config, user, rows)
+            return ok(result)
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def download_gr_template(self, _payload=None) -> dict:
+        """Return GR import template as base64-encoded xlsx data."""
+        import io
+        import base64
+        import zipfile
+
+        headers = ["gr_id", "po_id", "gr_no", "requester_id",
+                   "estimated_amount", "con_value", "status", "remark", "tax_rate",
+                   "gross_cost", "goods_service_description", "confirmation_name",
+                   "delivery_from", "delivery_to", "last_delivery"]
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                 "Optional", "Optional (defaults to importer)",
+                 "Required", "Optional",
+                 "draft/manager_confirm/pending/approved/cancelled", "Optional",
+                 "Optional (e.g. 13)", "Optional", "Optional", "Optional",
+                 "YYYY-MM-DD", "YYYY-MM-DD", "YYYY-MM-DD"]
+        sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
+                  "10000", "", "draft", "", "13",
+                  "", "Sample goods description", "",
+                  "2026-01-01", "2026-12-31", ""]
+
+        def _col_letter(i):
+            """Convert 0-based column index to Excel column letter(s)."""
+            s = ""
+            n = i
+            while n >= 0:
+                s = chr(ord('A') + n % 26) + s
+                n = n // 26 - 1
+            return s
+
+        def _inline_str_cell(col, row_num, text):
+            ref = f"{_col_letter(col)}{row_num}"
+            return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
+
+        def _xml_escape(s):
+            return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+
+        sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">{header_cells}</row>
+    <row r="2">{hint_cells}</row>
+    <row r="3">{sample_cells}</row>
+  </sheetData>
+</worksheet>"""
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                '</Types>')
+            zf.writestr("_rels/.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/workbook.xml",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="GR Import" sheetId="1" r:id="rId1"/></sheets>'
+                '</workbook>')
+            zf.writestr("xl/_rels/workbook.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                '</Relationships>')
+            zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode("ascii")
+        return ok({"filename": "GR_Import_Template.xlsx", "data": b64})

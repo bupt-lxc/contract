@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
-from sc_gr_app.services.audit_service import write_audit_log
+from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import (
     compute_po_budget_decimal,
@@ -270,7 +270,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ),
                 )
                 created = _get_gr(conn, gr_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="create_gr",
                     object_type="gr",
@@ -326,7 +326,7 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
         ).fetchone()
         sc_id = po_sc["sc_id"] if po_sc else None
 
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="submit_gr",
             object_type="gr",
@@ -383,7 +383,7 @@ def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestam
         ).fetchone()
         sc_id = po_sc["sc_id"] if po_sc else None
 
-        write_audit_log(
+        write_operation_record(
             conn,
             action_type="approve_gr",
             object_type="gr",
@@ -479,7 +479,7 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     (timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="confirm_gr",
                     object_type="gr",
@@ -585,7 +585,7 @@ def approve_gr(
                     (float(con_value_amount), current_user["user_id"], timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="approve_gr",
                     object_type="gr",
@@ -824,7 +824,7 @@ def update_gr(
                     if after_sc_id != sc_id:
                         audit_sc_ids.append(after_sc_id)
                 for audit_sc_id in audit_sc_ids:
-                    write_audit_log(
+                    write_operation_record(
                         conn,
                         action_type="update_gr",
                         object_type="gr",
@@ -870,7 +870,7 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     (current_user["user_id"], timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="cancel_gr",
                     object_type="gr",
@@ -929,7 +929,7 @@ def revoke_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 )
 
                 after = _get_gr(conn, gr_id)
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="revoke_gr",
                     object_type="gr",
@@ -984,7 +984,7 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 conn.execute("DELETE FROM attachments WHERE entity_type = 'gr' AND entity_id = ?", (gr_id,))
                 conn.execute("DELETE FROM gr_requests WHERE gr_id = ?", (gr_id,))
 
-                write_audit_log(
+                write_operation_record(
                     conn,
                     action_type="delete_gr",
                     object_type="gr",

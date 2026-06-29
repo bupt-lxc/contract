@@ -25,6 +25,7 @@
       <el-table-column prop="vendor_name" :label="$t('vendor.vendorName')" width="180" />
       <el-table-column prop="vendor_id" :label="$t('vendor.vendorId')" width="120" />
       <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140" />
+      <el-table-column prop="ksrm_vendor_code" :label="$t('vendor.ksrmCode')" width="120" />
       <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="140" />
       <el-table-column prop="contact_person" :label="$t('vendor.contact')" width="100" />
       <template #empty><el-empty :description="$t('vendor.noRecords')" /></template>
@@ -63,7 +64,8 @@ const filteredVendors = computed(() => {
     list = list.filter(v =>
       (v.vendor_name || '').toLowerCase().includes(q) ||
       (v.vendor_id || '').toLowerCase().includes(q) ||
-      (v.company_name_cn || '').toLowerCase().includes(q)
+      (v.company_name_cn || '').toLowerCase().includes(q) ||
+      (v.ksrm_vendor_code || '').toLowerCase().includes(q)
     )
   }
   return list

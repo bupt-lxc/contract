@@ -9,6 +9,12 @@
         <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
           <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
         </el-button>
+        <el-button @click="importVisible = true">
+          <el-icon><Upload /></el-icon> Import
+        </el-button>
+        <el-button @click="downloadTemplate">
+          <el-icon><Download /></el-icon> Template
+        </el-button>
         <el-button @click="handleExport" :loading="exporting">
           <el-icon><Download /></el-icon> {{ $t('common.export') }}
         </el-button>
@@ -59,6 +65,31 @@
       :state="batchState"
       @abort="abort"
     />
+
+    <el-dialog v-model="importVisible" title="Import SC" width="500px">
+      <el-upload
+        :auto-upload="false"
+        :on-change="handleFileSelect"
+        :limit="1"
+        accept=".xlsx,.xls"
+        drag
+      >
+        <el-icon :size="40"><UploadFilled /></el-icon>
+        <div>Drop file here or click to upload</div>
+        <template #tip>
+          <div>Only .xlsx/.xls files</div>
+        </template>
+      </el-upload>
+      <div v-if="importResult" style="margin-top:12px">
+        <el-alert v-if="importResult.ok" type="success" :title="`Imported ${importResult.count} records`" closable @close="importResult = null" />
+        <el-alert v-else type="error" closable @close="importResult = null">
+          <div v-for="e in importResult.errors" :key="e.row">Row {{ e.row }}: {{ e.field }} - {{ e.message }}</div>
+        </el-alert>
+      </div>
+      <template #footer>
+        <el-button @click="importVisible = false">Cancel</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -66,7 +97,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
@@ -278,6 +310,39 @@ async function handleExport() {
     ElMessage.error(e.message || t('export.failed'))
   } finally {
     exporting.value = false
+  }
+}
+
+// SC import
+const importVisible = ref(false)
+const importResult = ref(null)
+
+async function handleFileSelect(uploadFile) {
+  importResult.value = null
+  const file = uploadFile.raw
+  try {
+    const data = await file.arrayBuffer()
+    const wb = XLSX.read(data, { type: 'array' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+    importResult.value = await callApi('import_scs', { rows })
+    if (importResult.value.ok) {
+      importVisible.value = false
+      searchScs()
+    }
+  } catch (e) {
+    importResult.value = { ok: false, errors: [{ row: '-', field: '', message: e.message }] }
+  }
+}
+
+async function downloadTemplate() {
+  try {
+    const result = await callApi('download_sc_template')
+    const saveResult = await callApi('save_file', { filename: result.filename, data: result.data })
+    if (saveResult?.cancelled) return
+    ElMessage.success('Template downloaded')
+  } catch (e) {
+    ElMessage.error(e.message || 'Failed to download template')
   }
 }
 

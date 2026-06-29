@@ -102,6 +102,9 @@ def _attach_budget_info(
         # Also attach all child POs with their budget info
         _attach_child_pos(conn, entity_id, entity_info)
 
+        # Attach vendor list for the email body
+        _attach_sc_vendors(conn, entity_id, entity_info)
+
     elif entity_type == "po":
         # Also attach all child GRs under this PO
         _attach_child_grs(conn, entity_id, entity_info)
@@ -182,6 +185,27 @@ def _attach_child_grs(
     entity_info["child_grs"] = child_grs
 
 
+def _attach_sc_vendors(
+    conn: sqlite3.Connection,
+    sc_id: str,
+    entity_info: dict,
+) -> None:
+    """Query all vendors linked to an SC, attach as _vendors list for the email body."""
+    rows = conn.execute(
+        """
+        SELECT v.vendor_id, v.vendor_name, v.service_scope,
+               v.contact_person, v.phone, v.email
+        FROM sc_vendors scv
+        JOIN vendors v ON v.vendor_id = scv.vendor_id
+        WHERE scv.sc_id = ?
+        ORDER BY v.vendor_name
+        """,
+        (sc_id,),
+    ).fetchall()
+    entity_info["_vendors"] = [dict(r) for r in rows]
+
+
+
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
     """Map user IDs to email addresses from the users table."""
     if not user_ids:
@@ -202,6 +226,71 @@ def resolve_user_name(conn: sqlite3.Connection, user_id: str) -> str:
         "SELECT user_name FROM users WHERE user_id = ?", (user_id,)
     ).fetchone()
     return row["user_name"] if row else user_id
+
+
+def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
+    """Generate email content for preview without sending.
+
+    Returns {subject, html_body, to_addresses, cc_addresses, attachments, attachment_paths}.
+    """
+    to_ids = json.loads(entry["to_recipients"])
+    cc_ids = json.loads(entry["cc_recipients"])
+    to_emails_map = resolve_emails(conn, to_ids)
+    cc_emails_map = resolve_emails(conn, cc_ids)
+    to_addresses = [to_emails_map[uid] for uid in to_ids if uid in to_emails_map]
+    cc_addresses = [cc_emails_map[uid] for uid in cc_ids if uid in cc_emails_map]
+
+    entity_type = entry["entity_type"]
+    entity_id = entry["entity_id"]
+    entity_info = {}
+    if entity_type == "sc":
+        row = conn.execute("SELECT * FROM sc_records WHERE sc_id = ?", (entity_id,)).fetchone()
+    elif entity_type == "po":
+        row = conn.execute(
+            """SELECT p.*, v.vendor_name FROM pos p
+               LEFT JOIN vendors v ON v.vendor_id = p.vendor_id
+               WHERE p.po_id = ?""", (entity_id,)
+        ).fetchone()
+    elif entity_type == "gr":
+        row = conn.execute("SELECT * FROM gr_requests WHERE gr_id = ?", (entity_id,)).fetchone()
+    else:
+        row = None
+    if row:
+        entity_info = dict(row)
+
+    _attach_budget_info(conn, entity_type, entity_id, entity_info)
+
+    actor_id = entry.get("actor_id") or ""
+    actor_name = resolve_user_name(conn, actor_id) if actor_id else ""
+    requester_id = entity_info.get("requester_id") or ""
+    requester_name = resolve_user_name(conn, requester_id) if requester_id else ""
+
+    # Look up attachments
+    attachment_rows = conn.execute(
+        "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
+        (entity_type, entity_id),
+    ).fetchall()
+    entity_info["_attachments"] = [r["filename"] for r in attachment_rows]
+    attachment_paths = [r["stored_path"] for r in attachment_rows]
+
+    subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
+    # Append daily sequence
+    today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    seq = conn.execute(
+        "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
+    ).fetchone()[0]
+    subject = f"{subject}-{seq:03d}"
+    body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
+                                actor_name=actor_name, requester_name=requester_name)
+
+    return {
+        "subject": subject,
+        "html_body": body,
+        "to_addresses": to_addresses,
+        "cc_addresses": cc_addresses,
+        "attachments": [r["filename"] for r in attachment_rows],
+        "attachment_paths": attachment_paths,
+    }
 
 
 def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
@@ -256,19 +345,26 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     requester_id = entity_info.get("requester_id") or ""
     requester_name = resolve_user_name(conn, requester_id) if requester_id else ""
 
-    # Monthly summary: body and subject are pre-rendered and stored in app_settings
-    if entry["event_type"] == "monthly_summary":
-        body, subject = _get_monthly_content(conn, entry)
-    else:
-        subject = templates.build_subject(entry, entity_info)
-        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
-                                    actor_name=actor_name, requester_name=requester_name)
-
-    # Look up attachments for this entity
+    # Look up attachments — used for both display names and Outlook attachment files
     attachment_rows = conn.execute(
         "SELECT filename, stored_path FROM attachments WHERE entity_type = ? AND entity_id = ?",
         (entity_type, entity_id),
     ).fetchall()
+    entity_info["_attachments"] = [r["filename"] for r in attachment_rows]
+
+    # Monthly summary: body and subject are pre-rendered and stored in app_settings
+    if entry["event_type"] == "monthly_summary":
+        body, subject = _get_monthly_content(conn, entry)
+    else:
+        subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
+        # Append daily sequence number
+        today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        seq = conn.execute(
+            "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
+        ).fetchone()[0]
+        subject = f"{subject}-{seq:03d}"
+        body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
+                                    actor_name=actor_name, requester_name=requester_name)
 
     pythoncom.CoInitialize()
     try:

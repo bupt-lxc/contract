@@ -98,36 +98,36 @@ def seed_approved_sc_vendor_po(
                 (sc_no, sc_id),
             )
             conn.commit()
-    create_vendor(
+    v = create_vendor(
         app_config,
         USER,
         {
-            "vendor_id": "V1",
             "vendor_name": "Vendor",
             "service_scope": "General Service",
         },
     )
-    add_sc_vendor(app_config, ADMIN, sc_id, "V1")
+    vendor_id = v["vendor_id"]
+    add_sc_vendor(app_config, ADMIN, sc_id, vendor_id)
     created_po = create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_no": po_no,
             "po_amount": po_amount,
             "status": po_status,
         },
     )
     po_id = created_po["po_id"]
-    return sc_id, po_id
+    return sc_id, po_id, vendor_id
 
 
 def test_sc_po_gr_happy_path(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -156,7 +156,7 @@ def test_approve_gr_rejects_closed_parent_sc(app_config):
     from sc_gr_app.services.po_service import finish_po
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -179,7 +179,7 @@ def test_update_gr_rejects_closed_parent_sc(app_config):
     from sc_gr_app.services.po_service import finish_po
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -202,7 +202,7 @@ def test_cancel_gr_rejects_closed_parent_sc(app_config):
     from sc_gr_app.services.po_service import finish_po
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -415,7 +415,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
 def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=100)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_amount=100)
 
     with pytest.raises(ValidationError, match="po_amount must be positive"):
         create_po(
@@ -445,7 +445,7 @@ def test_create_gr_requires_complete_approved_sc_and_po(
 ):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(
         app_config,
         sc_no=sc_no,
         po_no=po_no,
@@ -575,7 +575,7 @@ def test_create_gr_requires_approved_sc(app_config):
 def test_create_gr_requires_enough_sc_available(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
     create_gr(
             app_config,
             ADMIN,
@@ -600,7 +600,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
 ):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     with pytest.raises(
         ValidationError,
@@ -620,7 +620,7 @@ def test_create_gr_rejects_non_finite_estimated_amount(
 def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     with connect(app_config) as conn:
         conn.execute(
@@ -672,7 +672,7 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
 def test_approve_gr_rechecks_extra_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
     created_gr = create_gr(
             app_config,
             ADMIN,
@@ -687,7 +687,7 @@ def test_approve_gr_rechecks_extra_con_value(app_config):
 def test_approve_gr_validates_con_value(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
             app_config,
             ADMIN,
@@ -703,7 +703,7 @@ def test_approve_gr_validates_con_value(app_config):
 def test_approve_gr_rejects_non_finite_con_value(app_config, con_value):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
             app_config,
             ADMIN,
@@ -719,7 +719,7 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
             app_config,
             ADMIN,
@@ -732,7 +732,7 @@ def test_sc_vendor_po_gr_writes_are_audited(app_config):
         actions = [
             row["action_type"]
             for row in conn.execute(
-                "select action_type from audit_logs order by created_at"
+                "select action_type from operation_records order by created_at"
             )
         ]
 
@@ -751,14 +751,14 @@ def test_create_po_allows_exact_decimal_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.1)
+    sc_id, po_id, vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.1)
 
     created = create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_amount": 0.2,
             "status": "activing",
         },
@@ -771,7 +771,7 @@ def test_create_gr_allows_exact_decimal_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
     create_gr(
             app_config,
             ADMIN,
@@ -791,7 +791,7 @@ def test_approve_gr_allows_exact_decimal_extra_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.3, po_amount=0.3)
     created_gr = create_gr(
             app_config,
             ADMIN,
@@ -981,7 +981,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
 
     from sc_gr_app.services.sc_service import get_sc_detail
 
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -1000,7 +1000,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     assert detail["budget"]["sc_amount"] == 1000
     assert [po["po_id"] for po in detail["pos"]] == [po_id]
     assert [gr["gr_id"] for gr in detail["grs"]] == [gr_id]
-    assert "create_sc" in [log["action_type"] for log in detail["audit_logs"]]
+    assert "create_sc" in [log["action_type"] for log in detail["operation_records"]]
     assert detail["permissions"] == {
         "is_admin": True,
         "can_edit_sc": True,
@@ -1024,7 +1024,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
 def test_get_sc_detail_includes_po_budget_data(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
     create_gr(
             app_config,
             ADMIN,
@@ -1057,7 +1057,7 @@ def test_admin_can_view_draft_sc_detail(app_config):
 def test_update_sc_rejects_amount_below_allocated_po_amount(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
 
     from sc_gr_app.services.sc_service import update_sc
 
@@ -1068,7 +1068,7 @@ def test_update_sc_rejects_amount_below_allocated_po_amount(app_config):
 def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
     created_gr = create_gr(
         app_config,
         ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 300})
@@ -1087,7 +1087,7 @@ def test_update_sc_rejects_amount_below_gr_budget_usage(app_config):
 def test_update_sc_rejects_amount_below_manager_confirm_gr_usage(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=1000)
 
     with connect(app_config) as conn:
         conn.execute(
@@ -1111,13 +1111,13 @@ def test_update_sc_rejects_amount_below_manager_confirm_gr_usage(app_config):
 def test_update_sc_allows_exact_decimal_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
+    sc_id, po_id, vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=0.1)
     create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_amount": 0.2,
             "status": "activing",
         },
@@ -1200,7 +1200,7 @@ def test_update_sc_rejects_clearing_required_fields_on_non_draft(
 ):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     from sc_gr_app.services.sc_service import update_sc
 
@@ -1212,7 +1212,7 @@ def test_update_sc_rejects_clearing_required_fields_on_non_draft(
 def test_admin_updates_po_with_budget_validation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_amount=800)
     create_gr(
         app_config,
         ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 300})
@@ -1242,7 +1242,7 @@ def test_admin_updates_po_with_budget_validation(app_config):
 def test_admin_approves_and_finishes_po(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
 
     from sc_gr_app.services.po_service import finish_po
 
@@ -1254,7 +1254,7 @@ def test_admin_approves_and_finishes_po(app_config):
 def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1000, po_amount=800)
 
     from sc_gr_app.services.po_service import update_po
 
@@ -1275,13 +1275,13 @@ def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_co
 def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.6, po_amount=0.1)
+    sc_id, po_id, vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=0.6, po_amount=0.1)
     create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_amount": 0.2,
         },
     )
@@ -1290,7 +1290,7 @@ def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
         ADMIN,
         {
             "sc_id": sc_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_amount": 0.1,
         },
     )
@@ -1306,7 +1306,7 @@ def test_update_po_allows_exact_decimal_sibling_budget_boundary(app_config):
 def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=1, po_amount=1)
     create_gr(
         app_config,
         ADMIN, {"po_id": po_id, "requester_id": "U1", "estimated_amount": 0.1})
@@ -1327,7 +1327,7 @@ def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
 def test_po_update_approve_finish_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
 
     from sc_gr_app.services.po_service import finish_po, update_po
 
@@ -1338,7 +1338,7 @@ def test_po_update_approve_finish_are_audited(app_config):
         actions = [
             row["action_type"]
             for row in conn.execute(
-                "select action_type from audit_logs order by created_at"
+                "select action_type from operation_records order by created_at"
             )
         ]
 
@@ -1350,7 +1350,7 @@ def test_gr_write_permissions(app_config):
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     from sc_gr_app.services.gr_service import cancel_gr, create_gr, update_gr
 
@@ -1381,7 +1381,7 @@ def test_gr_write_permissions(app_config):
 def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     created = create_gr(
         app_config,
@@ -1400,7 +1400,7 @@ def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
 def test_admin_updates_pending_gr_with_budget_validation(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -1427,7 +1427,7 @@ def test_admin_updates_pending_gr_with_budget_validation(app_config):
 def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=300, po_amount=300)
+    sc_id, po_id, vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=300, po_amount=300)
     with connect(app_config) as conn:
         conn.execute(
             """
@@ -1449,7 +1449,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
             (
                 "PO2",
                 sc_id,
-                "V1",
+                vendor_id,
                 "PO002",
                 200,
                 "activing",
@@ -1490,7 +1490,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
 def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
+    sc_id, po_id, vendor_id = seed_approved_sc_vendor_po(app_config, sc_amount=500, po_amount=500)
     created_sc2 = create_sc(
         app_config,
         USER,
@@ -1506,13 +1506,13 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
     )
     sc2_id = created_sc2["sc_id"]
     approve_sc(app_config, ADMIN, sc2_id)
-    add_sc_vendor(app_config, ADMIN, sc2_id, "V1")
+    add_sc_vendor(app_config, ADMIN, sc2_id, vendor_id)
     created_po2 = create_po(
         app_config,
         ADMIN,
         {
             "sc_id": sc2_id,
-            "vendor_id": "V1",
+            "vendor_id": vendor_id,
             "po_no": "PO002",
             "po_amount": 500,
             "status": "activing",
@@ -1536,7 +1536,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
             for row in conn.execute(
                 """
                 select sc_id
-                from audit_logs
+                from operation_records
                 where action_type = 'update_gr' and object_id = ?
                 order by sc_id
                 """,
@@ -1553,7 +1553,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
 def test_update_pending_gr_rejects_blank_requester_id(app_config, requester_id):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -1570,7 +1570,7 @@ def test_update_pending_gr_rejects_blank_requester_id(app_config, requester_id):
 def test_update_pending_gr_rejects_unknown_requester_id(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr = create_gr(
         app_config,
         ADMIN,
@@ -1587,7 +1587,7 @@ def test_update_pending_gr_rejects_unknown_requester_id(app_config):
 def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id = seed_approved_sc_vendor_po(app_config)
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
     created_gr1 = create_gr(
         app_config,
         ADMIN,
@@ -1983,7 +1983,7 @@ def test_reject_draft_po_on_approved_sc(app_config):
     """Approved SC rejects draft PO."""
     migrate(app_config)
     seed_users(app_config)
-    sc_id, _ = seed_approved_sc_vendor_po(app_config)
+    sc_id, _po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
     create_vendor(
         app_config, ADMIN,
@@ -2071,7 +2071,7 @@ class TestTransferSc:
         transfer_sc(app_config, ADMIN, sc["sc_id"], "U2")
         with connect(app_config) as conn:
             row = conn.execute(
-                "SELECT * FROM audit_logs WHERE action_type = 'transfer_sc' AND object_id = ?",
+                "SELECT * FROM operation_records WHERE action_type = 'transfer_sc' AND object_id = ?",
                 (sc["sc_id"],),
             ).fetchone()
         assert row is not None

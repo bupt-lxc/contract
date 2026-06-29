@@ -84,21 +84,21 @@
 
       <div class="section-card">
         <div class="section-header">
-          <h3>{{ $t('audit.audit') }}</h3>
+          <h3>{{ $t('record.record') }}</h3>
           <el-button size="small" @click="handleExportAudit">
             <el-icon><Download /></el-icon> {{ $t('common.export') }}
           </el-button>
         </div>
-        <el-table :data="detail.audit_logs || []" stripe border size="small">
-          <el-table-column prop="created_at" :label="$t('audit.created')" width="160">
+        <el-table :data="detail.operation_records || []" stripe border size="small">
+          <el-table-column prop="created_at" :label="$t('record.created')" width="160">
             <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
           </el-table-column>
-          <el-table-column prop="action_type" :label="$t('audit.action')" width="140" />
-          <el-table-column prop="object_type" :label="$t('audit.object')" width="100" />
-          <el-table-column prop="object_id" :label="$t('audit.objectId')" width="120" />
-          <el-table-column prop="operator_id" :label="$t('audit.operator')" width="120" />
-          <el-table-column prop="changes_summary" :label="$t('audit.changes')" min-width="220" />
-          <template #empty><el-empty :description="$t('audit.noRecordsInSc')" /></template>
+          <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
+          <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+          <el-table-column prop="object_id" :label="$t('record.objectId')" width="120" />
+          <el-table-column prop="operator_id" :label="$t('record.operator')" width="120" />
+          <el-table-column prop="changes_summary" :label="$t('record.changes')" min-width="220" />
+          <template #empty><el-empty :description="$t('record.noRecordsInSc')" /></template>
         </el-table>
       </div>
 
@@ -193,7 +193,7 @@ async function handleEditSave(data) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: scId.value, file_paths: _attachments })
       attachRefreshKey.value++
     }
-    ElMessage.success(t('sc.updated'))
+    ElMessage.success(t('sc.scUpdated'))
     await fetchDetail(scId.value)
     editDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -205,9 +205,9 @@ async function handleSubmit() {
       ElMessage.warning(t('sc.vendorRequiredForSubmit'))
       return
     }
-    await ElMessageBox.confirm(t('sc.confirmSubmit'), t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('sc.submitConfirm'), t('common.confirm'), { type: 'warning' })
     await submitSc(scId.value, {})
-    ElMessage.success(t('sc.submitted'))
+    ElMessage.success(t('sc.scSubmitted'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -227,7 +227,7 @@ async function handleConfirm() {
 
 async function handleApprove() {
   try {
-    await ElMessageBox.confirm(t('sc.confirmApprove'), t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('sc.approveConfirm'), t('common.confirm'), { type: 'warning' })
 
     // Check for draft POs — offer cascade
     const draftPos = (detail.value.pos || []).filter(p => p.status === 'draft')
@@ -244,7 +244,7 @@ async function handleApprove() {
     }
 
     await approveSc(scId.value, cascadePos)
-    ElMessage.success(t('sc.approved'))
+    ElMessage.success(t('sc.scApproved'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -253,9 +253,9 @@ async function handleApprove() {
 
 async function handleDeny() {
   try {
-    await ElMessageBox.confirm(t('sc.confirmDeny'), t('common.confirm'), { type: 'warning' })
+    await ElMessageBox.confirm(t('sc.denyConfirm'), t('common.confirm'), { type: 'warning' })
     await denySc(scId.value)
-    ElMessage.success(t('sc.denied'))
+    ElMessage.success(t('sc.scDenied'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -264,7 +264,7 @@ async function handleDeny() {
 
 async function handleClose() {
   try {
-    await ElMessageBox.prompt(t('sc.confirmClosePrompt'), t('sc.closeSc'), {
+    await ElMessageBox.prompt(t('sc.closePrompt'), t('sc.closeTitle'), {
       confirmButtonText: t('common.close'),
       type: 'warning',
       inputPattern: /^I CONFIRM CLOSE THIS SC$/,
@@ -272,7 +272,7 @@ async function handleClose() {
       inputPlaceholder: 'I CONFIRM CLOSE THIS SC'
     })
     await closeSc(scId.value)
-    ElMessage.success(t('sc.closed'))
+    ElMessage.success(t('sc.scClosed'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -409,15 +409,15 @@ async function handleExportPos() {
 
 async function handleExportAudit() {
   const columns = [
-    { key: 'created_at', label: t('audit.created'), getValue: r => (r.created_at || '').slice(0, 19) },
-    { key: 'action_type', label: t('audit.action') },
-    { key: 'object_type', label: t('audit.objectType') },
-    { key: 'object_id', label: t('audit.objectId') },
-    { key: 'operator_id', label: t('audit.operator') },
-    { key: 'machine_id', label: t('audit.machine') }
+    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+    { key: 'action_type', label: t('record.action') },
+    { key: 'object_type', label: t('record.objectType') },
+    { key: 'object_id', label: t('record.objectId') },
+    { key: 'operator_id', label: t('record.operator') },
+    { key: 'machine_id', label: t('record.machine') }
   ]
   const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
-  await exportRows(detail.value.audit_logs || [], columns, `${scNo}_Audit`)
+  await exportRows(detail.value.operation_records || [], columns, `${scNo}_Records`)
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 

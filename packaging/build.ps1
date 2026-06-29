@@ -127,6 +127,7 @@ Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
 $sharedReleases = Join-Path $sharedDrive "releases"
 $guiInstaller = "$setupPrefix-$version-Setup.exe"
 $notifyExe = "$notifyPrefix-$version.exe"
+$nonVersionedInstaller = "$setupPrefix-Setup.exe"
 
 Write-Host "=== Pushing to shared drive ===" -ForegroundColor Cyan
 if (-not (Test-Path $sharedReleases)) {
@@ -134,32 +135,41 @@ if (-not (Test-Path $sharedReleases)) {
 }
 
 # Copy notification executable (always built)
-Copy-Item -Path (Join-Path $distDir $notifyExe) -Destination $sharedReleases -Force
-$notifyHash = (Get-FileHash -Path (Join-Path $sharedReleases $notifyExe) -Algorithm SHA256).Hash.ToLower()
+$nonVersionedNotify = "$notifyPrefix.exe"
+$nonVersionedNotifyPath = Join-Path $sharedReleases $nonVersionedNotify
+Copy-Item -Path (Join-Path $distDir $notifyExe) -Destination $nonVersionedNotifyPath -Force
+# Versioned copy alongside non-versioned
+Copy-Item -Path (Join-Path $distDir $notifyExe) -Destination (Join-Path $sharedReleases $notifyExe) -Force
+$notifyHash = (Get-FileHash -Path $nonVersionedNotifyPath -Algorithm SHA256).Hash.ToLower()
 
 # Copy GUI installer (only if Inno Setup was available)
 $guiPath = Join-Path $distDir "installer\$guiInstaller"
 $guiHash = $null
 if (Test-Path $guiPath) {
-    Copy-Item -Path $guiPath -Destination $sharedReleases -Force
-    $guiHash = (Get-FileHash -Path (Join-Path $sharedReleases $guiInstaller) -Algorithm SHA256).Hash.ToLower()
+    $nonVersionedPath = Join-Path $sharedReleases $nonVersionedInstaller
+    Copy-Item -Path $guiPath -Destination $nonVersionedPath -Force
+    # Versioned copy alongside non-versioned
+    Copy-Item -Path $guiPath -Destination (Join-Path $sharedReleases $guiInstaller) -Force
+    $guiHash = (Get-FileHash -Path $nonVersionedPath -Algorithm SHA256).Hash.ToLower()
+    Write-Host "Non-versioned installer: $nonVersionedPath" -ForegroundColor Green
 } else {
     Write-Host "=== GUI installer not found, skipping ===" -ForegroundColor Yellow
 }
 
-# Generate manifest.json
+# Generate manifest.json — gui.installer points to the non-versioned
+# file so the updater always downloads from a fixed path.
 $manifest = @{
     version = $version
     published_at = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
     changelog_cn = ""
     notification = @{
-        package = $notifyExe
+        package = $nonVersionedNotify
         sha256 = $notifyHash
     }
 }
 if ($guiHash) {
     $manifest.gui = @{
-        installer = $guiInstaller
+        installer = $nonVersionedInstaller
         sha256 = $guiHash
     }
 }
@@ -170,6 +180,17 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $sharedReleases "manifest.json"), $manifestJson, $utf8NoBom)
 
 Write-Host "Pushed version $version to $sharedReleases" -ForegroundColor Green
+
+# 10. Local release directory: non-versioned copy (for manual distribution)
+if (Test-Path $guiPath) {
+    $releaseDir = Join-Path $distDir "release"
+    if (-not (Test-Path $releaseDir)) {
+        New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+    }
+    $nonVersioned = Join-Path $releaseDir "POMP_Setup.exe"
+    Copy-Item -Path $guiPath -Destination $nonVersioned -Force
+    Write-Host "Non-versioned installer: $nonVersioned" -ForegroundColor Green
+}
 
 $installerDir = Join-Path $distDir "installer"
 Write-Host "=== Done ===" -ForegroundColor Green

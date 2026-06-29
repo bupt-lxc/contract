@@ -2,6 +2,18 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
+
+def format_timestamp(iso_str: str) -> str:
+    """Convert ISO UTC timestamp to display format: YYYY-MM-DD HH:MM:SS"""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, AttributeError):
+        return iso_str
+
+
 # Fields excluded from change summaries (pure timestamps / tracking noise)
 _SKIP_DIFF_FIELDS = {
     "created_at", "updated_at", "created_by",
@@ -54,7 +66,7 @@ def _fmt_val(value) -> str:
     return s
 
 
-def write_audit_log(
+def write_operation_record(
     conn,
     *,
     action_type,
@@ -70,7 +82,7 @@ def write_audit_log(
     changes_summary = _diff_changes(before, after)
     conn.execute(
         """
-        insert into audit_logs (
+        insert into operation_records (
           log_id,
           action_type,
           object_type,

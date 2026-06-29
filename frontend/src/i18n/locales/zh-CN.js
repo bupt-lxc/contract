@@ -27,7 +27,7 @@ export default {
     grList: '收货记录列表',
     grDetail: '收货记录详情',
     vendorList: '供应商列表',
-    auditLogs: '审计日志',
+    operationRecords: '操作记录',
     emailLogs: '邮件日志',
     emailSettings: '邮件通知设置',
     system: '系统'
@@ -35,6 +35,7 @@ export default {
 
   common: {
     save: '保存',
+    saved: '已保存',
     cancel: '取消',
     edit: '编辑',
     delete: '删除',
@@ -116,7 +117,11 @@ export default {
     adminPanelDesc: '全部功能 & 系统管理',
     requesterPanel: '申请人面板',
     requesterPanelDesc: '申请 & 查看',
-    switchRole: '切换角色'
+    switchRole: '切换角色',
+    register: '注册',
+    machineId: '机器ID',
+    userName: '姓名',
+    email: '邮箱'
   },
 
 home: {
@@ -129,7 +134,7 @@ home: {
     colRequester: '申请人',
     colPoNo: 'PO编号',
     colGrId: 'GR ID',
-    colDeadline: '截止日期',
+    colDeadline: '合同结束日期',
     colCreatedAt: '申请日期',
     viewAllOfType: '查看此类全部',
   },
@@ -149,6 +154,8 @@ home: {
     requestType: '申请类型',
     costCenter: '成本中心',
     scAmount: '采购需求金额',
+    startDate: '开始日期',
+    endDate: '结束日期',
     servicePeriodStart: '服务开始日期',
     servicePeriodEnd: '服务结束日期',
     description: '描述',
@@ -214,6 +221,7 @@ home: {
     transferOwnerHint: '将 {no} 的所有者从 {old} 转移给：',
     selectNewOwner: '选择新所有者',
     ownerTransferred: '所有者已转移',
+    currency: '货币',
   },
 
   po: {
@@ -232,6 +240,8 @@ home: {
     vendorName: '供应商名称',
     poAmount: '采购订单金额',
     openPoAmount: '可用采购订单金额',
+    startDate: '开始日期',
+    contractEndDate: '合同结束日期',
     consumedAmount: '已消费金额',
     pendingExclTax: '待批准预估消费金额（不含税）',
     pendingInclTax: '待批准预估消费金额（含税）',
@@ -286,12 +296,14 @@ home: {
     requesterId: '申请人ID',
     estimated: '预估金额',
     estimatedAmount: '预估金额',
-    conValue: '合同金额',
+    conValue: 'GR金额',
     grossCost: '含税总金额',
     estAmount: '预估金额',
     taxRate: '增值税率(%)',
     remark: '备注',
     created: '创建时间',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
     actions: '操作',
     edit: '编辑',
     approve: '批准',
@@ -300,6 +312,7 @@ home: {
     scNo: '采购需求编号',
     vendor: '供应商',
     poId: '采购订单ID',
+    vendorId: '供应商ID',
     scId: '采购需求ID',
     noRecords: '暂无收货记录。',
     noRecordsForPo: '此采购订单暂无收货记录。',
@@ -342,6 +355,7 @@ home: {
     vendor: '供应商',
     vendorId: '供应商ID',
     vendorName: '供应商名称',
+    vendorNameFull: '供应商名称（需全称）',
     ksrmCode: 'KSRM代码',
     serviceScope: '服务范围',
     contact: '联系人',
@@ -397,9 +411,9 @@ home: {
     userList: '用户列表'
   },
 
-  audit: {
-    auditLogs: '审计日志',
-    audit: '审计',
+  record: {
+    recordLogs: '操作记录',
+    record: '操作记录',
     action: '操作',
     object: '对象',
     objectType: '对象类型',
@@ -407,10 +421,11 @@ home: {
     operator: '操作者',
     machine: '机器',
     mode: '模式',
-    noRecords: '暂无审计日志。',
-    noRecordsInSc: '暂无审计记录。',
+    noRecords: '暂无操作记录。',
+    noRecordsInSc: '暂无操作记录。',
     changes: '变更详情',
     scId: 'SC ID',
+    created: '创建时间',
     exportSuccess: '导出成功',
     exportFailed: '导出失败'
   },
@@ -436,7 +451,10 @@ home: {
     eventAmount: '金额',
     noRecords: '暂无邮件通知记录。',
     exportSuccess: '导出成功',
-    exportFailed: '导出失败'
+    exportFailed: '导出失败',
+    previewSend: '预览并发送',
+    openInOutlook: '在Outlook中打开',
+    autoSend: '自动'
   },
 
   notification: {
@@ -525,7 +543,7 @@ home: {
     contractTo: '合同结束',
     grId: '收货记录ID',
     estimated: '预估金额',
-    conValue: '合同金额',
+    conValue: 'GR金额',
     grossCost: '含税总金额',
     remark: '备注',
     action: '操作',
@@ -569,7 +587,7 @@ home: {
     grId: '收货记录ID',
     requester: '申请人',
     estimatedAmount: '预估金额',
-    conValue: '合同金额',
+    conValue: 'GR金额',
     grossCost: '含税总金额',
     action: '操作',
     objectType: '对象类型',
@@ -581,6 +599,8 @@ home: {
     contractType: '合同类型',
     purchaser: '采购员',
     activingDate: '生效日期',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
     deadline: '截止日期',
     unlimited: '不限',
     within3Years: '三年内',
@@ -672,7 +692,7 @@ home: {
     contractTo: '合同结束',
     grId: '收货记录ID',
     estimated: '预估金额',
-    conValue: '合同金额',
+    conValue: 'GR金额',
     grossCost: '含税总金额',
     remark: '备注',
     action: '操作',
@@ -683,6 +703,8 @@ home: {
     asset: '资产',
     assetNums: '资产编号',
     internalSystemNumber: '内部系统编号',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
     activingDate: '生效日期',
     contractPos: '合同项',
     contractType: '合同类型',
