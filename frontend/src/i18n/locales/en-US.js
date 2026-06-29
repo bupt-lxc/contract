@@ -81,7 +81,7 @@ export default {
 
   status: {
     draft: 'Draft',
-    manager_confirm: 'Manager Confirm',
+    manager_confirm: 'To be confirmed',
     pending: 'Pending',
     approved: 'Approved',
     denied: 'Denied',

@@ -81,7 +81,7 @@ export default {
 
   status: {
     draft: '草稿',
-    manager_confirm: '管理员确认',
+    manager_confirm: '待确认',
     pending: '待处理',
     approved: '已批准',
     denied: '已拒绝',
