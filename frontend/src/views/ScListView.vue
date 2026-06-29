@@ -271,10 +271,10 @@ async function handleSaveSubmit(data) {
   try {
     const { _attachments, ...formData } = data
     const created = await createDraft(formData)
-    await submitSc(created.sc_id, formData)
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
     }
+    await submitSc(created.sc_id, formData)
     ElMessage.success(t('common.saved'))
     scDialogVisible.value = false
     await searchScs()

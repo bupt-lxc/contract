@@ -70,20 +70,28 @@ def main():
     if args.beta:
         os.environ["SC_GR_BETA"] = "1"
 
+    one_shot = args.run_once or args.thresholds_only
+
     _setup_logging()
+
+    if one_shot:
+        # Suppress verbose startup logging in one-shot modes (invoked
+        # frequently by Task Scheduler — avoid log explosion on stdout).
+        logging.getLogger().handlers[0].setLevel(logging.WARNING)
 
     if args.draft:
         sender.set_draft_mode(True)
 
     config = default_config()
-    logging.info("Notification started. Database: %s", config.db_path)
-    logging.info("Poll interval: %ss", args.poll_interval)
-    logging.info("Draft mode: %s", args.draft)
+    if not one_shot:
+        logging.info("Notification started. Database: %s", config.db_path)
+        logging.info("Poll interval: %ss", args.poll_interval)
+        logging.info("Draft mode: %s", args.draft)
 
     migrate(config)
 
     # Update check for run-once and thresholds-only modes
-    if args.run_once or args.thresholds_only:
+    if one_shot:
         _check_for_update(config)
 
     if args.thresholds_only:
@@ -105,7 +113,7 @@ def _check_for_update(config):
     if not getattr(sys, 'frozen', False):
         return
 
-    manifest = fetch_manifest(config)
+    manifest = fetch_manifest()
     if manifest is None or not is_update_available(manifest):
         return
 

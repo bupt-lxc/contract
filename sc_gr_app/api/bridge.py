@@ -359,7 +359,16 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
+            file_paths = data.pop("_attachments", None) or []
+            parent_sc_id = data.pop("_parent_sc_id", None)
+            parent_po_id = data.pop("_parent_po_id", None)
             result = gr_service.create_gr(self.config, current_user, data)
+            if file_paths:
+                self._add_attachments_inline(
+                    entity_type="gr", entity_id=result["gr_id"],
+                    file_paths=file_paths, current_user=current_user,
+                    parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                )
             self._auto_open_outlook_draft("gr", result["gr_id"])
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
@@ -1006,6 +1015,67 @@ class ApiBridge:
             return ok(results)
         except Exception as exc:
             return fail(exc)
+
+    def _add_attachments_inline(self, entity_type, entity_id, file_paths, current_user,
+                                  parent_sc_id=None, parent_po_id=None):
+        """Copy files and create DB records inline — best-effort, never raises.
+
+        Used internally so create_gr / submit_sc can attach files before
+        _auto_open_outlook_draft runs.
+        """
+        try:
+            import shutil
+            from datetime import datetime, timezone
+            if not isinstance(file_paths, list) or len(file_paths) == 0:
+                return
+            timestamp = datetime.now(timezone.utc).isoformat()
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                for fp in file_paths:
+                    src = Path(fp)
+                    if not src.exists():
+                        continue
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, src.name,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
+                    shutil.copy2(src, dest)
+                    conn.execute(
+                        "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            entity_type, entity_id, dest.name,
+                            str(dest), dest.stat().st_size,
+                            current_user["user_id"], timestamp,
+                        ),
+                    )
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "filename": dest.name,
+                        "stored_path": str(dest),
+                        "file_size": dest.stat().st_size,
+                        "created_by": current_user["user_id"],
+                        "created_at": timestamp,
+                    }
+                    write_operation_record(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
+                conn.commit()
+        except Exception:
+            pass  # best-effort; never block the parent operation
 
     def add_attachments(self, payload) -> dict:
         """Copy selected files into the attachments directory and create DB records."""

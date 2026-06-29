@@ -318,15 +318,20 @@ async function handleGrSave(data) {
       if (po.value?.status !== 'draft') {
         payload.status = 'manager_confirm'
       }
+      if (_attachments?.length) {
+        payload._attachments = _attachments
+        payload._parent_sc_id = scId.value
+        payload._parent_po_id = poId.value
+      }
       const created = await createGr(payload)
       grId = created.gr_id
     } else {
       grId = formData.gr_id
       await updateGr(grId, formData)
-    }
-    if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
-      attachRefreshKey.value++
+      if (_attachments?.length) {
+        await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+        attachRefreshKey.value++
+      }
     }
     ElMessage.success(t('common.saved'))
     await fetchDetail(scId.value)

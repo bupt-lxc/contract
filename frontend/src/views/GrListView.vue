@@ -305,18 +305,14 @@ function confirmGrSelection() {
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
+    const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
     const payload = { ...formData, po_id: grSelectedPoId.value, status: 'manager_confirm' }
-    const result = await callApi('create_gr', { data: payload })
-    const created = result
-    if (_attachments?.length && created?.gr_id) {
-      // Get po info for parent references
-      const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
-      await callApi('add_attachments', {
-        entity_type: 'gr', entity_id: created.gr_id,
-        file_paths: _attachments,
-        parent_sc_id: po?.sc_id, parent_po_id: grSelectedPoId.value
-      })
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = po?.sc_id
+      payload._parent_po_id = grSelectedPoId.value
     }
+    await callApi('create_gr', { data: payload })
     ElMessage.success(t('common.saved'))
     grDialogVisible.value = false
     await searchGrs()
