@@ -60,7 +60,7 @@ def seed_sc(conn, sc_id="SC1", sc_amount=1000):
           updated_at,
           approved_by,
           approved_at,
-          closed_at
+          finished_at
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
@@ -177,8 +177,8 @@ def seed_gr(
           created_at,
           approved_by,
           approved_at,
-          cancelled_by,
-          cancelled_at
+          denied_by,
+          denied_at
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
@@ -194,8 +194,8 @@ def seed_gr(
             TIMESTAMP,
             "U1" if status == "approved" else None,
             TIMESTAMP if status == "approved" else None,
-            "U1" if status == "cancelled" else None,
-            TIMESTAMP if status == "cancelled" else None,
+            "U1" if status == "denied" else None,
+            TIMESTAMP if status == "denied" else None,
         ),
     )
 
@@ -304,7 +304,7 @@ def test_cancelled_grs_are_excluded_from_sc_and_po_budget(app_config):
             "GR3",
             estimated_amount=300,
             con_value=300,
-            status="cancelled",
+            status="denied",
         )
         conn.commit()
 

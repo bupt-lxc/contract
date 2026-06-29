@@ -66,7 +66,7 @@
           @detail="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
-          @cancel="row => handleGrCancel(row)"
+          @deny="row => handleGrDeny(row)"
           @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
@@ -156,7 +156,7 @@ const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updatePo, finishPo, submitPo } = usePo()
-const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
+const { createGr, updateGr, approveGr, denyGr, submitGr } = useGr()
 
 const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
 const { exportRows } = useExport()
@@ -269,11 +269,11 @@ async function handleGrApprove(row) {
   }
 }
 
-async function handleGrCancel(row) {
+async function handleGrDeny(row) {
   try {
-    await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
-    await cancelGr(row.gr_id)
-    ElMessage.success(t('gr.grCancelled'))
+    await ElMessageBox.confirm(t('gr.denyConfirm'), t('common.confirm'), { type: 'warning' })
+    await denyGr(row.gr_id)
+    ElMessage.success(t('gr.grDenied'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

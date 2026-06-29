@@ -36,9 +36,9 @@
         <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
         <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
         <el-button v-if="row.status === 'pending'" type="success" link size="small" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
-        <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.cancelConfirm')" @confirm="$emit('cancel', row)">
+        <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.denyConfirm')" @confirm="$emit('deny', row)">
           <template #reference>
-            <el-button type="danger" link size="small" @click.stop>{{ $t('gr.cancel') }}</el-button>
+            <el-button type="danger" link size="small" @click.stop>{{ $t('gr.deny') }}</el-button>
           </template>
         </el-popconfirm>
         <el-button type="info" link size="small" @click.stop="$emit('attachments', row)">
@@ -56,7 +56,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['detail', 'edit', 'approve', 'cancel', 'attachments', 'row-click', 'submit'])
+defineEmits(['detail', 'edit', 'approve', 'deny', 'attachments', 'row-click', 'submit'])
 
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

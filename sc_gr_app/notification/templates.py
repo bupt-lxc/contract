@@ -54,9 +54,8 @@ _STATUS_LABELS: dict[str, str] = {
     "manager_confirm": "To be confirm",
     "approved": "Approved",
     "denied": "Denied",
-    "closed": "Closed",
+    "denied": "Denied",
     "finished": "Finished",
-    "cancelled": "Cancelled",
     "activing": "Activing",
     "po_pending": "PO Pending",
     "po_approved": "PO Approved",
@@ -68,9 +67,8 @@ _TRANSITION_LABELS: dict[str, str] = {
     "confirm": "Confirmed",
     "approve": "Approved",
     "deny": "Denied",
-    "close": "Closed",
+    "deny": "Denied",
     "finish": "Finished",
-    "cancel": "Cancelled",
 }
 
 _TYPE_LABELS: dict[str, str] = {"sc": "SC", "po": "PO", "gr": "GR"}
@@ -84,14 +82,14 @@ _SC_EXCLUDE = {
     "consumed_amount", "sc_available_amount",
     "pending_total", "pending_total_incl_tax", "child_pos",
     # Timestamps not relevant in notification emails
-    "created_at", "updated_at", "approved_at", "closed_at", "confirmed_at",
+    "created_at", "updated_at", "approved_at", "finished_at", "confirmed_at",
     "pending_date", "approved_date",
     # People already shown in Notification Info section
     "created_by", "approved_by",
 }
 _PO_EXCLUDE = {"consumed_amount", "pending_total", "pending_total_incl_tax",
                "open_po_amount", "activing_date", "created_at", "updated_at"}
-_GR_EXCLUDE = {"created_at", "pending_date", "approved_date", "cancelled_at", "confirmed_at"}
+_GR_EXCLUDE = {"created_at", "pending_date", "approved_date", "denied_at", "finished_at", "confirmed_at"}
 
 _GR_RENAMES = {
     "estimated_amount": "GR Application Amount (Net)",

@@ -16,7 +16,7 @@
         <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
         <el-button v-if="permissions.can_recall_sc" type="warning" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
         <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
-        <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
+        <el-button v-if="permissions.can_finish_sc" type="danger" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="permissions.can_transfer_sc" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
       </div>
     </div>
@@ -32,7 +32,7 @@
         <div class="section-header">
           <h3>{{ $t('sc.scInformation') }}</h3>
           <el-button
-            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'closed')"
+            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'finished')"
             type="primary" size="small"
             @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
           >
@@ -52,7 +52,7 @@
         />
       </div>
 
-      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed') && detail.pos && detail.pos.length > 0" class="section-card">
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'finished') && detail.pos && detail.pos.length > 0" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button size="small" @click="handleExportPos">
@@ -165,7 +165,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
+const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, finishSc } = useSc()
 const { createPo, updatePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
@@ -262,17 +262,17 @@ async function handleDeny() {
   }
 }
 
-async function handleClose() {
+async function handleFinish() {
   try {
-    await ElMessageBox.prompt(t('sc.closePrompt'), t('sc.closeTitle'), {
-      confirmButtonText: t('common.close'),
+    await ElMessageBox.prompt(t('sc.finishPrompt'), t('sc.finishTitle'), {
+      confirmButtonText: t('common.finish'),
       type: 'warning',
-      inputPattern: /^I CONFIRM CLOSE THIS SC$/,
-      inputErrorMessage: t('sc.closeInputError'),
-      inputPlaceholder: 'I CONFIRM CLOSE THIS SC'
+      inputPattern: /^I CONFIRM FINISH THIS SC$/,
+      inputErrorMessage: t('sc.finishInputError'),
+      inputPlaceholder: 'I CONFIRM FINISH THIS SC'
     })
-    await closeSc(scId.value)
-    ElMessage.success(t('sc.scClosed'))
+    await finishSc(scId.value)
+    ElMessage.success(t('sc.scFinished'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

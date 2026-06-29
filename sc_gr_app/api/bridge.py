@@ -33,7 +33,7 @@ def _format_entity_timestamps(entity: dict) -> dict:
     """Format timestamp fields in an entity dict for display."""
     _TIMESTAMP_FIELDS = (
         "created_at", "updated_at", "pending_date", "approved_date",
-        "closed_at", "cancelled_at", "confirmed_at", "activing_date",
+        "finished_at", "denied_at", "confirmed_at", "activing_date",
         "approved_at", "sent_at",
     )
     for f in _TIMESTAMP_FIELDS:
@@ -232,12 +232,12 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def close_sc(self, payload) -> dict:
+    def finish_sc(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            result = sc_service.close_sc(self.config, current_user, sc_id)
+            result = sc_service.finish_sc(self.config, current_user, sc_id)
             self._auto_open_outlook_draft("sc", sc_id)
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
@@ -387,12 +387,23 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def cancel_gr(self, payload) -> dict:
+    def deny_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            result = gr_service.cancel_gr(self.config, current_user, gr_id)
+            result = gr_service.deny_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
+        except Exception as exc:
+            return fail(exc)
+
+    def finish_gr(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            result = gr_service.finish_gr(self.config, current_user, gr_id)
             self._auto_open_outlook_draft("gr", gr_id)
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
@@ -1020,6 +1031,7 @@ class ApiBridge:
             sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 for fp in file_paths:
                     src = Path(fp)
                     if not src.exists():
@@ -1132,6 +1144,7 @@ class ApiBridge:
             sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 for src in file_paths:
                     src_path = Path(src)
                     filename = src_path.name
@@ -1251,6 +1264,8 @@ class ApiBridge:
                     "created_by": row["created_by"],
                     "created_at": row["created_at"],
                 }
+
+                conn.execute("BEGIN IMMEDIATE")
                 write_operation_record(
                     conn,
                     action_type="delete_attachment",
@@ -1347,7 +1362,7 @@ class ApiBridge:
                  "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
-                 "draft/pending/approved/closed/denied/manager_confirm", "Optional",
+                 "draft/pending/approved/finished/denied/manager_confirm", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
@@ -1537,7 +1552,7 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional", "Optional (defaults to importer)",
                  "Required", "Optional",
-                 "draft/manager_confirm/pending/approved/cancelled", "Optional",
+                 "draft/manager_confirm/pending/approved/denied/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
                  "YYYY-MM-DD", "YYYY-MM-DD", "YYYY-MM-DD"]
         sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",

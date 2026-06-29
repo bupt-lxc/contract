@@ -9,7 +9,7 @@
         <el-button v-if="scDetail?.permissions?.can_manage_gr && ['draft','pending','manager_confirm','approved'].includes(gr.status)" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleCancel">{{ $t('gr.cancel') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" @click="handleDeny">{{ $t('gr.deny') }}</el-button>
         <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" @click="handleRecall">{{ $t('gr.recall') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_gr && gr.status === 'draft'" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
@@ -111,7 +111,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updateGr, approveGr, cancelGr } = useGr()
+const { updateGr, approveGr, denyGr } = useGr()
 
 const scId = computed(() => route.params.scId)
 const poId = computed(() => route.params.poId)
@@ -188,11 +188,11 @@ async function handleApprove() {
   }
 }
 
-async function handleCancel() {
+async function handleDeny() {
   try {
-    await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
-    await cancelGr(grId.value)
-    ElMessage.success(t('gr.grCancelled'))
+    await ElMessageBox.confirm(t('gr.denyConfirm'), t('common.confirm'), { type: 'warning' })
+    await denyGr(grId.value)
+    ElMessage.success(t('gr.grDenied'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

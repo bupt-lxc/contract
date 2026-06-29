@@ -17,8 +17,8 @@ def format_timestamp(iso_str: str) -> str:
 # Fields excluded from change summaries (pure timestamps / tracking noise)
 _SKIP_DIFF_FIELDS = {
     "created_at", "updated_at", "created_by",
-    "approved_by", "approved_at", "closed_at",
-    "cancelled_by", "cancelled_at",
+    "approved_by", "approved_at", "finished_at",
+    "denied_by", "denied_at",
 }
 
 

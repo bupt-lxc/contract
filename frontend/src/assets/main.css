@@ -29,8 +29,8 @@ body {
 .status-row-pending, .status-row-po_pending { border-left: 3px solid var(--status-pending); }
 .status-row-approved, .status-row-po_approved { border-left: 3px solid var(--status-approved); }
 .status-row-denied { border-left: 3px solid var(--status-denied); }
-.status-row-closed, .status-row-finished { border-left: 3px solid var(--status-closed); }
-.status-row-cancelled { border-left: 3px solid var(--status-denied); }
+.status-row-finished { border-left: 3px solid var(--status-closed); }
+.status-row-denied { border-left: 3px solid var(--status-denied); }
 
 /* Amount formatting */
 .amount-cell {

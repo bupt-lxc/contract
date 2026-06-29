@@ -120,7 +120,7 @@ const exporting = ref(false)
 
 const scStatuses = [
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
-  { label: t('status.denied'), value: 'denied' }, { label: t('status.closed'), value: 'closed' }
+  { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])

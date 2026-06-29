@@ -27,7 +27,7 @@ REQUIRED_FIELDS = (
 )
 SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
 SUPPORTED_CURRENCIES = {"CNY", "EUR", "USD"}
-SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "closed"}
+SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "finished"}
 OPTIONAL_UPDATE_FIELDS = (
     "sc_no",
     "request_type",
@@ -141,8 +141,8 @@ def _assert_can_view_sc(user: dict, sc: dict) -> None:
 
 
 def _assert_can_edit_sc(user: dict, sc: dict) -> None:
-    if sc["status"] == "closed":
-        raise ConflictError("Closed SC cannot be edited")
+    if sc["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
     if user.get("role") == "admin":
         return
     if sc["status"] in ("draft", "manager_confirm", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
@@ -157,9 +157,9 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_manager_confirm = sc["status"] == "manager_confirm"
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
-    is_closed = sc["status"] == "closed"
+    is_finished = sc["status"] == "finished"
     is_denied = sc["status"] == "denied"
-    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_closed)
+    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_finished)
     can_manage = (is_admin or is_owner) and (is_draft or is_approved)
     return {
         "is_admin": is_admin,
@@ -168,7 +168,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_confirm_sc": is_admin and is_manager_confirm,
         "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
         "can_deny_sc": is_admin and is_pending,
-        "can_close_sc": is_admin and is_approved,
+        "can_finish_sc": is_admin and is_approved,
         "can_recall_sc": is_owner and (is_pending or is_manager_confirm or is_approved or is_denied),
         "can_delete_sc": (is_admin or is_owner) and is_draft,
         "can_delete_po": is_admin or is_owner,
@@ -462,7 +462,7 @@ def create_sc(
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at,
+                      finished_at,
                       asset,
                       asset_nums,
                       pending_date,
@@ -487,7 +487,7 @@ def create_sc(
                         timestamp,
                         current_user["user_id"] if status == "approved" else None,
                         timestamp if status == "approved" else None,
-                        timestamp if status == "closed" else None,
+                        timestamp if status == "finished" else None,
                         data.get("asset", "N"),
                         data.get("asset_nums"),
                         timestamp,
@@ -551,7 +551,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at,
+                      finished_at,
                       asset,
                       asset_nums,
                       pending_date,
@@ -876,7 +876,7 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     return after
 
 
-def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+def finish_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     require_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -894,7 +894,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 ).fetchall()
                 if unfinished_pos:
                     raise ConflictError(
-                        f"Cannot close SC: {len(unfinished_pos)} PO(s) not finished. "
+                        f"Cannot finish SC: {len(unfinished_pos)} PO(s) not finished. "
                         "Finish all POs first."
                     )
 
@@ -904,22 +904,22 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     SELECT gr.gr_id, gr.status
                     FROM gr_requests gr
                     JOIN pos po ON po.po_id = gr.po_id
-                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'cancelled')
+                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'denied', 'finished')
                     """,
                     (sc_id,),
                 ).fetchall()
                 if non_final_grs:
                     raise ConflictError(
-                        f"Cannot close SC: {len(non_final_grs)} GR(s) not in final state. "
-                        "Approve or cancel all GRs first."
+                        f"Cannot finish SC: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve, deny or finish all GRs first."
                     )
 
                 timestamp = utc_now()
                 conn.execute(
                     """
                     update sc_records
-                    set status = 'closed',
-                        closed_at = ?,
+                    set status = 'finished',
+                        finished_at = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -928,7 +928,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 after = _get_sc(conn, sc_id)
                 write_operation_record(
                     conn,
-                    action_type="close_sc",
+                    action_type="finish_sc",
                     object_type="sc",
                     object_id=sc_id,
                     sc_id=sc_id,
@@ -938,7 +938,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     after=after,
                 )
                 notification_service.queue_status_change(
-                    conn, "sc", sc_id, "close", before, current_user
+                    conn, "sc", sc_id, "finish", before, current_user
                 )
                 conn.commit()
             except Exception:

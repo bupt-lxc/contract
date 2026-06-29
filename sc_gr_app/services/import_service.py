@@ -7,7 +7,7 @@ from sc_gr_app.errors import ValidationError
 from sc_gr_app.services.lock_service import LeaseLock
 from sc_gr_app.services.record_service import write_operation_record
 
-SC_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "closed"}
+SC_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
 def utc_now() -> str:
@@ -282,7 +282,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-GR_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "cancelled"}
+GR_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
 def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:

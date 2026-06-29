@@ -357,12 +357,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     "select * from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
-                if sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
+                if sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
-                if before["status"] == "draft" and sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
+                if before["status"] == "draft" and sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can edit POs")
 
@@ -472,8 +472,8 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     "select status from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
-                if sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
+                if sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
                 if before["status"] != "activing":
                     raise ConflictError("PO must be activing")
 
@@ -531,8 +531,8 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
         raise NotFound(f"SC {sc_id} not found")
     if sc["requester_id"] != current_user["user_id"]:
         raise PermissionDenied("Only the SC requester can recall POs")
-    if sc["status"] == "closed":
-        raise ConflictError("Closed SC cannot be edited")
+    if sc["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:

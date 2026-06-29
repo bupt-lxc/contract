@@ -163,7 +163,7 @@ def test_bridge_sc_detail_and_write_methods_forward_payload_and_current_user(mon
     monkeypatch.setattr(bridge.sc_service, "update_sc", fake_service("update_sc"))
     monkeypatch.setattr(bridge.sc_service, "approve_sc", fake_service("approve_sc"))
     monkeypatch.setattr(bridge.sc_service, "deny_sc", fake_service("deny_sc"))
-    monkeypatch.setattr(bridge.sc_service, "close_sc", fake_service("close_sc"))
+    monkeypatch.setattr(bridge.sc_service, "finish_sc", fake_service("finish_sc"))
 
     api = bridge.ApiBridge(app_config)
 
@@ -191,9 +191,9 @@ def test_bridge_sc_detail_and_write_methods_forward_payload_and_current_user(mon
         "ok": True,
         "data": {"name": "deny_sc", "args": ("SC4",)},
     }
-    assert api.close_sc({"sc_id": "SC5"}) == {
+    assert api.finish_sc({"sc_id": "SC5"}) == {
         "ok": True,
-        "data": {"name": "close_sc", "args": ("SC5",)},
+        "data": {"name": "finish_sc", "args": ("SC5",)},
     }
     assert calls == [
         ("get_sc_detail", app_config, current_user, ("SC1",)),
@@ -202,7 +202,7 @@ def test_bridge_sc_detail_and_write_methods_forward_payload_and_current_user(mon
         ("update_sc", app_config, current_user, ("SC2", {"amount": 20})),
         ("approve_sc", app_config, current_user, ("SC3",)),
         ("deny_sc", app_config, current_user, ("SC4",)),
-        ("close_sc", app_config, current_user, ("SC5",)),
+        ("finish_sc", app_config, current_user, ("SC5",)),
     ]
 
 
@@ -282,7 +282,7 @@ def test_bridge_gr_write_methods_forward_payload_and_current_user(monkeypatch, a
     monkeypatch.setattr(bridge.gr_service, "create_gr", fake_service("create_gr"))
     monkeypatch.setattr(bridge.gr_service, "update_gr", fake_service("update_gr"))
     monkeypatch.setattr(bridge.gr_service, "approve_gr", fake_service("approve_gr"))
-    monkeypatch.setattr(bridge.gr_service, "cancel_gr", fake_service("cancel_gr"))
+    monkeypatch.setattr(bridge.gr_service, "deny_gr", fake_service("deny_gr"))
 
     api = bridge.ApiBridge(app_config)
 
@@ -298,15 +298,15 @@ def test_bridge_gr_write_methods_forward_payload_and_current_user(monkeypatch, a
         "ok": True,
         "data": {"method": "approve_gr", "args": ("GR2", 99.5)},
     }
-    assert api.cancel_gr({"gr_id": "GR3"}) == {
+    assert api.deny_gr({"gr_id": "GR3"}) == {
         "ok": True,
-        "data": {"method": "cancel_gr", "args": ("GR3",)},
+        "data": {"method": "deny_gr", "args": ("GR3",)},
     }
     assert calls == [
         ("create_gr", app_config, current_user, ({"po_id": "PO1"},)),
         ("update_gr", app_config, current_user, ("GR1", {"qty": 4})),
         ("approve_gr", app_config, current_user, ("GR2", 99.5)),
-        ("cancel_gr", app_config, current_user, ("GR3",)),
+        ("deny_gr", app_config, current_user, ("GR3",)),
     ]
 
 

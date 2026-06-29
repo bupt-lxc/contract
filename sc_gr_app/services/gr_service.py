@@ -16,7 +16,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("po_id", "requester_id", "estimated_amount")
-SUPPORTED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "cancelled"}
+SUPPORTED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
 def utc_now() -> str:
@@ -122,8 +122,8 @@ def _require_editable_parent_sc(conn, sc_id: str) -> None:
     ).fetchone()
     if row is None:
         raise NotFound(f"SC not found: {sc_id}")
-    if row["status"] == "closed":
-        raise ConflictError("Closed SC cannot be edited")
+    if row["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
 
 
 def _validate_user_exists(conn, user_id: str) -> None:
@@ -232,8 +232,8 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       created_at,
                       approved_by,
                       approved_at,
-                      cancelled_by,
-                      cancelled_at,
+                      denied_by,
+                      denied_at,
                       pending_date,
                       approved_date,
                       goods_service_description,
@@ -644,8 +644,8 @@ def update_gr(
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
-                if before["status"] == "cancelled":
-                    raise ConflictError("Cancelled GR cannot be edited")
+                if before["status"] == "denied":
+                    raise ConflictError("Denied GR cannot be edited")
                 if before["status"] not in ("draft", "manager_confirm", "pending", "approved"):
                     raise ConflictError("GR cannot be edited in its current status")
 
@@ -844,7 +844,7 @@ def update_gr(
     return after
 
 
-def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     require_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -863,9 +863,9 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 conn.execute(
                     """
                     update gr_requests
-                    set status = 'cancelled',
-                        cancelled_by = ?,
-                        cancelled_at = ?
+                    set status = 'denied',
+                        denied_by = ?,
+                        denied_at = ?
                     where gr_id = ?
                     """,
                     (current_user["user_id"], timestamp, gr_id),
@@ -873,7 +873,7 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
                     conn,
-                    action_type="cancel_gr",
+                    action_type="deny_gr",
                     object_type="gr",
                     object_id=gr_id,
                     sc_id=sc_id,
@@ -887,7 +887,62 @@ def cancel_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     (sc_id,),
                 ).fetchone()
                 notification_service.queue_status_change(
-                    conn, "gr", gr_id, "cancel",
+                    conn, "gr", gr_id, "deny",
+                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    return after
+
+
+def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+    """Mark an approved GR as finished (goods received / service completed)."""
+    require_requester_or_admin(current_user)
+
+    with connect(config) as lookup_conn:
+        sc_id = _get_gr_sc_id(lookup_conn, gr_id)
+
+    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+        with connect(config) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                _require_editable_parent_sc(conn, sc_id)
+                before = _get_gr(conn, gr_id)
+                if before["status"] != "approved":
+                    raise ConflictError("GR must be approved")
+
+                timestamp = utc_now()
+                conn.execute(
+                    """
+                    update gr_requests
+                    set status = 'finished',
+                        finished_by = ?,
+                        finished_at = ?
+                    where gr_id = ?
+                    """,
+                    (current_user["user_id"], timestamp, gr_id),
+                )
+                after = _get_gr(conn, gr_id)
+                write_operation_record(
+                    conn,
+                    action_type="finish_gr",
+                    object_type="gr",
+                    object_id=gr_id,
+                    sc_id=sc_id,
+                    operator_id=current_user["user_id"],
+                    machine_id=current_user["machine_id"],
+                    before=before,
+                    after=after,
+                )
+                sc = conn.execute(
+                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                    (sc_id,),
+                ).fetchone()
+                notification_service.queue_status_change(
+                    conn, "gr", gr_id, "finish",
                     {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
                 conn.commit()
