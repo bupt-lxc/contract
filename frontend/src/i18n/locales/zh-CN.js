@@ -35,6 +35,7 @@ export default {
 
   common: {
     save: '保存',
+    saved: '已保存',
     cancel: '取消',
     edit: '编辑',
     delete: '删除',
@@ -301,6 +302,8 @@ home: {
     taxRate: '增值税率(%)',
     remark: '备注',
     created: '创建时间',
+    pendingDate: '提交日期',
+    approvedDate: '批准日期',
     actions: '操作',
     edit: '编辑',
     approve: '批准',
@@ -309,6 +312,7 @@ home: {
     scNo: '采购需求编号',
     vendor: '供应商',
     poId: '采购订单ID',
+    vendorId: '供应商ID',
     scId: '采购需求ID',
     noRecords: '暂无收货记录。',
     noRecordsForPo: '此采购订单暂无收货记录。',

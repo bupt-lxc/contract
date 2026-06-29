@@ -35,6 +35,7 @@ export default {
 
   common: {
     save: 'Save',
+    saved: 'Saved',
     cancel: 'Cancel',
     edit: 'Edit',
     delete: 'Delete',
@@ -301,6 +302,8 @@ home: {
     taxRate: 'VAT(%)',
     remark: 'Remark',
     created: 'Created',
+    pendingDate: 'Pending Date',
+    approvedDate: 'Approved Date',
     actions: 'Actions',
     edit: 'Edit',
     approve: 'Approve',
@@ -309,6 +312,7 @@ home: {
     scNo: 'SC No',
     vendor: 'Vendor',
     poId: 'PO ID',
+    vendorId: 'Vendor ID',
     scId: 'SC ID',
     noRecords: 'No GR records found.',
     noRecordsForPo: 'No GRs for this PO.',

@@ -102,6 +102,9 @@ def _attach_budget_info(
         # Also attach all child POs with their budget info
         _attach_child_pos(conn, entity_id, entity_info)
 
+        # Attach vendor list for the email body
+        _attach_sc_vendors(conn, entity_id, entity_info)
+
     elif entity_type == "po":
         # Also attach all child GRs under this PO
         _attach_child_grs(conn, entity_id, entity_info)
@@ -182,6 +185,27 @@ def _attach_child_grs(
     entity_info["child_grs"] = child_grs
 
 
+def _attach_sc_vendors(
+    conn: sqlite3.Connection,
+    sc_id: str,
+    entity_info: dict,
+) -> None:
+    """Query all vendors linked to an SC, attach as _vendors list for the email body."""
+    rows = conn.execute(
+        """
+        SELECT v.vendor_id, v.vendor_name, v.service_scope,
+               v.contact_person, v.phone, v.email
+        FROM sc_vendors scv
+        JOIN vendors v ON v.vendor_id = scv.vendor_id
+        WHERE scv.sc_id = ?
+        ORDER BY v.vendor_name
+        """,
+        (sc_id,),
+    ).fetchall()
+    entity_info["_vendors"] = [dict(r) for r in rows]
+
+
+
 def resolve_emails(conn: sqlite3.Connection, user_ids: list[str]) -> dict[str, str]:
     """Map user IDs to email addresses from the users table."""
     if not user_ids:
@@ -253,7 +277,7 @@ def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
     # Append daily sequence
     today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
     seq = conn.execute(
-        "SELECT COUNT(*) + 1 FROM notification_queue WHERE date(created_at) = date('now')"
+        "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
     ).fetchone()[0]
     subject = f"{subject}-{seq:03d}"
     body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
@@ -336,7 +360,7 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         # Append daily sequence number
         today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
         seq = conn.execute(
-            "SELECT COUNT(*) + 1 FROM notification_queue WHERE date(created_at) = date('now')"
+            "SELECT COUNT(*) FROM notification_queue WHERE date(created_at) = date('now')"
         ).fetchone()[0]
         subject = f"{subject}-{seq:03d}"
         body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},

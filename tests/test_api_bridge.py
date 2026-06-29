@@ -219,9 +219,13 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
         lambda config, machine_id: current_user,
     )
 
+    monkeypatch.setattr(bridge.ApiBridge, "_auto_open_outlook_draft", lambda *a, **kw: None)
+
     def fake_service(name):
         def _service(config, user, *args, **kwargs):
             calls.append((name, config, user, args))
+            if name == "create_po":
+                return {"po_id": "PO-NEW", **args[0]}
             return [name, *args]
 
         return _service
@@ -234,7 +238,7 @@ def test_bridge_po_write_methods_forward_payload_and_current_user(monkeypatch, a
 
     assert api.create_po({"data": {"sc_id": "SC1"}}) == {
         "ok": True,
-        "data": ["create_po", {"sc_id": "SC1"}],
+        "data": {"po_id": "PO-NEW", "sc_id": "SC1"},
     }
     assert api.update_po({"po_id": "PO1", "data": {"price": 3}}) == {
         "ok": True,
@@ -264,9 +268,13 @@ def test_bridge_gr_write_methods_forward_payload_and_current_user(monkeypatch, a
         lambda config, machine_id: current_user,
     )
 
+    monkeypatch.setattr(bridge.ApiBridge, "_auto_open_outlook_draft", lambda *a, **kw: None)
+
     def fake_service(name):
         def _service(config, user, *args):
             calls.append((name, config, user, args))
+            if name == "create_gr":
+                return {"gr_id": "GR-NEW", "method": name, "args": args}
             return {"method": name, "args": args}
 
         return _service
@@ -280,7 +288,7 @@ def test_bridge_gr_write_methods_forward_payload_and_current_user(monkeypatch, a
 
     assert api.create_gr({"data": {"po_id": "PO1"}}) == {
         "ok": True,
-        "data": {"method": "create_gr", "args": ({"po_id": "PO1"},)},
+        "data": {"gr_id": "GR-NEW", "method": "create_gr", "args": ({"po_id": "PO1"},)},
     }
     assert api.update_gr({"gr_id": "GR1", "data": {"qty": 4}}) == {
         "ok": True,

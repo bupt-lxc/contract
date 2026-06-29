@@ -73,13 +73,11 @@
       <el-table-column :label="$t('common.actions')" width="140" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.status === 'pending' && row.event_type === 'status_change'"
+            v-if="row.status !== 'sent'"
             type="primary" link size="small"
             @click="previewEntry = row; previewVisible = true"
           >{{ $t('email.previewSend') }}</el-button>
-          <span v-else style="color:#94a3b8;font-size:12px">
-            {{ row.status === 'sent' ? $t('email.sent') : row.status === 'failed' ? $t('email.failed') : $t('email.autoSend') }}
-          </span>
+          <span v-else style="color:#94a3b8;font-size:12px">{{ $t('email.sent') }}</span>
         </template>
       </el-table-column>
       <template #empty><el-empty :description="state.queueError || $t('email.noRecords')" /></template>

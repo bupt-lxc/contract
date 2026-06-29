@@ -123,7 +123,13 @@ def queue_status_change(conn, entity_type, entity_id, transition, entity, curren
     cc_ids = [uid for uid in cc_ids if uid not in to_ids]
 
     if not to_ids:
-        return
+        # No primary recipients (e.g. admin_recipients not yet configured).
+        # Promote CC recipients so someone still gets the notification.
+        if cc_ids:
+            to_ids = cc_ids
+            cc_ids = []
+        else:
+            return
 
     timestamp = _utc_now()
     # If a pending entry already exists for the same event, refresh its

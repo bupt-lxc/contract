@@ -101,7 +101,10 @@ class TestQueueStatusChange:
             rows = conn.execute("SELECT * FROM notification_queue").fetchall()
             assert len(rows) == 0
 
-    def test_skips_when_no_to_recipients(self, app_config):
+    def test_promotes_cc_when_no_to_recipients(self, app_config):
+        """When admin_recipients is empty and requester is only in CC,
+        the requester should be promoted to TO so the notification is
+        still created."""
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn, "U1", "M1", "requester")
@@ -120,7 +123,9 @@ class TestQueueStatusChange:
 
         with connect(app_config) as conn:
             rows = conn.execute("SELECT * FROM notification_queue").fetchall()
-            assert len(rows) == 0
+            assert len(rows) == 1
+            assert json.loads(rows[0]["to_recipients"]) == ["U1"]
+            assert json.loads(rows[0]["cc_recipients"]) == []
 
     def test_merges_per_sc_cc_list(self, app_config):
         migrate(app_config)

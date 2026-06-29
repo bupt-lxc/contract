@@ -193,7 +193,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
-            return ok(_format_entity_timestamps(sc_service.submit_sc(self.config, current_user, sc_id, data)))
+            result = sc_service.submit_sc(self.config, current_user, sc_id, data)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -213,7 +215,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             cascade_pos = payload.get("cascade_pos", False)
-            return ok(_format_entity_timestamps(sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)))
+            result = sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -222,7 +226,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(_format_entity_timestamps(sc_service.deny_sc(self.config, current_user, sc_id)))
+            result = sc_service.deny_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -231,7 +237,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(_format_entity_timestamps(sc_service.close_sc(self.config, current_user, sc_id)))
+            result = sc_service.close_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -241,7 +249,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(_format_entity_timestamps(sc_service.confirm_sc(self.config, current_user, sc_id)))
+            result = sc_service.confirm_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -251,7 +261,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            return ok(_format_entity_timestamps(sc_service.revoke_sc(self.config, current_user, sc_id)))
+            result = sc_service.revoke_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -281,7 +293,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(_format_entity_timestamps(po_service.create_po(self.config, current_user, data)))
+            result = po_service.create_po(self.config, current_user, data)
+            self._auto_open_outlook_draft("po", result["po_id"])
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -300,7 +314,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(_format_entity_timestamps(po_service.finish_po(self.config, current_user, po_id)))
+            result = po_service.finish_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -310,7 +326,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(_format_entity_timestamps(po_service.submit_po(self.config, current_user, po_id)))
+            result = po_service.submit_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -320,7 +338,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            return ok(_format_entity_timestamps(po_service.revoke_po(self.config, current_user, po_id)))
+            result = po_service.revoke_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -339,7 +359,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
-            return ok(_format_entity_timestamps(gr_service.create_gr(self.config, current_user, data)))
+            result = gr_service.create_gr(self.config, current_user, data)
+            self._auto_open_outlook_draft("gr", result["gr_id"])
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -359,7 +381,9 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             con_value = payload.get("con_value")  # optional — auto-calculated from tax_rate if omitted
-            return ok(_format_entity_timestamps(gr_service.approve_gr(self.config, current_user, gr_id, con_value)))
+            result = gr_service.approve_gr(self.config, current_user, gr_id, con_value)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -368,7 +392,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(_format_entity_timestamps(gr_service.cancel_gr(self.config, current_user, gr_id)))
+            result = gr_service.cancel_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -378,7 +404,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(_format_entity_timestamps(gr_service.confirm_gr(self.config, current_user, gr_id)))
+            result = gr_service.confirm_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -388,7 +416,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(_format_entity_timestamps(gr_service.submit_gr(self.config, current_user, gr_id)))
+            result = gr_service.submit_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -398,7 +428,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            return ok(_format_entity_timestamps(gr_service.revoke_gr(self.config, current_user, gr_id)))
+            result = gr_service.revoke_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id)
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -827,6 +859,48 @@ class ApiBridge:
             return ok({"message": "Draft opened in Outlook"})
         except (PermissionDenied, ValidationError, NotFound) as e:
             return fail(e)
+
+    def _auto_open_outlook_draft(self, entity_type: str, entity_id: str) -> None:
+        """After a status transition, find the latest pending queue entry
+        and open the email draft in Outlook. Best-effort — failures are
+        logged but never raise."""
+        try:
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                entry = conn.execute(
+                    """SELECT * FROM notification_queue
+                       WHERE entity_type = ? AND entity_id = ? AND status = 'pending'
+                       ORDER BY id DESC LIMIT 1""",
+                    (entity_type, entity_id),
+                ).fetchone()
+                if not entry:
+                    return
+                draft = sender.generate_draft(conn, dict(entry))
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+        except Exception:
+            pass  # best-effort; don't block the operation
 
     # ── Attachment APIs ──────────────────────────────────────────────
 

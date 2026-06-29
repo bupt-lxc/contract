@@ -77,8 +77,16 @@ _TYPE_LABELS: dict[str, str] = {"sc": "SC", "po": "PO", "gr": "GR"}
 # Field exclusions and renames for entity detail rows
 # ---------------------------------------------------------------
 
-_SC_EXCLUDE = {"consumed_amount", "sc_available_amount", "created_at", "updated_at",
-               "pending_date", "approved_date", "closed_at"}
+_SC_EXCLUDE = {
+    # Budget-derived fields (shown in their own way or not needed)
+    "consumed_amount", "sc_available_amount",
+    "pending_total", "pending_total_incl_tax", "child_pos",
+    # Timestamps not relevant in notification emails
+    "created_at", "updated_at", "approved_at", "closed_at", "confirmed_at",
+    "pending_date", "approved_date",
+    # People already shown in Notification Info section
+    "created_by", "approved_by",
+}
 _PO_EXCLUDE = {"consumed_amount", "pending_total", "pending_total_incl_tax",
                "open_po_amount", "activing_date", "created_at", "updated_at"}
 _GR_EXCLUDE = {"created_at", "pending_date", "approved_date", "cancelled_at", "confirmed_at"}
@@ -251,6 +259,11 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                         "contract_from", "contract_to", "delivery_from",
                         "delivery_to", "last_delivery"):
                 val = _fmt_datetime(val)
+            elif key == "status":
+                if val == "manager_confirm":
+                    val = "To be confirm"
+                else:
+                    val = _STATUS_LABELS.get(val, val)
             result.append((label, val))
 
     for key, value in entity_info.items():
@@ -258,6 +271,11 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
             continue
         seen.add(key)
         label = renames.get(key, key.replace("_", " ").title())
+        if key == "status":
+            if value == "manager_confirm":
+                value = "To be confirm"
+            else:
+                value = _STATUS_LABELS.get(value, value)
         result.append((label, value))
 
     return result
@@ -371,6 +389,31 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
         display = str(value) if value is not None else "-"
         lines.append(f'<tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold;width:180px">{label}</td><td style="padding:8px;border:1px solid #ddd">{display}</td></tr>')
     lines.append('</table>')
+
+    # Table 3: Vendor Info (SC only)
+    if entity_type == "sc":
+        vendors = entity_info.get("_vendors")
+        if vendors:
+            lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-top:20px">')
+            lines.append('<tr><th colspan="6" style="background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd">Vendor Info</th></tr>')
+            lines.append('<tr style="background:#fafafa">'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Vendor ID</th>'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Vendor Name</th>'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Service Scope</th>'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Contact</th>'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Phone</th>'
+                         '<th style="padding:8px;border:1px solid #ddd;text-align:left">Email</th>'
+                         '</tr>')
+            for v in vendors:
+                lines.append('<tr>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("vendor_id", "-")}</td>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("vendor_name", "-")}</td>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("service_scope", "-")}</td>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("contact_person", "-")}</td>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("phone", "-")}</td>'
+                             f'<td style="padding:8px;border:1px solid #ddd">{v.get("email", "-")}</td>'
+                             '</tr>')
+            lines.append('</table>')
 
     return "\n".join(lines)
 
