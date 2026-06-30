@@ -6,13 +6,13 @@
       @reset="handleReset"
     >
       <template #actions>
-        <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
+        <el-button type="primary" :disabled="loadingState.count > 0" @click="scDialogVisible = true; scDialogMode = 'create'">
           <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
         </el-button>
-        <el-button @click="importVisible = true">
+        <el-button :disabled="loadingState.count > 0" @click="importVisible = true">
           <el-icon><Upload /></el-icon> Import
         </el-button>
-        <el-button @click="downloadTemplate">
+        <el-button :disabled="loadingState.count > 0" @click="downloadTemplate">
           <el-icon><Download /></el-icon> Template
         </el-button>
         <el-button @click="handleExport" :loading="exporting">
@@ -23,9 +23,9 @@
 
     <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
       <span style="font-size:13px;color:#1d4ed8;font-weight:500">{{ $t('batch.selected', { count: selectedRows.length }) }}</span>
-      <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
-      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
-      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'pending')" size="small" type="success" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
+      <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" :disabled="loadingState.count > 0" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" :disabled="loadingState.count > 0" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'pending')" size="small" type="success" :disabled="loadingState.count > 0" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
     </div>
 
     <ScTable
@@ -102,7 +102,7 @@ import * as XLSX from 'xlsx'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
-import { callApi } from '@/api/bridge.js'
+import { callApi, loadingState } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
