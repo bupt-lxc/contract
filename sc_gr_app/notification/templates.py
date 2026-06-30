@@ -118,7 +118,7 @@ _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
 # ---------------------------------------------------------------
 
 def _abbreviate_name(name: str) -> str:
-    """Abbreviate: 'Li, Xingchen (C/EV-L)' → 'LXingchen', 'Liwei Zhou' → 'LZhou'"""
+    """Format: 'Li, Xingchen (C/EV-L)' → 'LiXingchen', 'Liwei Zhou' → 'LiweiZhou'"""
     if not name:
         return "Unknown"
     # Strip trailing parenthetical content (e.g. cost center)
@@ -127,11 +127,19 @@ def _abbreviate_name(name: str) -> str:
         parts = [p.strip() for p in name.split(",", 1)]
         surname = parts[0]
         given = parts[1] if len(parts) > 1 else ""
-        return f"{surname[0] if surname else ''}{given}"
+        return f"{surname}{given}"
     parts = name.strip().split()
     if len(parts) >= 2:
-        return f"{parts[0][0] if parts[0] else ''}{parts[-1]}"
+        return f"{parts[0]}{''.join(parts[1:])}"
     return name
+
+
+def _short_entity_id(entity_id: str) -> str:
+    """Shorten entity ID for subject: 'SC-V2SE7PP-20260629-002' → 'SC 0629-002'"""
+    m = re.match(r'^([A-Z]+)-.+?-(\d{4})(\d{2})(\d{2})-(\d+)$', entity_id)
+    if m:
+        return f"{m.group(1)} {m.group(3)}{m.group(4)}-{m.group(5)}"
+    return entity_id
 
 
 def _describe_event(event_type: str, event_key: str) -> str:
@@ -319,9 +327,10 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
 def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     """Build email subject line.
 
-    Format: [POMP] <action> <entity_id> from <abbreviation>
+    Format: [POMP] <action> <short_entity_id> from <name>
+    Example: [POMP] Submitted SC 0629-002 from LiXingchen
     """
-    entity_id = entry.get("entity_id", "")
+    entity_id = _short_entity_id(entry.get("entity_id", ""))
     event_type = entry.get("event_type", "")
     event_key = entry.get("event_key", "")
 
@@ -343,7 +352,8 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
 
 
 def build_body(entry: dict, entity_info: dict, user_emails: dict,
-               actor_name: str = "", requester_name: str = "") -> str:
+               actor_name: str = "", requester_name: str = "",
+               show_confirm_btn: bool = False) -> str:
     """Build the HTML email body using a simple two-table layout.
 
     Table 1 — Notification Info: Entity Type, Entity ID, Event, Operator, Status, Attachments
@@ -414,6 +424,44 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
                              f'<td style="padding:8px;border:1px solid #ddd">{v.get("email", "-")}</td>'
                              '</tr>')
             lines.append('</table>')
+
+    # ── CTA buttons ──────────────────────────────────────────────────
+    lines.append(
+        '<table style="width:100%;border-collapse:collapse;'
+        'font-family:Arial,sans-serif;font-size:14px;margin-top:24px">'
+        '<tr><td align="center" style="padding:4px">'
+    )
+
+    # Always show "Open in POMP" button
+    open_url = f"pomp://{entity_type}/{entity_id}"
+    lines.append(
+        f'<a href="{open_url}" '
+        f'style="display:inline-block;padding:12px 32px;'
+        f'background-color:#1a73e8;color:#fff;'
+        f'text-decoration:none;border-radius:6px;'
+        f'font-size:16px;font-weight:600">'
+        f'Open in POMP →</a>'
+    )
+
+    # Additional "Confirm" button for SC/GR submit events
+    if show_confirm_btn:
+        confirm_url = f"pomp://{entity_type}/{entity_id}/confirm"
+        lines.append('&nbsp;&nbsp;')
+        lines.append(
+            f'<a href="{confirm_url}" '
+            f'style="display:inline-block;padding:12px 32px;'
+            f'background-color:#34a853;color:#fff;'
+            f'text-decoration:none;border-radius:6px;'
+            f'font-size:16px;font-weight:600">'
+            f'Confirm this {entity_type.upper()} →</a>'
+        )
+
+    lines.append(
+        '<p style="margin-top:12px;font-size:12px;color:#9aa0a6">'
+        'Clicking this button will open PO Management Platform.'
+        ' If the app is not running, please start POMP first.</p>'
+        '</td></tr></table>'
+    )
 
     return "\n".join(lines)
 

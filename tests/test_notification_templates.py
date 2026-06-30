@@ -105,6 +105,54 @@ class TestBuildBody:
         # Fields not in entity_info are omitted (no placeholder rows)
         assert "Po No" not in body  # po_no not in entity_info, so not shown
 
+    def test_body_includes_open_in_pomp_button_for_sc(self):
+        entry = {
+            "entity_type": "sc", "entity_id": "SC-001",
+            "event_type": "status_change", "event_key": "approve",
+        }
+        entity_info = {"sc_no": "SC-001", "status": "approved", "sc_amount": 100000}
+        body = templates.build_body(entry, entity_info, {})
+        assert 'pomp://sc/SC-001' in body
+        assert 'Open in POMP' in body
+
+    def test_body_includes_confirm_button_for_sc_submit(self):
+        entry = {
+            "entity_type": "sc", "entity_id": "SC-001",
+            "event_type": "status_change", "event_key": "submit",
+        }
+        entity_info = {"sc_no": "SC-001", "status": "manager_confirm", "sc_amount": 100000}
+        body = templates.build_body(entry, entity_info, {}, show_confirm_btn=True)
+        assert 'pomp://sc/SC-001/confirm' in body
+        assert 'Confirm this SC' in body
+
+    def test_body_includes_confirm_button_for_gr_submit(self):
+        entry = {
+            "entity_type": "gr", "entity_id": "GR-001",
+            "event_type": "status_change", "event_key": "submit",
+        }
+        entity_info = {"gr_no": "GR-001", "status": "manager_confirm", "estimated_amount": 50000}
+        body = templates.build_body(entry, entity_info, {}, show_confirm_btn=True)
+        assert 'pomp://gr/GR-001/confirm' in body
+        assert 'Confirm this GR' in body
+
+    def test_body_no_confirm_button_for_non_submit(self):
+        entry = {
+            "entity_type": "sc", "entity_id": "SC-001",
+            "event_type": "status_change", "event_key": "approve",
+        }
+        entity_info = {"sc_no": "SC-001", "status": "approved", "sc_amount": 100000}
+        body = templates.build_body(entry, entity_info, {})
+        assert 'pomp://sc/SC-001/confirm' not in body
+
+    def test_open_in_pomp_button_for_po(self):
+        entry = {
+            "entity_type": "po", "entity_id": "PO-001",
+            "event_type": "status_change", "event_key": "finish",
+        }
+        entity_info = {"po_no": "PO-001", "status": "finished", "po_amount": 80000}
+        body = templates.build_body(entry, entity_info, {})
+        assert 'pomp://po/PO-001' in body
+
 
 class TestBuildSubject:
     def test_status_change_subject(self):
@@ -116,6 +164,16 @@ class TestBuildSubject:
         }
         subject = templates.build_subject(entry, {})
         assert subject == "[POMP] Submitted PO-001 from System"
+
+    def test_status_change_subject_short_id(self):
+        entry = {
+            "entity_type": "sc",
+            "entity_id": "SC-V2SE7PP-20260629-002",
+            "event_type": "status_change",
+            "event_key": "submit",
+        }
+        subject = templates.build_subject(entry, {}, actor_name="Li, Xingchen (C/EV-L)")
+        assert subject == "[POMP] Submitted SC 0629-002 from LiXingchen"
 
     def test_threshold_date_subject(self):
         entry = {
@@ -180,3 +238,35 @@ class TestFmtDatetime:
     def test_preserves_non_iso_value(self):
         result = templates._fmt_datetime("2026-06-16")
         assert result == "2026-06-16"
+
+
+class TestAbbreviateName:
+    def test_last_comma_first_with_parens(self):
+        assert "LiXingchen" == templates._abbreviate_name("Li, Xingchen (C/EV-L)")
+
+    def test_last_comma_first_no_parens(self):
+        assert "LiXingchen" == templates._abbreviate_name("Li, Xingchen")
+
+    def test_first_last(self):
+        assert "LiweiZhou" == templates._abbreviate_name("Liwei Zhou")
+
+    def test_single_name(self):
+        assert "LiXingchen" == templates._abbreviate_name("LiXingchen")
+
+    def test_empty_or_none(self):
+        assert "Unknown" == templates._abbreviate_name("")
+        assert "Unknown" == templates._abbreviate_name(None)
+
+
+class TestShortEntityId:
+    def test_sc_id(self):
+        assert "SC 0629-002" == templates._short_entity_id("SC-V2SE7PP-20260629-002")
+
+    def test_po_id(self):
+        assert "PO 0115-005" == templates._short_entity_id("PO-V2SE7PP-20260115-005")
+
+    def test_gr_id(self):
+        assert "GR 1231-010" == templates._short_entity_id("GR-XYZ-20261231-010")
+
+    def test_non_matching_returns_unchanged(self):
+        assert "SC-001" == templates._short_entity_id("SC-001")
