@@ -2,7 +2,7 @@
   <div>
     <div class="section-header">
       <h3>{{ $t('sc.vendors') }}</h3>
-      <el-button v-if="canManage" type="primary" size="small" @click="pickerVisible = true">
+      <el-button v-if="canManage" type="primary" size="small" :disabled="loadingState.count > 0" @click="pickerVisible = true">
         <el-icon><Plus /></el-icon> {{ $t('sc.addVendor') }}
       </el-button>
     </div>
@@ -55,7 +55,7 @@
           @confirm="$emit('remove', v.vendor_id)"
         >
           <template #reference>
-            <el-button type="danger" link size="small" style="margin-left:8px;flex-shrink:0">
+            <el-button type="danger" link size="small" :disabled="loadingState.count > 0" style="margin-left:8px;flex-shrink:0">
               <el-icon><Delete /></el-icon>
             </el-button>
           </template>
@@ -76,6 +76,7 @@
 import { ref, computed } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import VendorPickerDialog from './VendorPickerDialog.vue'
+import { loadingState } from '@/api/bridge.js'
 
 const props = defineProps({
   vendors: { type: Array, default: () => [] },

@@ -6,11 +6,11 @@
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="isRequester && po.status === 'activing'" type="warning" @click="handleRecall">{{ $t('po.recall') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="isRequester && po.status === 'activing'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
       </div>
     </div>
 
@@ -22,7 +22,7 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poInformation') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
         </div>
@@ -133,7 +133,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download } from '@element-plus/icons-vue'
-import { callApi } from '@/api/bridge.js'
+import { callApi, loadingState } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
 import { usePo } from '@/composables/usePo.js'
