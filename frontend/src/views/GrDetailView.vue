@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_gr && ['draft','pending','manager_confirm','approved'].includes(gr.status)" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('gr.deny') }}</el-button>
         <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('gr.recall') }}</el-button>
@@ -133,6 +133,7 @@ const grOperationRecords = computed(() => {
 })
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 
+const confirmBtn = ref(null)
 const editDialogVisible = ref(false)
 const attachRefreshKey = ref(0)
 const activeUsers = ref([])
@@ -225,5 +226,26 @@ async function handleDelete() {
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
   await fetchDetail(scId.value)
+
+  if (window.__pendingConfirmAction?.type === 'gr' && window.__pendingConfirmAction?.id === grId.value) {
+    window.__pendingConfirmAction = null
+    setTimeout(() => {
+      confirmBtn.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      confirmBtn.value?.$el?.classList.add('confirm-pulse')
+      setTimeout(() => confirmBtn.value?.$el?.classList.remove('confirm-pulse'), 3000)
+    }, 500)
+  }
 })
 </script>
+
+<style scoped>
+.confirm-pulse {
+  animation: pulse 0.6s ease-in-out 3;
+  box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6);
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(52, 168, 83, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0); }
+}
+</style>
