@@ -283,8 +283,8 @@ def _setup_tray(window):
     nid.hIcon = hIcon
     nid.szTip = WINDOW_TITLE
 
-    __shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
-    __shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+    _shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+    _shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 
     _user32.CreatePopupMenu.restype = ctypes.c_void_p
     _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.UINT_PTR, wintypes.LPCWSTR]
