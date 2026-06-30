@@ -217,69 +217,138 @@ def _check_update():
     sys.exit(0)
 
 
-def _hook_close(hwnd, allow_close):
-    """Subclass the Win32 window to hide on close instead of destroying."""
-    global _tray_wndproc
-
-    GWLP_WNDPROC = -4
-    WM_CLOSE = 0x0010
-
-    original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
-
-    @WNDPROC
-    def wnd_proc(hwnd_, msg, wparam, lparam):
-        if msg == WM_CLOSE and not allow_close[0]:
-            _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
-            return 0
-        return _user32.CallWindowProcW(
-            ctypes.c_void_p(original), hwnd_, msg, wparam, lparam,
-        )
-
-    _user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
-    _tray_wndproc = wnd_proc  # prevent GC
-
-
 def _setup_tray(window):
-    """Minimize to tray on close. Tray icon with context menu."""
-    try:
-        from pystray import Icon, Menu, MenuItem
-        from PIL import Image
-    except ImportError:
-        return
+    """Minimize to tray on close using native Win32 Shell_NotifyIcon.
+
+    No external dependencies — uses only user32 + shell32 via ctypes.
+    """
+    from ctypes import wintypes
+
+    logger = logging.getLogger(__name__)
 
     icon_path = Path(__file__).parent / "icons" / "tray.png"
     if not icon_path.exists():
+        logger.warning("Tray: icon not found at %s", icon_path)
         return
 
-    image = Image.open(icon_path)
+    hIcon = _user32.LoadImageW(None, str(icon_path), 1, 0, 0, 0x0010)  # IMAGE_ICON=1, LR_LOADFROMFILE=0x0010
+    if not hIcon:
+        logger.warning("Tray: LoadImageW failed for %s", icon_path)
+        return
 
-    _allow_close = [False]  # mutable container shared across closures
+    _allow_close = [False]
 
-    def show_window(icon, item):
-        window.show()
-        window.restore()
+    # ── constants ──────────────────────────────────────────────────────
+    WM_TRAYICON = 0x8000 + 100
+    WM_COMMAND  = 0x0111
+    IDM_SHOW    = 1001
+    IDM_EXIT    = 1002
+    MF_STRING   = 0
+    TPM_RIGHTBUTTON = 2
+    TPM_BOTTOMALIGN = 0x20
 
-    def exit_app(icon, item):
-        _allow_close[0] = True
-        icon.stop()
-        window.destroy()
-        os._exit(0)
+    class POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class NOTIFYICONDATAW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize",           wintypes.DWORD),
+            ("hWnd",             wintypes.HWND),
+            ("uID",              wintypes.UINT),
+            ("uFlags",           wintypes.UINT),
+            ("uCallbackMessage", wintypes.UINT),
+            ("hIcon",            wintypes.HICON),
+            ("szTip",            wintypes.WCHAR * 128),
+        ]
+
+    nid = NOTIFYICONDATAW()
+    nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+    nid.uID = 1
+    nid.uFlags = 1 | 2 | 4          # NIF_MESSAGE | NIF_ICON | NIF_TIP
+    nid.uCallbackMessage = WM_TRAYICON
+    nid.hIcon = hIcon
+    nid.szTip = WINDOW_TITLE
+
+    shell32 = ctypes.windll.shell32
+    shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+    shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+    _user32.CreatePopupMenu.restype = ctypes.c_void_p
+    _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.UINT_PTR, wintypes.LPCWSTR]
+    _user32.AppendMenuW.restype = wintypes.BOOL
+    _user32.DestroyMenu.argtypes = [ctypes.c_void_p]
+    _user32.DestroyMenu.restype = wintypes.BOOL
+    _user32.GetCursorPos.argtypes = [ctypes.c_void_p]
+    _user32.GetCursorPos.restype = wintypes.BOOL
 
     def _on_shown():
-        """Hook WM_CLOSE after the native window is ready."""
-        hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
-        if hwnd:
-            _hook_close(hwnd, _allow_close)
+        import time
+        for _ in range(20):
+            hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
+            if hwnd:
+                nid.hWnd = hwnd
+                shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # NIM_ADD
+                _subclass_window(hwnd)
+                return
+            time.sleep(0.05)
+        logger.warning("Tray: could not find window HWND after 1s")
+
+    def _subclass_window(hwnd):
+        """Intercept WM_CLOSE (hide to tray) and tray icon messages."""
+        global _tray_wndproc
+
+        GWLP_WNDPROC = -4
+        WM_CLOSE = 0x0010
+
+        original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
+
+        @WNDPROC
+        def wnd_proc(hwnd_, msg, wparam, lparam):
+            # ── close button → hide to tray ──────────────────────────
+            if msg == WM_CLOSE and not _allow_close[0]:
+                _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
+                return 0
+
+            # ── tray icon right-click → context menu ──────────────────
+            if msg == WM_TRAYICON and lparam == 0x0205:  # WM_RBUTTONUP
+                pt = POINT()
+                _user32.GetCursorPos(ctypes.byref(pt))
+                hMenu = _user32.CreatePopupMenu()
+                _user32.AppendMenuW(hMenu, MF_STRING, IDM_SHOW, "Show Window")
+                _user32.AppendMenuW(hMenu, MF_STRING, IDM_EXIT, "Exit")
+                _user32.SetForegroundWindow(hwnd_)
+                _user32.TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_RIGHTBUTTON,
+                                       pt.x, pt.y, 0, hwnd_, None)
+                _user32.PostMessageW(hwnd_, 0, 0, 0)  # benign message to dismiss menu
+                _user32.DestroyMenu(hMenu)
+                return 0
+
+            # ── tray icon double-click → restore window ──────────────
+            if msg == WM_TRAYICON and lparam == 0x0203:  # WM_LBUTTONDBLCLK
+                window.show()
+                window.restore()
+                return 0
+
+            # ── context menu commands ────────────────────────────────
+            if msg == WM_COMMAND:
+                if wparam == IDM_SHOW:
+                    window.show()
+                    window.restore()
+                    return 0
+                if wparam == IDM_EXIT:
+                    _allow_close[0] = True
+                    shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # NIM_DELETE
+                    _user32.DestroyIcon(hIcon)
+                    window.destroy()
+                    os._exit(0)
+
+            return _user32.CallWindowProcW(
+                ctypes.c_void_p(original), hwnd_, msg, wparam, lparam)
+
+        _user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
+        _tray_wndproc = wnd_proc  # prevent GC
 
     window.events.shown += _on_shown
-
-    icon = Icon("pomp", image, WINDOW_TITLE, Menu(
-        MenuItem("Show Window", show_window, default=True),
-        MenuItem("Exit", exit_app),
-    ))
-
-    threading.Thread(target=icon.run, daemon=True).start()
-    return icon
 
 
 def _show_error_and_exit(title: str, message: str):
