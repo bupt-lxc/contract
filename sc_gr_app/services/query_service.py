@@ -651,6 +651,7 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
+                f"sc.created_at, sc.pending_date, sc.submitted_date, "
                 f"sc.service_period_end AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
@@ -674,6 +675,7 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
+                f"po.created_at, po.activing_date AS pending_date, "
                 f"po.contract_to AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM pos po "
@@ -699,7 +701,7 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
-                f"gr.created_at, "
+                f"gr.created_at, gr.pending_date, gr.submitted_date, "
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "

@@ -15,6 +15,7 @@ import os
 import sys
 from pathlib import Path
 
+from sc_gr_app import __version__
 from sc_gr_app.config import default_config
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.notification import engine, sender
@@ -73,6 +74,8 @@ def main():
     one_shot = args.run_once or args.thresholds_only
 
     _setup_logging()
+
+    logging.info("POMP Notification v%s", __version__)
 
     if one_shot:
         # Suppress verbose startup logging in one-shot modes (invoked

@@ -45,9 +45,10 @@
           <el-descriptions-item :label="$t('gr.deliveryTo')">{{ (gr.delivery_to || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmedAt')">{{ (gr.confirmed_at || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.created')">{{ (gr.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.submittedDate')">{{ (gr.submitted_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.created')">{{ (gr.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>

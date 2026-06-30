@@ -32,7 +32,13 @@
       <el-table-column :label="$t('common.status')" width="100" prop="status" sortable>
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
-      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="120" sortable />
+      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="135" sortable>
+        <template #default="{ row }">
+          <el-tooltip :content="row.gr_id" placement="top" :disabled="!row.gr_id">
+            <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.gr_id) }}</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
         <template #default="{ row }">{{ row.gr_no || '-' }}</template>
       </el-table-column>
@@ -192,6 +198,8 @@ const deadlineOptions = [
   { label: t('filter.within2Months'), value: '2m' },
   { label: t('filter.within1Month'), value: '1m' },
 ]
+
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 
 function computeDeadlineEnd(value) {
   const today = new Date()

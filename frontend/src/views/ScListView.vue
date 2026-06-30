@@ -297,7 +297,8 @@ async function handleExport() {
       { key: 'sc_amount', label: t('exportCol.scAmount') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) },
-      { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+      { key: 'submitted_date', label: t('sc.submittedDate'), getValue: r => (r.submitted_date || '').slice(0, 10) },
       { key: 'description', label: t('exportCol.description') }
     ]
     await exportAll('search_scs', {

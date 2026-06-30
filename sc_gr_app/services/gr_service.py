@@ -313,10 +313,11 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
         conn.execute(
             """
             update gr_requests
-            set status = 'manager_confirm'
+            set status = 'manager_confirm',
+                submitted_date = ?
             where gr_id = ?
             """,
-            (gr_id,),
+            (timestamp, gr_id),
         )
         after = _get_gr(conn, gr_id)
 

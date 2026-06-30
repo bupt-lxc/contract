@@ -92,7 +92,7 @@
         </div>
         <el-table :data="detail.operation_records || []" stripe border size="small">
           <el-table-column prop="created_at" :label="$t('record.created')" width="160">
-            <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
+            <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
           </el-table-column>
           <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
           <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -406,7 +406,7 @@ async function handleExportPos() {
 
 async function handleExportAudit() {
   const columns = [
-    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
     { key: 'action_type', label: t('record.action') },
     { key: 'object_type', label: t('record.objectType') },
     { key: 'object_id', label: t('record.objectId') },

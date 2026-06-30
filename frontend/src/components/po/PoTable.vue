@@ -11,10 +11,20 @@
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
     <el-table-column prop="po_no" :label="$t('po.poNo')" width="130" sortable>
-      <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
+      <template #default="{ row }">
+        <template v-if="row.po_no">{{ row.po_no }}</template>
+        <el-tooltip v-else :content="row.po_id" placement="top">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.po_id) }}</span>
+        </el-tooltip>
+      </template>
     </el-table-column>
-    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" sortable />
-    <el-table-column v-if="!hideScInfo" prop="sc_no" :label="$t('filter.scNo')" width="130" sortable />
+    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" sortable>
+      <template #default="{ row }">
+        <el-tooltip :content="row.sc_id" placement="top" :disabled="!row.sc_id">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.sc_id) }}</span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip sortable />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip sortable />
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" sortable />
@@ -59,6 +69,7 @@ defineProps({
 
 defineEmits(['detail', 'edit', 'finish', 'submit'])
 
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

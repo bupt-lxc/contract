@@ -296,7 +296,7 @@ def test_po_budget_open_po_amount_is_returned_only_as_derived_key(app_config):
     assert compute_po_budget(app_config, "PO1")["open_po_amount"] == 550.0
 
 
-def test_cancelled_grs_are_excluded_from_sc_and_po_budget(app_config):
+def test_denied_grs_are_excluded_from_sc_and_po_budget(app_config):
     seed_base_budget_records(app_config)
     with connect(app_config) as conn:
         seed_gr(

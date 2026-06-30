@@ -23,7 +23,7 @@
       </el-table-column>
       <el-table-column prop="created_by" :label="$t('attachment.uploadedBy')" width="120" />
       <el-table-column :label="$t('attachment.uploadedAt')" width="160">
-        <template #default="{ row }">{{ row.created_at?.slice(0, 19) }}</template>
+        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="140" fixed="right">
         <template #default="{ row }">

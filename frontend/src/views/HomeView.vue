@@ -22,9 +22,9 @@
           </div>
           <div class="wb-cell__table">
             <div class="wb-cell__th">
-              <span class="wb-cell__th-id">{{ $t('home.colScNo') }}</span>
+              <span class="wb-cell__th-id">{{ $t('sc.scId') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.sc?.[cell.status]?.rows || [])"
@@ -32,9 +32,9 @@
               class="wb-cell__tr"
               @click="$router.push(`/sc/${row.sc_id}`)"
             >
-              <span class="wb-cell__td-id">{{ row.sc_no || row.sc_id }}</span>
+              <span class="wb-cell__td-id" :title="row.sc_id">{{ shortId(row.sc_id) }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -61,7 +61,7 @@
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colPoNo') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.po?.[cell.status]?.rows || [])"
@@ -69,9 +69,9 @@
               class="wb-cell__tr"
               @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
             >
-              <span class="wb-cell__td-id">{{ row.po_no || row.po_id }}</span>
+              <span class="wb-cell__td-id" :title="row.po_id">{{ row.po_no || shortId(row.po_id) }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.po?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -98,7 +98,7 @@
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colGrId') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colCreatedAt') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.gr?.[cell.status]?.rows || [])"
@@ -106,9 +106,9 @@
               class="wb-cell__tr"
               @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)"
             >
-              <span class="wb-cell__td-id">{{ row.gr_id }}</span>
+              <span class="wb-cell__td-id" :title="row.gr_id">{{ shortId(row.gr_id) }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.created_at || '').slice(0, 10) || '-' }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.gr?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -158,6 +158,28 @@ function headStatus(status) {
   if (status.includes('approved')) return 'approved'
   if (status.includes('finished')) return 'approved'
   return 'draft'
+}
+
+function shortId(id) {
+  if (!id) return '-'
+  const parts = id.split('-')
+  return parts.slice(2).join('-')
+}
+
+function dateColLabel(status) {
+  if (status === 'draft') return t('home.colCreatedAt')
+  if (status === 'manager_confirm') return t('home.colSubmitted')
+  if (status === 'approved' || status === 'finished') return t('home.colDeadline')
+  return t('home.colPendingDate')
+}
+
+function cellDate(status, row) {
+  let val
+  if (status === 'draft') val = row.created_at
+  else if (status === 'manager_confirm') val = row.submitted_date
+  else if (status === 'approved' || status === 'finished') val = row.deadline
+  else val = row.pending_date
+  return (val || '').slice(0, 10) || '-'
 }
 
 onMounted(async () => {

@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1062,8 +1062,6 @@ def _migrate_v28(conn) -> None:
     Add finished_by, finished_at to gr_requests."""
     # --- sc_records: closed → finished, closed_at → finished_at ---
     if _table_exists(conn, "sc_records"):
-        # Update existing data
-        conn.execute("UPDATE sc_records SET status = 'finished' WHERE status = 'closed'")
         conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
         conn.execute("""
             CREATE TABLE sc_records (
@@ -1113,7 +1111,9 @@ def _migrate_v28(conn) -> None:
             )
             SELECT
               sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
-              service_period_start, service_period_end, status, description,
+              service_period_start, service_period_end,
+              CASE WHEN status = 'closed' THEN 'finished' ELSE status END,
+              description,
               created_by, created_at, updated_at, approved_by, approved_at, closed_at,
               confirmed_at, asset, asset_nums, pending_date, approved_date,
               internal_system_number, COALESCE(currency, 'CNY')
@@ -1125,7 +1125,6 @@ def _migrate_v28(conn) -> None:
 
     # --- gr_requests: cancelled → denied, add finished ---
     if _table_exists(conn, "gr_requests"):
-        conn.execute("UPDATE gr_requests SET status = 'denied' WHERE status = 'cancelled'")
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
         has_finished_cols = "finished_by" in existing and "finished_at" in existing
         has_denied_cols = "denied_by" in existing and "denied_at" in existing
@@ -1175,7 +1174,9 @@ def _migrate_v28(conn) -> None:
                 )
                 SELECT
                   gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
-                  gross_cost, tax_rate, status, remark,
+                  gross_cost, tax_rate,
+                  CASE WHEN status = 'cancelled' THEN 'denied' ELSE status END,
+                  remark,
                   created_by, created_at, approved_by, approved_at,
                   cancelled_by, cancelled_at,
                   NULL, NULL,
@@ -1218,6 +1219,19 @@ def _migrate_v28(conn) -> None:
         )
 
     _record(conn, 28)
+
+
+def _migrate_v29(conn) -> None:
+    """Add submitted_date column to sc_records and gr_requests."""
+    if _table_exists(conn, "sc_records"):
+        sc_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "submitted_date" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN submitted_date TEXT")
+    if _table_exists(conn, "gr_requests"):
+        gr_cols = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "submitted_date" not in gr_cols:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN submitted_date TEXT")
+    _record(conn, 29)
 
 
 def migrate(config: AppConfig) -> None:
@@ -1372,6 +1386,10 @@ def migrate(config: AppConfig) -> None:
                 conn.commit()
                 conn.execute("PRAGMA legacy_alter_table = OFF")
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 29 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v29(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

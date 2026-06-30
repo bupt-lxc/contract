@@ -3,7 +3,13 @@
     <el-table-column prop="status" :label="$t('gr.status')" width="100" sortable>
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
-    <el-table-column prop="gr_id" :label="$t('gr.id')" width="120" sortable />
+    <el-table-column prop="gr_id" :label="$t('gr.id')" width="135" sortable>
+      <template #default="{ row }">
+        <el-tooltip :content="row.gr_id" placement="top" :disabled="!row.gr_id">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.gr_id) }}</span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
       <template #default="{ row }">{{ row.gr_no || '-' }}</template>
     </el-table-column>
@@ -59,5 +65,6 @@ import { loadingState } from '@/api/bridge.js'
 defineProps({ rows: { type: Array, default: () => [] } })
 defineEmits(['detail', 'edit', 'approve', 'deny', 'attachments', 'row-click', 'submit'])
 
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

@@ -198,7 +198,7 @@ def test_update_gr_rejects_closed_parent_sc(app_config):
         update_gr(app_config, ADMIN, gr_id, {"remark": "after close"})
 
 
-def test_cancel_gr_rejects_closed_parent_sc(app_config):
+def test_deny_gr_rejects_finished_parent_sc(app_config):
     from sc_gr_app.services.po_service import finish_po
     migrate(app_config)
     seed_users(app_config)
@@ -213,7 +213,7 @@ def test_cancel_gr_rejects_closed_parent_sc(app_config):
         },
     )
     gr_id = created_gr["gr_id"]
-    # First cancel: GR → cancelled (final state), close SC, then second cancel should fail
+    # First deny: GR → denied (final state), finish SC, then second deny should fail
     deny_gr(app_config, ADMIN, gr_id)
     finish_po(app_config, ADMIN, po_id)
     finish_sc(app_config, ADMIN, sc_id)
@@ -1346,7 +1346,7 @@ def test_po_update_approve_finish_are_audited(app_config):
 
 
 def test_gr_write_permissions(app_config):
-    """Requester owner can create/update GRs, but approve/cancel require admin."""
+    """Requester owner can create/update GRs, but approve/deny require admin."""
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
@@ -1373,7 +1373,7 @@ def test_gr_write_permissions(app_config):
     with pytest.raises(PermissionDenied):
         update_gr(app_config, OTHER, gr_id, {"remark": "other changed"})
 
-    # Cancel remains admin-only (even owner cannot cancel)
+    # Deny remains admin-only (even owner cannot deny)
     with pytest.raises(PermissionDenied):
         deny_gr(app_config, USER, gr_id)
 
@@ -1584,7 +1584,7 @@ def test_update_pending_gr_rejects_unknown_requester_id(app_config):
         update_gr(app_config, ADMIN, gr_id, {"requester_id": "MISSING"})
 
 
-def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
+def test_admin_updates_approved_gr_con_value_and_denies_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
     sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
@@ -1610,11 +1610,11 @@ def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
         gr1_id,
         {"con_value": 95, "remark": "invoice adjusted"},
     )
-    cancelled = deny_gr(app_config, ADMIN, gr2_id)
+    denied = deny_gr(app_config, ADMIN, gr2_id)
 
     assert updated["con_value"] == 95
     assert updated["remark"] == "invoice adjusted"
-    assert cancelled["status"] == "denied"
+    assert denied["status"] == "denied"
 
 
 # ── Draft PO/GR + cascade submission ──
@@ -1816,8 +1816,8 @@ def test_approve_sc_with_cascade_pos(app_config):
             assert po_check["activing_date"] is not None
 
 
-def test_close_sc_blocked_by_unfinished_pos(app_config):
-    """close_sc is blocked if any PO is not finished."""
+def test_finish_sc_blocked_by_unfinished_pos(app_config):
+    """finish_sc is blocked if any PO is not finished."""
     from sc_gr_app.services.po_service import finish_po
     from sc_gr_app.services.sc_service import finish_sc
     migrate(app_config)
@@ -1834,7 +1834,7 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
     )
     # Submit SC → submit PO → approve SC → approve PO
-    sc_data = {"sc_no": "SC-CLOS1", "requester_id": "U1", "request_type": "service",
+    sc_data = {"sc_no": "SC-FIN1", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
                "vendor_ids": ["V1"]}
@@ -1842,14 +1842,14 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc_draft["sc_id"])
-    # PO is po_approved, not finished — close_sc should block
+    # PO is activing, not finished — finish_sc should block
     with pytest.raises(ConflictError, match="PO.*not finished"):
         finish_sc(app_config, ADMIN, sc_draft["sc_id"])
 
     # Finish PO
     finish_po(app_config, ADMIN, po["po_id"])
 
-    # Now close_sc should succeed
+    # Now finish_sc should succeed
     finish_sc(app_config, ADMIN, sc_draft["sc_id"])
     with connect(app_config) as conn:
         sc_check = conn.execute("SELECT status FROM sc_records WHERE sc_id = ?", (sc_draft["sc_id"],)).fetchone()
