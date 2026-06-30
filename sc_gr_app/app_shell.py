@@ -226,15 +226,28 @@ def _setup_tray(window):
 
     logger = logging.getLogger(__name__)
 
-    icon_path = Path(__file__).parent / "icons" / "tray.png"
-    if not icon_path.exists():
-        logger.warning("Tray: icon not found at %s", icon_path)
-        return
-
-    hIcon = _user32.LoadImageW(None, str(icon_path), 1, 0, 0, 0x0010)  # IMAGE_ICON=1, LR_LOADFROMFILE=0x0010
-    if not hIcon:
-        logger.warning("Tray: LoadImageW failed for %s", icon_path)
-        return
+    # Extract small icon from the EXE (embedded by PyInstaller via app.spec icon=)
+    ExtractIconExW = _user32.ExtractIconExW
+    ExtractIconExW.argtypes = [ctypes.c_wchar_p, ctypes.c_int,
+                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
+    ExtractIconExW.restype = ctypes.c_uint
+    hIconLarge = ctypes.c_void_p()
+    hIconSmall = ctypes.c_void_p()
+    count = ExtractIconExW(sys.executable, 0,
+                           ctypes.byref(hIconLarge), ctypes.byref(hIconSmall), 1)
+    if count == 0 or not hIconSmall:
+        # Fallback: try large icon
+        if hIconLarge:
+            hIcon = hIconLarge
+        else:
+            logger.warning("Tray: ExtractIconExW failed, GetLastError=%s",
+                           ctypes.get_last_error())
+            return
+    else:
+        hIcon = hIconSmall
+        # We took the small icon; destroy the large one to avoid leak
+        if hIconLarge:
+            _user32.DestroyIcon(hIconLarge)
 
     _allow_close = [False]
 
