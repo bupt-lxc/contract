@@ -227,7 +227,8 @@ def _setup_tray(window):
     logger = logging.getLogger(__name__)
 
     # Extract small icon from the EXE (embedded by PyInstaller via app.spec icon=)
-    ExtractIconExW = _user32.ExtractIconExW
+    _shell32 = ctypes.windll.shell32
+    ExtractIconExW = _shell32.ExtractIconExW
     ExtractIconExW.argtypes = [ctypes.c_wchar_p, ctypes.c_int,
                                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
     ExtractIconExW.restype = ctypes.c_uint
@@ -282,9 +283,8 @@ def _setup_tray(window):
     nid.hIcon = hIcon
     nid.szTip = WINDOW_TITLE
 
-    shell32 = ctypes.windll.shell32
-    shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
-    shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+    __shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+    __shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 
     _user32.CreatePopupMenu.restype = ctypes.c_void_p
     _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.UINT_PTR, wintypes.LPCWSTR]
@@ -300,7 +300,7 @@ def _setup_tray(window):
             hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
             if hwnd:
                 nid.hWnd = hwnd
-                shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # NIM_ADD
+                _shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # NIM_ADD
                 _subclass_window(hwnd)
                 return
             time.sleep(0.05)
@@ -350,7 +350,7 @@ def _setup_tray(window):
                     return 0
                 if wparam == IDM_EXIT:
                     _allow_close[0] = True
-                    shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # NIM_DELETE
+                    _shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # NIM_DELETE
                     _user32.DestroyIcon(hIcon)
                     window.destroy()
                     os._exit(0)
