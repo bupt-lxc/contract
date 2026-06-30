@@ -32,16 +32,16 @@
     </el-table-column>
     <el-table-column :label="$t('gr.actions')" width="280" fixed="right">
       <template #default="{ row }">
-        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
-        <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
-        <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="row.status === 'pending'" type="success" link size="small" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
+        <el-button v-if="row.status === 'draft'" type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="row.status === 'pending'" type="success" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
         <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.denyConfirm')" @confirm="$emit('deny', row)">
           <template #reference>
-            <el-button type="danger" link size="small" @click.stop>{{ $t('gr.deny') }}</el-button>
+            <el-button type="danger" link size="small" :disabled="loadingState.count > 0" @click.stop>{{ $t('gr.deny') }}</el-button>
           </template>
         </el-popconfirm>
-        <el-button type="info" link size="small" @click.stop="$emit('attachments', row)">
+        <el-button type="info" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('attachments', row)">
           <el-icon><Paperclip /></el-icon>
         </el-button>
       </template>
@@ -54,6 +54,7 @@
 import { Paperclip } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import { loadingState } from '@/api/bridge.js'
 
 defineProps({ rows: { type: Array, default: () => [] } })
 defineEmits(['detail', 'edit', 'approve', 'deny', 'attachments', 'row-click', 'submit'])
