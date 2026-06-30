@@ -2,7 +2,7 @@
 ; Run after PyInstaller build: dist/PO Management Platform/
 
 #define MyAppName "PO Management Platform Beta"
-#define MyAppVersion "2.2.3"
+#define MyAppVersion "2.2.12"
 #define MyAppPublisher "Audi C/EV-L"
 #define MyAppURL ""
 #define MyAppExeName "PO Management Platform.exe"
@@ -16,7 +16,7 @@ DefaultDirName={localappdata}\PO Management Platform Beta
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist\installer
-OutputBaseFilename=POMP-Beta-2.2.3-Setup
+OutputBaseFilename=POMP-Beta-2.2.12-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -33,6 +33,11 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Files]
 Source: "..\dist\PO Management Platform\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Registry]
+Root: HKCU; Subkey: "SOFTWARE\Classes\pomp"; ValueType: string; ValueData: "PO Management Platform Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "SOFTWARE\Classes\pomp"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "SOFTWARE\Classes\pomp\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
