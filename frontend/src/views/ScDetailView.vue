@@ -9,15 +9,15 @@
         </p>
       </div>
       <div class="header-actions">
-        <el-button v-if="permissions.can_edit_sc" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="permissions.can_submit_sc" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="permissions.can_confirm_sc" type="primary" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
-        <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
-        <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
-        <el-button v-if="permissions.can_recall_sc" type="warning" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
-        <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
-        <el-button v-if="permissions.can_finish_sc" type="danger" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="permissions.can_transfer_sc" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
+        <el-button v-if="permissions.can_edit_sc" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="permissions.can_submit_sc" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="permissions.can_confirm_sc" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
+        <el-button v-if="permissions.can_approve_sc" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
+        <el-button v-if="permissions.can_deny_sc" type="warning" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('common.deny') }}</el-button>
+        <el-button v-if="permissions.can_recall_sc" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
+        <el-button v-if="permissions.can_delete_sc" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="permissions.can_finish_sc" type="danger" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="permissions.can_transfer_sc" :disabled="loadingState.count > 0" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
       </div>
     </div>
 
@@ -34,6 +34,7 @@
           <el-button
             v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'finished')"
             type="primary" size="small"
+            :disabled="loadingState.count > 0"
             @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
           >
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
@@ -152,7 +153,7 @@ import { useSc } from '@/composables/useSc.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
-import { callApi } from '@/api/bridge.js'
+import { callApi, loadingState } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
