@@ -287,7 +287,7 @@ def _setup_tray(window):
     _shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 
     _user32.CreatePopupMenu.restype = ctypes.c_void_p
-    _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.UINT_PTR, wintypes.LPCWSTR]
+    _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.WPARAM, wintypes.LPCWSTR]
     _user32.AppendMenuW.restype = wintypes.BOOL
     _user32.DestroyMenu.argtypes = [ctypes.c_void_p]
     _user32.DestroyMenu.restype = wintypes.BOOL
