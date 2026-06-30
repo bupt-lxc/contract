@@ -79,6 +79,52 @@ _user32.MessageBoxW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wcha
 _kernel32.CreateMutexW.restype = ctypes.c_void_p
 _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
 
+WM_COPYDATA = 0x004A
+
+
+class COPYDATASTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("dwData", ctypes.c_ulonglong),
+        ("cbData", ctypes.c_uint),
+        ("lpData", ctypes.c_void_p),
+    ]
+
+
+_user32.SendMessageW.restype = ctypes.c_longlong
+_user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_ulonglong, ctypes.c_longlong]
+
+
+def _parse_protocol_url(url: str):
+    """Parse pomp://sc/SC001/confirm into {type, id, action}. Returns None on failure."""
+    if not url or not url.startswith("pomp://"):
+        return None
+    path = url[len("pomp://"):].rstrip("/")
+    parts = path.split("/")
+    if len(parts) < 2:
+        return None
+    entity_type = parts[0]
+    if entity_type not in ("sc", "po", "gr"):
+        return None
+    result = {"type": entity_type, "id": parts[1], "action": None}
+    if len(parts) >= 3 and parts[2] == "confirm":
+        result["action"] = "confirm"
+    return result
+
+
+def _send_to_existing_window(hwnd, url):
+    """Forward a pomp:// URL to an already-running POMP window via WM_COPYDATA."""
+    encoded = url.encode("utf-8")
+    cds = COPYDATASTRUCT()
+    cds.dwData = 0
+    cds.cbData = len(encoded)
+    buf = ctypes.create_string_buffer(encoded)
+    cds.lpData = ctypes.cast(buf, ctypes.c_void_p)
+    _user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.c_void_p(ctypes.addressof(cds)))
+    # Bring existing window to foreground
+    _user32.ShowWindow(hwnd, 5)    # SW_SHOW
+    _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
+    _user32.SetForegroundWindow(hwnd)
+
 
 def _patch_webview2():
     _original = EdgeChrome.on_webview_ready
@@ -99,10 +145,13 @@ def _single_instance_check():
         return
     hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
     if hwnd:
-        # SW_SHOW (5) reveals a window hidden to tray; SW_RESTORE (9) handles minimized
-        _user32.ShowWindow(hwnd, 5)    # SW_SHOW
-        _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
-        _user32.SetForegroundWindow(hwnd)
+        # If launched with a pomp:// URL, forward it to the existing window
+        if len(sys.argv) > 1 and _parse_protocol_url(sys.argv[1]):
+            _send_to_existing_window(hwnd, sys.argv[1])
+        else:
+            _user32.ShowWindow(hwnd, 5)    # SW_SHOW
+            _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
+            _user32.SetForegroundWindow(hwnd)
     sys.exit(0)
 
 
@@ -322,6 +371,20 @@ def _setup_tray(window):
                 _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
                 return 0
 
+            # ── WM_COPYDATA: protocol URL from secondary instance ────
+            if msg == WM_COPYDATA:
+                cds = ctypes.cast(ctypes.c_void_p(lparam), ctypes.POINTER(COPYDATASTRUCT)).contents
+                url_bytes = ctypes.cast(cds.lpData, ctypes.c_char_p).value.decode("utf-8")
+                window.show()
+                window.restore()
+                import json
+                params = _parse_protocol_url(url_bytes)
+                if params:
+                    window.evaluate_js(
+                        f"window.__protocolNavigate({json.dumps(params)})"
+                    )
+                return 0
+
             # ── tray icon right-click → context menu ──────────────────
             if msg == WM_TRAYICON and lparam == 0x0205:  # WM_RBUTTONUP
                 pt = POINT()
@@ -425,5 +488,20 @@ def run_app():
     )
 
     _setup_tray(window)
+
+    # Check for pomp:// protocol URL on first launch
+    protocol_params = None
+    if len(sys.argv) > 1:
+        protocol_params = _parse_protocol_url(sys.argv[1])
+
+    def _on_loaded():
+        if protocol_params:
+            import json
+            js = json.dumps(protocol_params)
+            window.evaluate_js(f"window.__protocolNavigate({js})")
+
+    loaded_events = getattr(window.events, 'loaded', None)
+    if loaded_events is not None:
+        loaded_events += _on_loaded
 
     webview.start(debug=DEV_MODE)
