@@ -11,7 +11,7 @@
       <div class="header-actions">
         <el-button v-if="permissions.can_edit_sc" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="permissions.can_submit_sc" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="permissions.can_confirm_sc" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
+        <el-button v-if="permissions.can_confirm_sc" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
         <el-button v-if="permissions.can_approve_sc" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="permissions.can_deny_sc" type="warning" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('common.deny') }}</el-button>
         <el-button v-if="permissions.can_recall_sc" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
@@ -177,6 +177,7 @@ const permissions = computed(() => detail.value.permissions || {})
 const vendors = computed(() => vendorState.rows)
 const scVendors = computed(() => detail.value?.vendors || [])
 const activeUsers = ref([])
+const confirmBtn = ref(null)
 
 const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
@@ -421,6 +422,15 @@ async function handleExportAudit() {
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
   await Promise.all([fetchDetail(scId.value), searchVendors()])
+
+  if (window.__pendingConfirmAction?.type === 'sc' && window.__pendingConfirmAction?.id === scId.value) {
+    window.__pendingConfirmAction = null
+    setTimeout(() => {
+      confirmBtn.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      confirmBtn.value?.$el?.classList.add('confirm-pulse')
+      setTimeout(() => confirmBtn.value?.$el?.classList.remove('confirm-pulse'), 3000)
+    }, 500)
+  }
 })
 
 watch(() => route.params.id, async (newId) => {
@@ -442,5 +452,15 @@ watch(() => route.params.id, async (newId) => {
 .header-actions {
   display: flex;
   gap: 6px;
+}
+
+.confirm-pulse {
+  animation: pulse 0.6s ease-in-out 3;
+  box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6);
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(52, 168, 83, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0); }
 }
 </style>
