@@ -274,8 +274,13 @@ def generate_draft(conn: sqlite3.Connection, entry: dict) -> dict:
     attachment_paths = [r["stored_path"] for r in attachment_rows]
 
     subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
+    show_confirm = (
+        entry["event_key"] == "submit"
+        and entry["entity_type"] in ("sc", "gr")
+    )
     body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
-                                actor_name=actor_name, requester_name=requester_name)
+                                actor_name=actor_name, requester_name=requester_name,
+                                show_confirm_btn=show_confirm)
 
     return {
         "subject": subject,
@@ -351,8 +356,13 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         body, subject = _get_monthly_content(conn, entry)
     else:
         subject = templates.build_subject(entry, entity_info, actor_name=actor_name)
+        show_confirm = (
+            entry["event_key"] == "submit"
+            and entry["entity_type"] in ("sc", "gr")
+        )
         body = templates.build_body(entry, entity_info, {**to_emails_map, **cc_emails_map},
-                                    actor_name=actor_name, requester_name=requester_name)
+                                    actor_name=actor_name, requester_name=requester_name,
+                                    show_confirm_btn=show_confirm)
 
     pythoncom.CoInitialize()
     try:
