@@ -1,4 +1,5 @@
 <template>
+  <AppLoadingBar />
   <LoginView v-if="layout === 'standalone'" />
   <el-container v-else class="app-shell">
     <el-aside :width="sidebarCollapsed ? '64px' : '210px'" class="app-sidebar">
@@ -21,6 +22,7 @@ import { useRoute } from 'vue-router'
 import SideNav from '@/components/layout/SideNav.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LoginView from '@/views/LoginView.vue'
+import AppLoadingBar from '@/components/common/AppLoadingBar.vue'
 
 const route = useRoute()
 const sidebarCollapsed = ref(false)
