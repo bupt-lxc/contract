@@ -202,10 +202,6 @@ async function handleEditSave(data) {
 
 async function handleSubmit() {
   try {
-    if (!detail.value.vendors || detail.value.vendors.length === 0) {
-      ElMessage.warning(t('sc.vendorRequiredForSubmit'))
-      return
-    }
     await ElMessageBox.confirm(t('sc.submitConfirm'), t('common.confirm'), { type: 'warning' })
     await submitSc(scId.value, {})
     ElMessage.success(t('sc.scSubmitted'))
