@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 from sc_gr_app.api.schemas import fail, ok
@@ -62,6 +63,56 @@ class ApiBridge:
     def get_version(self, _payload=None) -> dict:
         from sc_gr_app import __version__
         return ok(__version__)
+
+    def install_update(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            version = _require_payload_field(payload, "version")
+            installer_name = _require_payload_field(payload, "installer_name")
+            expected_hash = _require_payload_field(payload, "sha256")
+        except Exception as exc:
+            return fail(exc)
+
+        from sc_gr_app.update import _releases_dir, sha256_file
+
+        releases_dir = _releases_dir()
+        installer_src = releases_dir / installer_name
+        temp_dir = Path(os.getenv("TEMP")) / "pomp-update"
+
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return fail(exc)
+
+        installer_dst = temp_dir / installer_name
+
+        try:
+            import shutil
+            shutil.copy2(str(installer_src), str(installer_dst))
+        except OSError as exc:
+            return fail(exc)
+
+        actual_hash = sha256_file(installer_dst)
+        if actual_hash != expected_hash:
+            return fail(Exception(
+                "Update file is corrupted. Contact your administrator."
+            ))
+
+        install_dir = Path(sys.executable).parent
+        try:
+            import subprocess
+            subprocess.Popen(
+                [
+                    str(installer_dst),
+                    "/SILENT",
+                    f"/DIR={install_dir}",
+                ],
+            )
+        except OSError as exc:
+            return fail(exc)
+
+        os._exit(0)
+        return ok(None)  # unreachable, but satisfies the return type
 
     def switch_dev_role(self, payload) -> dict:
         """Switch the dev user's role between admin and requester. Dev mode only."""
