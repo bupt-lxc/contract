@@ -1,17 +1,39 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
+
+# China Standard Time offset
+_CST = timedelta(hours=8)
 
 
 def format_timestamp(iso_str: str) -> str:
-    """Convert ISO UTC timestamp to display format: YYYY-MM-DD HH:MM:SS"""
+    """Convert ISO UTC timestamp to CST (UTC+8) display format: YYYY-MM-DD HH:MM:SS"""
     if not iso_str:
         return ""
     try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, AttributeError):
-        return iso_str
+        s = str(iso_str)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        if "T" in s:
+            date_part, time_part = s.split("T", 1)
+            tz_offset = "+00:00"
+            if "+" in time_part:
+                time_part, tz_str = time_part.split("+", 1)
+                tz_offset = "+" + tz_str
+            elif time_part.count("-") > 2:
+                time_part, tz_str = time_part.rsplit("-", 1)
+                tz_offset = "-" + tz_str
+            tm_parts = time_part.split(":")
+            dp = date_part.split("-")
+            year, month, day = int(dp[0]), int(dp[1]), int(dp[2])
+            hour, minute = int(tm_parts[0]), int(tm_parts[1])
+            second = int(float(tm_parts[2]))
+            dt = datetime(year, month, day, hour, minute, second)
+            dt_cst = dt + _CST
+            return dt_cst.strftime("%Y-%m-%d %H:%M:%S")
+        return s
+    except (ValueError, TypeError, IndexError, AttributeError):
+        return str(iso_str)
 
 
 # Fields excluded from change summaries (pure timestamps / tracking noise)

@@ -95,7 +95,7 @@
         </div>
         <el-table :data="detail.operation_records || []" stripe border size="small">
           <el-table-column prop="created_at" :label="$t('record.created')" width="160">
-            <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
           </el-table-column>
           <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
           <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -156,6 +156,7 @@ import { useSc } from '@/composables/useSc.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
+import { formatDateTime } from '@/utils/format.js'
 import { callApi, loadingState } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
@@ -428,7 +429,7 @@ async function handleExportPos() {
 
 async function handleExportAudit() {
   const columns = [
-    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+    { key: 'created_at', label: t('record.created'), getValue: r => formatDateTime(r.created_at) },
     { key: 'action_type', label: t('record.action') },
     { key: 'object_type', label: t('record.objectType') },
     { key: 'object_id', label: t('record.objectId') },

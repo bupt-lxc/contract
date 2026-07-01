@@ -86,7 +86,7 @@
           />
           <el-table :data="logsState.rows" v-loading="logsState.loading" stripe border style="margin-top:12px">
             <el-table-column prop="created_at" :label="$t('record.created')" width="160" sortable="custom">
-              <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+              <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
             </el-table-column>
             <el-table-column prop="action_type" :label="$t('record.action')" width="150" />
             <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -97,7 +97,6 @@
             <template #empty><el-empty :description="logsState.error || $t('record.noRecords')" /></template>
           </el-table>
           <el-pagination
-            v-if="logsState.total > logsState.pageSize"
             :current-page="logsState.currentPage"
             :page-size="logsState.pageSize"
             :total="logsState.total"
@@ -125,6 +124,7 @@ import { Plus, Download, Search } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { useUser } from '@/composables/useUser.js'
 import { useExport } from '@/composables/useExport.js'
+import { formatDateTime } from '@/utils/format.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import UserFormDialog from '@/components/system/UserFormDialog.vue'
 import { useLogs } from '@/composables/useLogs.js'
@@ -235,7 +235,7 @@ async function handleLogsExport() {
   logsExporting.value = true
   try {
     const columns = [
-      { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+      { key: 'created_at', label: t('record.created'), getValue: r => formatDateTime(r.created_at) },
       { key: 'action_type', label: t('record.action') },
       { key: 'object_type', label: t('record.objectType') },
       { key: 'object_id', label: t('record.objectId') },

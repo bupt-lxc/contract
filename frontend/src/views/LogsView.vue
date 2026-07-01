@@ -14,7 +14,7 @@
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
       <el-table-column prop="created_at" :label="$t('record.created')" width="160" sortable="custom">
-        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
       <el-table-column prop="action_type" :label="$t('record.action')" width="150" />
       <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -26,7 +26,6 @@
     </el-table>
 
     <el-pagination
-      v-if="state.total > state.pageSize"
       :current-page="state.currentPage"
       :page-size="state.pageSize"
       :total="state.total"
@@ -43,6 +42,7 @@ import { onMounted, ref } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { useLogs } from '@/composables/useLogs.js'
 import { useExport } from '@/composables/useExport.js'
+import { formatDateTime } from '@/utils/format.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -78,7 +78,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
-      { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+      { key: 'created_at', label: t('record.created'), getValue: r => formatDateTime(r.created_at) },
       { key: 'action_type', label: t('record.action') },
       { key: 'object_type', label: t('record.objectType') },
       { key: 'object_id', label: t('record.objectId') },

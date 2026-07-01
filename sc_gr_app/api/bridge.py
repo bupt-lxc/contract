@@ -34,7 +34,7 @@ def _format_entity_timestamps(entity: dict) -> dict:
     _TIMESTAMP_FIELDS = (
         "created_at", "updated_at", "pending_date", "approved_date",
         "finished_at", "denied_at", "confirmed_at", "activing_date",
-        "approved_at", "sent_at",
+        "approved_at", "sent_at", "submitted_date",
     )
     for f in _TIMESTAMP_FIELDS:
         if f in entity and entity[f]:

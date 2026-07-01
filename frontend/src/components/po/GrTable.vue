@@ -28,7 +28,7 @@
     </el-table-column>
     <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip sortable />
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
-      <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+      <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
     </el-table-column>
     <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
@@ -62,6 +62,7 @@ import { Paperclip } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import { loadingState } from '@/api/bridge.js'
+import { formatDateTime } from '@/utils/format.js'
 
 defineProps({ rows: { type: Array, default: () => [] } })
 defineEmits(['detail', 'edit', 'approve', 'deny', 'finish', 'attachments', 'row-click', 'submit'])

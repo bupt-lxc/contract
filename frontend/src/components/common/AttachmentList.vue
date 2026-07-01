@@ -23,7 +23,7 @@
       </el-table-column>
       <el-table-column prop="created_by" :label="$t('attachment.uploadedBy')" width="120" />
       <el-table-column :label="$t('attachment.uploadedAt')" width="160">
-        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="140" fixed="right">
         <template #default="{ row }">
@@ -52,6 +52,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip, FolderOpened } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
+import { formatDateTime } from '@/utils/format.js'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({

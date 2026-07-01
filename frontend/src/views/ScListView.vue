@@ -39,7 +39,6 @@
     />
 
     <el-pagination
-      v-if="state.total > state.pageSize"
       :current-page="state.currentPage"
       :page-size="state.pageSize"
       :total="state.total"
@@ -102,6 +101,7 @@ import * as XLSX from 'xlsx'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
+import { formatDateTime } from '@/utils/format.js'
 import { callApi, loadingState } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
@@ -298,7 +298,7 @@ async function handleExport() {
       { key: 'sc_amount', label: t('exportCol.scAmount') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) },
-      { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+      { key: 'created_at', label: t('exportCol.created'), getValue: r => formatDateTime(r.created_at) },
       { key: 'submitted_date', label: t('sc.submittedDate'), getValue: r => (r.submitted_date || '').slice(0, 10) },
       { key: 'description', label: t('exportCol.description') }
     ]

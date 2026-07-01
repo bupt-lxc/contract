@@ -62,10 +62,10 @@
         </template>
       </el-table-column>
       <el-table-column prop="created_at" :label="$t('email.created')" width="160">
-        <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
       <el-table-column prop="sent_at" :label="$t('email.sent')" width="160">
-        <template #default="{ row }">{{ (row.sent_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.sent_at) }}</template>
       </el-table-column>
       <el-table-column prop="error_msg" :label="$t('email.error')" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ row.error_msg || '-' }}</template>
@@ -84,7 +84,6 @@
     </el-table>
 
     <el-pagination
-      v-if="state.queueTotal > pageSize"
       v-model:current-page="currentPage"
       :page-size="pageSize"
       :total="state.queueTotal"
@@ -104,6 +103,7 @@ import { Download, ArrowLeft } from '@element-plus/icons-vue'
 import EmailPreviewDialog from '@/components/notification/EmailPreviewDialog.vue'
 import { useNotification } from '@/composables/useNotification.js'
 import { useExport } from '@/composables/useExport.js'
+import { formatDateTime } from '@/utils/format.js'
 import { callApi } from '@/api/bridge.js'
 import { ElMessage } from 'element-plus'
 
@@ -174,8 +174,8 @@ async function handleExport() {
       { key: 'to_recipients', label: t('email.to'), getValue: r => formatRecipients(r.to_recipients) },
       { key: 'cc_recipients', label: t('email.cc'), getValue: r => formatRecipients(r.cc_recipients) },
       { key: 'status', label: t('email.status') },
-      { key: 'created_at', label: t('email.created'), getValue: r => (r.created_at || '').replace('T', ' ').slice(0, 19) },
-      { key: 'sent_at', label: t('email.sent'), getValue: r => (r.sent_at || '').replace('T', ' ').slice(0, 19) || '-' },
+      { key: 'created_at', label: t('email.created'), getValue: r => formatDateTime(r.created_at) },
+      { key: 'sent_at', label: t('email.sent'), getValue: r => formatDateTime(r.sent_at) },
       { key: 'error_msg', label: t('email.error'), getValue: r => r.error_msg || '-' }
     ]
     await exportAll('list_notification_queue', {
