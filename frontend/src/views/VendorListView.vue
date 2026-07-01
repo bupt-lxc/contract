@@ -106,6 +106,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const columns = [
+      { key: 'vendor_id', label: t('vendor.vendorId') },
       { key: 'vendor_name', label: t('vendor.vendorName') },
       { key: 'company_name_cn', label: t('vendor.companyNameCn') },
       { key: 'ksrm_vendor_code', label: t('vendor.ksrmCode') },
