@@ -369,7 +369,9 @@ home: {
     confirmationName: '确认名称',
     deliveryFrom: '交付从',
     deliveryTo: '交付至',
-    lastDelivery: '最后交付'
+    lastDelivery: '最后交付',
+    confirmSubmit: '确认提交此验收申请？',
+    grSubmitted: '验收申请已提交'
   },
 
   vendor: {

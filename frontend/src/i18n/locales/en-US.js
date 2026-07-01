@@ -369,7 +369,9 @@ home: {
     confirmationName: 'Confirmation Name',
     deliveryFrom: 'Delivery From',
     deliveryTo: 'Delivery To',
-    lastDelivery: 'Last Delivery'
+    lastDelivery: 'Last Delivery',
+    confirmSubmit: 'Submit this GR for confirmation?',
+    grSubmitted: 'GR submitted'
   },
 
   vendor: {

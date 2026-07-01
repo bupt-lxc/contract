@@ -7,6 +7,7 @@
       </div>
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_gr && ['draft','pending','manager_confirm','approved'].includes(gr.status)" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'approved'" type="success" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('gr.finishGr') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
@@ -118,7 +119,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updateGr, approveGr, denyGr, finishGr } = useGr()
+const { updateGr, approveGr, denyGr, finishGr, submitGr } = useGr()
 
 const scId = computed(() => route.params.scId)
 const poId = computed(() => route.params.poId)
@@ -145,6 +146,17 @@ const attachRefreshKey = ref(0)
 const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
+
+async function handleSubmit() {
+  try {
+    await ElMessageBox.confirm(t('gr.confirmSubmit'), t('common.confirm'), { type: 'warning' })
+    await submitGr(grId.value)
+    ElMessage.success(t('gr.grSubmitted'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
 
 async function handleEditSave(data) {
   try {
