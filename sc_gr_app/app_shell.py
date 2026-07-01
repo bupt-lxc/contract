@@ -163,6 +163,56 @@ def _webview2_storage():
     return base
 
 
+def _read_update_info():
+    """Silently check for updates. Returns {version, changelog_cn, installer_name, sha256}
+    or None when no update is available or manifest can't be read."""
+    from sc_gr_app.update import (
+        _releases_dir,
+        fetch_manifest,
+        is_update_available,
+        verify_manifest,
+    )
+
+    if os.getenv("SC_GR_DEV") == "1":
+        return None
+
+    manifest = fetch_manifest()
+    if manifest is None:
+        return None
+    if not is_update_available(manifest):
+        return None
+    if not verify_manifest(manifest):
+        logger = logging.getLogger(__name__)
+        logger.warning("Update manifest is invalid — skipping tray update check")
+        return None
+
+    return {
+        "version": manifest["version"],
+        "changelog_cn": manifest.get("changelog_cn", ""),
+        "installer_name": manifest["gui"]["installer"],
+        "sha256": manifest["gui"]["sha256"],
+    }
+
+
+def _trigger_update_check(window):
+    """Run a silent update check in a daemon thread. If an update is found,
+    push it to the JS side via evaluate_js. Must be called after window is shown."""
+    import json
+
+    def _check():
+        try:
+            info = _read_update_info()
+            if info is None:
+                return
+            window.evaluate_js(
+                "window.__updateAvailable(" + json.dumps(info) + ")"
+            )
+        except Exception:
+            pass  # update check failure must never break the app
+
+    threading.Thread(target=_check, daemon=True).start()
+
+
 def _check_update():
     """Check for and apply updates from shared drive. Called before _init_database.
     Exits the process if an update is found and launched, or on fatal errors."""
@@ -403,6 +453,7 @@ def _setup_tray(window):
             if msg == WM_TRAYICON and lparam == 0x0203:  # WM_LBUTTONDBLCLK
                 window.show()
                 window.restore()
+                _trigger_update_check(window)
                 return 0
 
             # ── context menu commands ────────────────────────────────
@@ -410,6 +461,7 @@ def _setup_tray(window):
                 if wparam == IDM_SHOW:
                     window.show()
                     window.restore()
+                    _trigger_update_check(window)
                     return 0
                 if wparam == IDM_EXIT:
                     _allow_close[0] = True
