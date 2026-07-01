@@ -1,6 +1,4 @@
 """Tests for import_service -- status restrictions, required fields, preview functions."""
-import pytest
-from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.services import import_service
@@ -332,7 +330,7 @@ class TestConfirmImport:
             _seed_sc(conn)
             _seed_vendor(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_no": "PO-CONFIRM", "po_amount": "50000", "status": "active"}]
+        rows = [{"sc_id": "SC-0000001-20260701-001", "vendor_id": "V000001", "po_no": "PO-CONFIRM", "po_amount": "50000", "status": "active"}]
         result = import_service.import_pos(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
