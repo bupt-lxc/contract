@@ -1623,6 +1623,55 @@ class ApiBridge:
         except ValidationError as e:
             return fail(e)
 
+    def preview_sc_import(self, payload) -> dict:
+        """Validate SC import rows without inserting. Returns annotated rows.
+
+        Note: intentionally does NOT call _require_current_user() — preview is read-only
+        validation that does not write to the database, so no auth check is needed.
+        """
+        try:
+            from sc_gr_app.services import import_service
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            preview = import_service.preview_sc_import(self.config, rows)
+            return ok({"rows": preview})
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def preview_po_import(self, payload) -> dict:
+        """Validate PO import rows without inserting. Returns annotated rows."""
+        try:
+            from sc_gr_app.services import import_service
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            preview = import_service.preview_po_import(self.config, rows)
+            return ok({"rows": preview})
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
+    def preview_gr_import(self, payload) -> dict:
+        """Validate GR import rows without inserting. Returns annotated rows."""
+        try:
+            from sc_gr_app.services import import_service
+            payload = self._required_payload(payload)
+            rows = _require_payload_field(payload, "rows")
+            if not isinstance(rows, list) or len(rows) == 0:
+                return fail(ValidationError("rows must be a non-empty list"))
+            preview = import_service.preview_gr_import(self.config, rows)
+            return ok({"rows": preview})
+        except PermissionDenied as e:
+            return fail(e)
+        except ValidationError as e:
+            return fail(e)
+
     def download_sc_template(self, _payload=None) -> dict:
         """Return SC import template as base64-encoded xlsx data."""
         import io
@@ -1636,7 +1685,7 @@ class ApiBridge:
                  "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
-                 "draft/pending/approved/finished/denied/manager_confirm", "Optional",
+                 "approved/finished", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
@@ -1659,16 +1708,26 @@ class ApiBridge:
         def _xml_escape(s):
             return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
-        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
-        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
-        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+        header_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 3, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 4, v) for i, v in enumerate(sample))
+
+        last_col = _col_letter(len(headers) - 1)
+        info_text = (
+            "Import Rules: Only SC records with status \"approved\" or \"finished\" can be imported. "
+            "Required fields: SC NO, SC Amount, Status. "
+            "Leave SC ID empty to auto-generate."
+        )
+        info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
-    <row r="1">{header_cells}</row>
-    <row r="2">{hint_cells}</row>
-    <row r="3">{sample_cells}</row>
+    <row r="1">{info_cell}</row>
+    <row r="2">{header_cells}</row>
+    <row r="3">{hint_cells}</row>
+    <row r="4">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 
@@ -1731,7 +1790,7 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional (must exist if provided)",
                  "Optional", "Optional (defaults to importer)", "Required",
-                 "draft/active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
         sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
@@ -1754,16 +1813,26 @@ class ApiBridge:
         def _xml_escape(s):
             return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
-        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
-        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
-        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+        header_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 3, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 4, v) for i, v in enumerate(sample))
+
+        last_col = _col_letter(len(headers) - 1)
+        info_text = (
+            "Import Rules: Only PO records with status \"active\" or \"finished\" can be imported. "
+            "Required fields: SC ID, PO NO, PO Amount, Status. "
+            "Leave PO ID empty to auto-generate."
+        )
+        info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
-    <row r="1">{header_cells}</row>
-    <row r="2">{hint_cells}</row>
-    <row r="3">{sample_cells}</row>
+    <row r="1">{info_cell}</row>
+    <row r="2">{header_cells}</row>
+    <row r="3">{hint_cells}</row>
+    <row r="4">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 
@@ -1826,11 +1895,11 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional", "Optional (defaults to importer)",
                  "Required", "Optional",
-                 "draft/manager_confirm/pending/approved/denied/finished", "Optional",
+                 "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "YYYY-MM-DD", "YYYY-MM-DD", "YYYY-MM-DD"]
+                 "Required (YYYY-MM-DD)", "Required (YYYY-MM-DD)", "YYYY-MM-DD"]
         sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
-                  "10000", "", "draft", "", "13",
+                  "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
                   "2026-01-01", "2026-12-31", ""]
 
@@ -1850,16 +1919,26 @@ class ApiBridge:
         def _xml_escape(s):
             return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
-        header_cells = "".join(_inline_str_cell(i, 1, h) for i, h in enumerate(headers))
-        hint_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(hints))
-        sample_cells = "".join(_inline_str_cell(i, 3, v) for i, v in enumerate(sample))
+        header_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(headers))
+        hint_cells = "".join(_inline_str_cell(i, 3, h) for i, h in enumerate(hints))
+        sample_cells = "".join(_inline_str_cell(i, 4, v) for i, v in enumerate(sample))
+
+        last_col = _col_letter(len(headers) - 1)
+        info_text = (
+            "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
+            "Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
+            "Leave GR ID empty to auto-generate."
+        )
+        info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
-    <row r="1">{header_cells}</row>
-    <row r="2">{hint_cells}</row>
-    <row r="3">{sample_cells}</row>
+    <row r="1">{info_cell}</row>
+    <row r="2">{header_cells}</row>
+    <row r="3">{hint_cells}</row>
+    <row r="4">{sample_cells}</row>
   </sheetData>
 </worksheet>"""
 
