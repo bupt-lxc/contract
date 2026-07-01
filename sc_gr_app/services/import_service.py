@@ -7,7 +7,7 @@ from sc_gr_app.errors import ValidationError
 from sc_gr_app.services.lock_service import LeaseLock
 from sc_gr_app.services.record_service import write_operation_record
 
-SC_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
+SC_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
 
 
 def utc_now() -> str:
@@ -78,11 +78,11 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "sc_id"):
             continue
-        for field in ["sc_amount", "status"]:
+        for field in ["sc_no", "sc_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
-        if status and status not in SC_ALLOWED_STATUSES:
+        if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
         if row.get("requester_id"):
             exists = conn.execute(
@@ -171,7 +171,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-PO_ALLOWED_STATUSES = {"draft", "active", "finished"}
+PO_IMPORT_ALLOWED_STATUSES = {"active", "finished"}
 
 
 def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
@@ -180,11 +180,11 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "po_id"):
             continue
-        for field in ["sc_id", "po_amount", "status"]:
+        for field in ["sc_id", "po_no", "po_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
-        if status and status not in PO_ALLOWED_STATUSES:
+        if status and status not in PO_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
         if row.get("sc_id"):
             exists = conn.execute(
@@ -282,7 +282,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-GR_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
+GR_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
 
 
 def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
@@ -291,11 +291,11 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "gr_id"):
             continue
-        for field in ["po_id", "estimated_amount", "status"]:
+        for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
-        if status and status not in GR_ALLOWED_STATUSES:
+        if status and status not in GR_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
         if row.get("po_id"):
             exists = conn.execute(
