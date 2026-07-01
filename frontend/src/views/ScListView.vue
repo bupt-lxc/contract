@@ -119,6 +119,7 @@ const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const exporting = ref(false)
 
 const scStatuses = [
+  { label: t('status.manager_confirm'), value: 'manager_confirm' },
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
   { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]

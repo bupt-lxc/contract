@@ -1,7 +1,7 @@
 import { reactive, readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
 
-export function useGr(pageSize = 20) {
+export function useGr(pageSize = 10) {
   const state = reactive({
     rows: [],
     total: 0,

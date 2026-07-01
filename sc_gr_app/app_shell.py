@@ -119,7 +119,7 @@ def _send_to_existing_window(hwnd, url):
     cds.cbData = len(encoded)
     buf = ctypes.create_string_buffer(encoded)
     cds.lpData = ctypes.cast(buf, ctypes.c_void_p)
-    _user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.c_void_p(ctypes.addressof(cds)))
+    _user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.addressof(cds))
     # Bring existing window to foreground
     _user32.ShowWindow(hwnd, 5)    # SW_SHOW
     _user32.ShowWindow(hwnd, 9)    # SW_RESTORE

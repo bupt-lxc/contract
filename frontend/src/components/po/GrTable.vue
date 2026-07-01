@@ -41,6 +41,7 @@
         <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
         <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
         <el-button v-if="row.status === 'draft'" type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="row.status === 'approved'" type="success" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('finish', row)">{{ $t('gr.finishGr') }}</el-button>
         <el-button v-if="row.status === 'pending'" type="success" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
         <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.denyConfirm')" @confirm="$emit('deny', row)">
           <template #reference>
@@ -63,7 +64,7 @@ import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import { loadingState } from '@/api/bridge.js'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['detail', 'edit', 'approve', 'deny', 'attachments', 'row-click', 'submit'])
+defineEmits(['detail', 'edit', 'approve', 'deny', 'finish', 'attachments', 'row-click', 'submit'])
 
 function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }

@@ -477,6 +477,20 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "activing":
                     raise ConflictError("PO must be activing")
 
+                # Block if any GR is not in a final state
+                non_final_grs = conn.execute(
+                    """
+                    SELECT gr_id, status FROM gr_requests
+                    WHERE po_id = ? AND status NOT IN ('denied', 'finished')
+                    """,
+                    (po_id,),
+                ).fetchall()
+                if non_final_grs:
+                    raise ConflictError(
+                        f"Cannot finish PO: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve, deny or finish all GRs first."
+                    )
+
                 timestamp = utc_now()
                 conn.execute(
                     """

@@ -71,7 +71,7 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
     def fake_search(name):
         def _search(config, **payload):
             calls.append((name, config, payload))
-            return [name]
+            return {"rows": [name], "total": 1}
 
         return _search
 
@@ -89,11 +89,11 @@ def test_bridge_search_methods_forward_payload_or_empty_dict(monkeypatch, app_co
 
     api = bridge.ApiBridge(app_config)
 
-    assert api.search_scs({"text": "alpha"}) == {"ok": True, "data": ["sc"]}
-    assert api.search_vendors(None) == {"ok": True, "data": ["vendor"]}
-    assert api.search_pos() == {"ok": True, "data": ["po"]}
-    assert api.search_grs({"filters": {"status": "pending"}}) == {"ok": True, "data": ["gr"]}
-    assert api.search_operation_records({"text": "approve"}) == {"ok": True, "data": ["logs"]}
+    assert api.search_scs({"text": "alpha"}) == {"ok": True, "data": {"rows": ["sc"], "total": 1}}
+    assert api.search_vendors(None) == {"ok": True, "data": {"rows": ["vendor"], "total": 1}}
+    assert api.search_pos() == {"ok": True, "data": {"rows": ["po"], "total": 1}}
+    assert api.search_grs({"filters": {"status": "pending"}}) == {"ok": True, "data": {"rows": ["gr"], "total": 1}}
+    assert api.search_operation_records({"text": "approve"}) == {"ok": True, "data": {"rows": ["logs"], "total": 1}}
     assert calls == [
         ("sc", app_config, {"text": "alpha", "current_user": current_user}),
         ("vendor", app_config, {}),

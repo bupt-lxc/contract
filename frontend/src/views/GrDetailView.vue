@@ -8,10 +8,14 @@
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_gr && ['draft','pending','manager_confirm','approved'].includes(gr.status)" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'approved'" type="success" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('gr.finishGr') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('gr.deny') }}</el-button>
         <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('gr.recall') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_gr && gr.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="gr.gr_id" :disabled="loadingState.count > 0" @click="handleSendEmail('gr', gr.gr_id)">
+          <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
+        </el-button>
       </div>
     </div>
 
@@ -102,6 +106,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSc } from '@/composables/useSc.js'
 import { useGr } from '@/composables/useGr.js'
 import { callApi, loadingState } from '@/api/bridge.js'
+import { Message } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
@@ -112,7 +117,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updateGr, approveGr, denyGr } = useGr()
+const { updateGr, approveGr, denyGr, finishGr } = useGr()
 
 const scId = computed(() => route.params.scId)
 const poId = computed(() => route.params.poId)
@@ -201,6 +206,17 @@ async function handleDeny() {
   }
 }
 
+async function handleFinish() {
+  try {
+    await ElMessageBox.confirm(t('gr.finishGrConfirm'), t('gr.finishGr'), { type: 'warning' })
+    await finishGr(grId.value)
+    ElMessage.success(t('gr.grFinished'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleRecall() {
   try {
     await ElMessageBox.confirm(t('gr.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
@@ -209,6 +225,14 @@ async function handleRecall() {
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
+async function handleSendEmail(entityType, entityId) {
+  try {
+    await callApi('open_entity_email', { entity_type: entityType, entity_id: entityId })
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
   }
 }
 

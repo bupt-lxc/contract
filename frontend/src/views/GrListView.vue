@@ -183,6 +183,7 @@ const { exportAll } = useExport()
 const exporting = ref(false)
 
 const grStatuses = [
+  { label: t('status.manager_confirm'), value: 'manager_confirm' },
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' }, { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
 

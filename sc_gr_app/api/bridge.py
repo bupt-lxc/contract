@@ -485,7 +485,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_scs(self.config, **payload)))
+            result = query_service.search_scs(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -493,7 +494,8 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             self._require_current_user()
-            return ok(_format_list_timestamps(query_service.search_vendors(self.config, **payload)))
+            result = query_service.search_vendors(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -660,7 +662,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_pos(self.config, **payload)))
+            result = query_service.search_pos(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -669,7 +672,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_grs(self.config, **payload)))
+            result = query_service.search_grs(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -678,7 +682,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_operation_records(self.config, **payload)))
+            result = query_service.search_operation_records(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -856,6 +861,145 @@ class ApiBridge:
                 if not entry:
                     return fail(NotFound(f"Queue entry {entry_id} not found"))
                 draft = sender.generate_draft(conn, dict(entry))
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+
+            return ok({"message": "Draft opened in Outlook"})
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
+    def open_entity_email(self, payload) -> dict:
+        """Generate and open an email draft for an SC/PO/GR entity in Outlook.
+
+        Uses notification config to determine recipients (requester as To,
+        admin_recipients + per-entity CC + default CC as Cc).
+        """
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+
+            if entity_type not in ("sc", "po", "gr"):
+                return fail(ValidationError(f"Invalid entity_type: {entity_type}"))
+
+            import json
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                # Fetch entity
+                entity_info = {}
+                if entity_type == "sc":
+                    row = conn.execute(
+                        "SELECT * FROM sc_records WHERE sc_id = ?", (entity_id,)
+                    ).fetchone()
+                elif entity_type == "po":
+                    row = conn.execute(
+                        """SELECT p.*, v.vendor_name FROM pos p
+                           LEFT JOIN vendors v ON v.vendor_id = p.vendor_id
+                           WHERE p.po_id = ?""", (entity_id,)
+                    ).fetchone()
+                elif entity_type == "gr":
+                    row = conn.execute(
+                        "SELECT * FROM gr_requests WHERE gr_id = ?", (entity_id,)
+                    ).fetchone()
+
+                if not row:
+                    return fail(NotFound(f"{entity_type.upper()} {entity_id} not found"))
+                entity_info = dict(row)
+
+                requester_id = entity_info.get("requester_id") or ""
+                to_ids = [requester_id] if requester_id else []
+
+                # Cc: admin_recipients + per-entity CC + default CC
+                cc_ids = []
+                admin_setting = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.admin_recipients'"
+                ).fetchone()
+                if admin_setting:
+                    cc_ids.extend(json.loads(admin_setting["setting_value"]) or [])
+
+                default_cc = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.default_cc'"
+                ).fetchone()
+                if default_cc:
+                    cc_ids.extend(json.loads(default_cc["setting_value"]) or [])
+
+                # Per-entity CC config
+                if entity_type == "sc":
+                    config_row = conn.execute(
+                        "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'sc' AND entity_id = ? AND enabled = 1",
+                        (entity_id,),
+                    ).fetchone()
+                elif entity_type == "po":
+                    config_row = conn.execute(
+                        "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+                        (entity_id,),
+                    ).fetchone()
+                elif entity_type == "gr":
+                    gr_po = conn.execute(
+                        "SELECT po_id FROM gr_requests WHERE gr_id = ?", (entity_id,)
+                    ).fetchone()
+                    if gr_po:
+                        config_row = conn.execute(
+                            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+                            (gr_po["po_id"],),
+                        ).fetchone()
+                    else:
+                        config_row = None
+
+                if config_row:
+                    extra_cc = json.loads(config_row["cc_user_ids"])
+                    cc_ids.extend(extra_cc or [])
+
+                # Deduplicate and remove To recipients from CC
+                seen = set()
+                unique_cc = []
+                for uid in cc_ids:
+                    if uid and uid not in seen:
+                        seen.add(uid)
+                        unique_cc.append(uid)
+                cc_ids = [uid for uid in unique_cc if uid not in to_ids]
+
+                # If no To recipients, promote CC to To
+                if not to_ids:
+                    if cc_ids:
+                        to_ids = cc_ids
+                        cc_ids = []
+                    else:
+                        to_ids = [user["user_id"]]
+
+                # Build synthetic entry for generate_draft
+                entry = {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "event_type": "status_change",
+                    "event_key": "notify",
+                    "to_recipients": json.dumps(to_ids),
+                    "cc_recipients": json.dumps(cc_ids),
+                    "actor_id": user["user_id"],
+                }
+                draft = sender.generate_draft(conn, entry)
 
             pythoncom.CoInitialize()
             try:

@@ -165,6 +165,9 @@ def _search(
     _append_filters(clauses, params, filters, allowed_filters, like_fields)
 
     where_sql = f" where {' and '.join(clauses)}" if clauses else ""
+
+    count_sql = f"select count(*) from ({select_sql}{where_sql}) subq"
+
     sql = (
         f"{select_sql}{where_sql} "
         f"order by {sort_column} {_normalize_direction(direction)} "
@@ -173,9 +176,10 @@ def _search(
     params.extend([_normalize_limit(limit), _normalize_offset(offset)])
 
     with connect(config) as conn:
+        total = conn.execute(count_sql, params[:-2]).fetchone()[0]
         rows = conn.execute(sql, params).fetchall()
 
-    return [_row_to_dict(row) for row in rows]
+    return {"rows": [_row_to_dict(row) for row in rows], "total": total}
 
 
 def search_scs(

@@ -69,6 +69,7 @@ _TRANSITION_LABELS: dict[str, str] = {
     "deny": "Denied",
     "deny": "Denied",
     "finish": "Finished",
+    "notify": "Notification",
 }
 
 _TYPE_LABELS: dict[str, str] = {"sc": "SC", "po": "PO", "gr": "GR"}

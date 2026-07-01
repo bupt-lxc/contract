@@ -166,13 +166,14 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_edit_sc": can_edit,
         "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
         "can_confirm_sc": is_admin and is_manager_confirm,
-        "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
+        "can_approve_sc": is_admin and is_pending,
         "can_deny_sc": is_admin and is_pending,
-        "can_finish_sc": is_admin and is_approved,
+        "can_finish_sc": (is_admin or is_owner) and is_approved,
         "can_recall_sc": is_owner and (is_pending or is_manager_confirm or is_approved or is_denied),
         "can_delete_sc": (is_admin or is_owner) and is_draft,
         "can_delete_po": is_admin or is_owner,
         "can_delete_gr": is_admin or is_owner,
+        "can_finish_gr": is_admin or is_owner,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
         "can_transfer_sc": is_admin or is_owner,
@@ -879,7 +880,7 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
 
 
 def finish_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    require_admin(current_user)
+    require_requester_or_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:

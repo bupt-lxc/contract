@@ -1013,12 +1013,14 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_delete_sc": False,
         "can_delete_po": True,
         "can_delete_gr": True,
+        "can_finish_gr": True,
         "can_manage_po": True,
         "can_manage_gr": True,
         "can_transfer_sc": True,
     }
     assert requester_detail["permissions"]["can_manage_po"] is True
     assert requester_detail["permissions"]["can_manage_gr"] is True
+    assert requester_detail["permissions"]["can_finish_gr"] is True
 
 
 def test_get_sc_detail_includes_po_budget_data(app_config):

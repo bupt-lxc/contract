@@ -11,6 +11,9 @@
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="isRequester && po.status === 'activing'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="po.po_id" :disabled="loadingState.count > 0" @click="handleSendEmail('po', po.po_id)">
+          <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
+        </el-button>
       </div>
     </div>
 
@@ -67,6 +70,7 @@
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @deny="row => handleGrDeny(row)"
+          @finish="row => handleGrFinish(row)"
           @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
@@ -132,7 +136,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Message } from '@element-plus/icons-vue'
 import { callApi, loadingState } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
@@ -156,7 +160,7 @@ const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updatePo, finishPo, submitPo } = usePo()
-const { createGr, updateGr, approveGr, denyGr, submitGr } = useGr()
+const { createGr, updateGr, approveGr, denyGr, submitGr, finishGr } = useGr()
 
 const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
 const { exportRows } = useExport()
@@ -289,6 +293,17 @@ async function handleGrSubmit(row) {
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
+async function handleGrFinish(row) {
+  try {
+    await ElMessageBox.confirm(t('gr.finishGrConfirm'), t('gr.finishGr'), { type: 'warning' })
+    await finishGr(row.gr_id)
+    ElMessage.success(t('gr.grFinished'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleExportGrs() {
   const columns = [
     { key: 'status', label: t('common.status') },
@@ -307,6 +322,14 @@ async function handleExportGrs() {
   const poNo = po.value?.po_no || po.value?.po_id || 'PO'
   await exportRows(grs.value, columns, `${poNo}_GRs`)
   ElMessage.success(t('common.exportedSuccessfully'))
+}
+
+async function handleSendEmail(entityType, entityId) {
+  try {
+    await callApi('open_entity_email', { entity_type: entityType, entity_id: entityId })
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrSave(data) {

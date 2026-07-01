@@ -18,6 +18,9 @@
         <el-button v-if="permissions.can_delete_sc" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="permissions.can_finish_sc" type="danger" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="permissions.can_transfer_sc" :disabled="loadingState.count > 0" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
+        <el-button v-if="detail.sc" :disabled="loadingState.count > 0" @click="handleSendEmail('sc', detail.sc.sc_id)">
+          <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
+        </el-button>
       </div>
     </div>
 
@@ -148,7 +151,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Message } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
@@ -225,6 +228,24 @@ async function handleConfirm() {
 
 async function handleApprove() {
   try {
+    let scNo = detail.value.sc?.sc_no || ''
+
+    if (!scNo) {
+      const { value } = await ElMessageBox.prompt(
+        t('sc.enterScNo'),
+        t('sc.scNoRequired'),
+        {
+          confirmButtonText: t('common.confirm'),
+          type: 'warning',
+          inputPattern: /.+/,
+          inputErrorMessage: t('sc.scNoRequired'),
+        }
+      )
+      scNo = value
+      if (!scNo) throw 'cancel'
+      await updateSc(scId.value, { sc_no: scNo })
+    }
+
     await ElMessageBox.confirm(t('sc.approveConfirm'), t('common.confirm'), { type: 'warning' })
 
     // Check for draft POs — offer cascade
@@ -417,6 +438,14 @@ async function handleExportAudit() {
   const scNo = detail.value.sc?.sc_no || detail.value.sc?.sc_id || 'SC'
   await exportRows(detail.value.operation_records || [], columns, `${scNo}_Records`)
   ElMessage.success(t('common.exportedSuccessfully'))
+}
+
+async function handleSendEmail(entityType, entityId) {
+  try {
+    await callApi('open_entity_email', { entity_type: entityType, entity_id: entityId })
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
+  }
 }
 
 onMounted(async () => {

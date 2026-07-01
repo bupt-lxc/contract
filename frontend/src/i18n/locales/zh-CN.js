@@ -202,6 +202,7 @@ home: {
     deleted: '已删除',
     draftSaved: '草稿已保存',
     requesterRequired: '申请人为必填项',
+    enterScNo: '请输入采购需求编号',
     scNoRequired: '采购需求编号为必填项',
     requestTypeRequired: '申请类型为必填项',
     costCenterRequired: '成本中心为必填项',
@@ -472,6 +473,7 @@ home: {
     exportFailed: '导出失败',
     previewSend: '预览并发送',
     openInOutlook: '在Outlook中打开',
+    sendEmail: '发送邮件',
     autoSend: '自动'
   },
 

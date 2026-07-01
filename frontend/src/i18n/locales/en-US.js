@@ -202,6 +202,7 @@ home: {
     deleted: 'Deleted',
     draftSaved: 'Draft saved',
     requesterRequired: 'Requester is required',
+    enterScNo: 'Enter SC No',
     scNoRequired: 'SC No is required',
     requestTypeRequired: 'Request Type is required',
     costCenterRequired: 'Cost Center is required',
@@ -335,7 +336,7 @@ home: {
     finishGr: 'Finish GR',
     finishGrConfirm: 'Mark this GR as finished? Goods received / service completed.',
     approveGr: 'Approve GR',
-    enterConValue: 'Enter Gross cost (leave empty to auto-calculate from Net cost and VAT(%)):',
+    enterConValue: 'Enter GR Value (leave empty to auto-calculate from Net cost and VAT(%)):',
     enterValidNumber: 'Enter a valid positive number',
     createdBy: 'Created By',
     invalidNumber: 'Enter a valid positive number',
@@ -472,6 +473,7 @@ home: {
     exportFailed: 'Export failed',
     previewSend: 'Preview & Send',
     openInOutlook: 'Open in Outlook',
+    sendEmail: 'Send Email',
     autoSend: 'Auto'
   },
 
