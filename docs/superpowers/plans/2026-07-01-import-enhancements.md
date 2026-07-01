@@ -23,6 +23,8 @@
 | `frontend/src/i18n/locales/en-US.js` | New i18n keys for import rules and preview UI |
 | `frontend/src/i18n/locales/zh-CN.js` | Same (Chinese) |
 | `tests/test_import_service.py` | **New** — tests for status restrictions, required fields, preview annotations |
+| `项目说明.md` | Update to match actual system behavior + add import feature docs |
+| `CLAUDE.md` | Update import-related descriptions if needed |
 
 ---
 
@@ -1395,7 +1397,73 @@ git commit -m "feat: replace inline import dialogs with ImportPreviewDialog in l
 
 ---
 
-### Task 8: Final verification and commit
+### Task 8: Update project documentation
+
+**Files:**
+- Modify: `项目说明.md` (main project documentation)
+- Modify: `CLAUDE.md` (if import-related commands change)
+
+- [ ] **Step 1: Update 项目说明.md — Section 3 (首版目标)**
+
+Remove "Excel 导入导出" and "邮件发送" from the "首版暂不包含" list since both are fully implemented. Add a note that both features are now available.
+
+- [ ] **Step 2: Update 项目说明.md — Section 6 (核心数据对象) to match actual schema**
+
+**CRITICAL: This is the largest change.** The subagent MUST do its own thorough read of `项目说明.md` and compare every claim against the actual code. The audit found 32 discrepancies but there may be more. Key areas to update:
+
+6.1 SC: Add missing fields (`currency`, `internal_system_number`, `asset`, `asset_nums`, `confirmed_at`, `finished_at`, `pending_date`, `approved_date`, `submitted_date`). Rename `closed_at` to `finished_at`. Document draft workflow (fields nullable for drafts).
+
+6.2 SC 状态: Replace the 4-status list with actual 6-status list (`draft`, `manager_confirm`, `pending`, `approved`, `denied`, `finished`). Document the full draft→submit→confirm→approve→finish flow. Document recall and delete.
+
+6.3 vendor: Add `status` (active/disabled) and `company_name_cn` fields. Add `sc_vendors` junction table documentation. Note that `service_scope` is now free-form.
+
+6.4 PO: Replace statuses `po_pending`/`po_approved` with `draft`/`active`/`finished`. Add missing fields (`requester_id`, `contract_pos`, `contract_type`, `cost_center`, `purchaser`, `active_date`).
+
+6.5 GR: Replace 3-status list with actual 6-status list (`draft`, `manager_confirm`, `pending`, `approved`, `denied`, `finished`). Add 15+ missing fields. Replace `cancelled_by`/`cancelled_at` with `denied_by`/`denied_at`.
+
+- [ ] **Step 3: Update 项目说明.md — Section 7 (金额规则)**
+
+Add tax-inclusive pending totals. Update status references in formulas (add `manager_confirm` alongside `pending`).
+
+- [ ] **Step 4: Update 项目说明.md — Section 8 (业务流程)**
+
+Document the actual draft-submit-confirm-approve workflow for SC/PO/GR. Add recall/revoke, delete, transfer_sc, submit_po, submit_gr, confirm_sc, confirm_gr, finish_gr operations. Replace GR cancellation with deny/recall.
+
+- [ ] **Step 5: Update 项目说明.md — Section 10 (并发设计)**
+
+Update lock hierarchy description to match actual single-level `LeaseLock` implementation.
+
+- [ ] **Step 6: Update 项目说明.md — Section 11 (页面结构)**
+
+Update navigation to reflect actual structure: 工作台, SC, PO, GR, vendor, 邮件, 系统. Remove standalone 待办 and 日志 pages.
+
+- [ ] **Step 7: Update 项目说明.md — Section 14 (后续扩展)**
+
+Remove "邮件通知" and "Excel 导入导出" from future extensions since they are implemented.
+
+- [ ] **Step 8: Add import feature documentation to 项目说明.md**
+
+Add a subsection under SC/PO/GR describing the import feature:
+- How to download templates
+- Status restrictions (SC: approved/finished, PO: active/finished, GR: approved/finished)
+- Required fields for import
+- Preview and confirm workflow
+- Refer to the info row on each template for field-level guidance
+
+- [ ] **Step 9: Update CLAUDE.md if needed**
+
+Check if any import-related commands or features described in CLAUDE.md are affected by the changes. If the import flow description is outdated, update it.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add 项目说明.md CLAUDE.md
+git commit -m "docs: update 项目说明.md to match actual system and add import documentation"
+```
+
+---
+
+### Task 9: Final verification and commit
 
 - [ ] **Step 1: Run all tests**
 
