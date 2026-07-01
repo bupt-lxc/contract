@@ -448,7 +448,7 @@ def _generate_vendor_id(conn) -> str:
     row = conn.execute(
         "SELECT COALESCE(MAX(CAST(SUBSTR(vendor_id, 2) AS INTEGER)), 0) + 1 AS next_id FROM vendors"
     ).fetchone()
-    return f"V{row['next_id']:06d}"
+    return f"V{int(row['next_id']):06d}"
 
 
 def execute_import(

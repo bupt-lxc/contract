@@ -14,7 +14,10 @@
         <el-collapse class="vendor-collapse" :model-value="expandedNames">
           <el-collapse-item :name="v.vendor_id">
             <template #title>
-              <span class="vendor-title">{{ v.vendor_name }} - {{ v.company_name_cn || '-' }} - {{ v.vendor_id }} - {{ v.ksrm_vendor_code || '-' }}</span>
+              <span class="vendor-title">{{ v.service_scope }} —— {{ v.vendor_name }}</span>
+              <span class="vendor-subtitle" v-if="v.vendor_id || v.ksrm_vendor_code">
+                {{ v.vendor_id }}<template v-if="v.ksrm_vendor_code"> | {{ v.ksrm_vendor_code }}</template>
+              </span>
             </template>
             <div class="vendor-detail-grid">
               <div class="vendor-field" v-if="v.company_name_cn">
@@ -130,6 +133,11 @@ const expandedNames = computed(() => props.vendors.map(v => v.vendor_id))
 .vendor-title {
   font-weight: 600;
   font-size: 13px;
+}
+.vendor-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 10px;
 }
 .vendor-detail-grid {
   display: grid;

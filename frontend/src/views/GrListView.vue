@@ -69,7 +69,6 @@
     </el-table>
 
     <el-pagination
-      v-if="state.total > state.pageSize"
       :current-page="state.currentPage"
       :page-size="state.pageSize"
       :total="state.total"

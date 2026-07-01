@@ -90,7 +90,7 @@
           <el-option
             v-for="v in vendors"
             :key="v.vendor_id"
-            :label="`${v.vendor_name} — ${v.vendor_id}`"
+            :label="`${v.service_scope} —— ${v.vendor_name}`"
             :value="v.vendor_id"
           />
         </el-select>
