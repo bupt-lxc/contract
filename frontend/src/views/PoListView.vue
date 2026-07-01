@@ -76,30 +76,13 @@
       @save-draft="handlePoSaveDraft"
     />
 
-    <el-dialog v-model="importVisible" title="Import PO" width="500px">
-      <el-upload
-        :auto-upload="false"
-        :on-change="handleFileSelect"
-        :limit="1"
-        accept=".xlsx,.xls"
-        drag
-      >
-        <el-icon :size="40"><UploadFilled /></el-icon>
-        <div>Drop file here or click to upload</div>
-        <template #tip>
-          <div>Only .xlsx/.xls files</div>
-        </template>
-      </el-upload>
-      <div v-if="importResult" style="margin-top:12px">
-        <el-alert v-if="importResult.ok" type="success" :title="`Imported ${importResult.count} records`" closable @close="importResult = null" />
-        <el-alert v-else type="error" closable @close="importResult = null">
-          <div v-for="e in importResult.errors" :key="e.row">Row {{ e.row }}: {{ e.field }} - {{ e.message }}</div>
-        </el-alert>
-      </div>
-      <template #footer>
-        <el-button @click="importVisible = false">Cancel</el-button>
-      </template>
-    </el-dialog>
+    <ImportPreviewDialog
+      v-model:visible="importVisible"
+      entity-type="PO"
+      :columns="poImportColumns"
+      :rules-text="$t('po.importRules')"
+      @imported="searchPos"
+    />
   </div>
 </template>
 
@@ -107,14 +90,14 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { usePo } from '@/composables/usePo.js'
 import { useExport } from '@/composables/useExport.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
+import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -330,25 +313,24 @@ async function handleExport() {
 
 // PO import
 const importVisible = ref(false)
-const importResult = ref(null)
 
-async function handleFileSelect(uploadFile) {
-  importResult.value = null
-  const file = uploadFile.raw
-  try {
-    const data = await file.arrayBuffer()
-    const wb = XLSX.read(data, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-    importResult.value = await callApi('import_pos', { rows })
-    if (importResult.value.ok) {
-      importVisible.value = false
-      searchPos()
-    }
-  } catch (e) {
-    importResult.value = { ok: false, errors: [{ row: '-', field: '', message: e.message }] }
-  }
-}
+const poImportColumns = [
+  { prop: 'po_id', label: 'PO ID', width: '160' },
+  { prop: 'sc_id', label: 'SC ID', width: '160' },
+  { prop: 'vendor_id', label: t('po.vendor'), width: '100' },
+  { prop: 'po_no', label: t('po.poNo'), width: '120' },
+  { prop: 'requester_id', label: t('sc.requester'), width: '100' },
+  { prop: 'po_amount', label: t('po.poAmount'), width: '100' },
+  { prop: 'status', label: t('common.status'), width: '90' },
+  { prop: 'contract_from', label: t('po.contractFrom'), width: '110' },
+  { prop: 'contract_to', label: t('po.contractTo'), width: '110' },
+  { prop: 'contract_no', label: t('po.contractNo'), width: '120' },
+  { prop: 'payment_frequency', label: t('po.paymentFrequency'), width: '100' },
+  { prop: 'contract_pos', label: t('po.contractPos'), width: '90' },
+  { prop: 'contract_type', label: t('po.contractType'), width: '100' },
+  { prop: 'cost_center', label: t('po.costCenter'), width: '100' },
+  { prop: 'purchaser', label: t('po.purchaser'), width: '100' },
+]
 
 async function downloadTemplate() {
   try {
