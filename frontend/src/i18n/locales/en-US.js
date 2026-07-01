@@ -76,7 +76,18 @@ export default {
     browse: 'Browse',
     vendor: 'Vendor',
     yes: 'Yes',
-    no: 'No'
+    no: 'No',
+    importValid: 'Valid: {n}',
+    importInvalid: 'Invalid: {n}',
+    importSelected: 'Selected: {n}',
+    importReSelect: 'Re-select',
+    importConfirm: 'Import ({n})',
+    importFile: 'File',
+    importSelectFile: 'Select file',
+    importDropHint: 'Drop file here or click to upload',
+    importFormatHint: 'Only .xlsx/.xls files',
+    importValidation: 'Validation',
+    template: 'Template'
   },
 
   status: {
@@ -130,6 +141,7 @@ home: {
     loadError: 'Load failed',
     colScNo: 'SC No',
     colRequester: 'Requester',
+    colRequestType: 'Request Type',
     colPoNo: 'PO No',
     colGrId: 'GR ID',
     colDeadline: 'End Day',
@@ -232,6 +244,7 @@ home: {
     selectNewOwner: 'Select new owner',
     ownerTransferred: 'Owner transferred',
     currency: 'Currency',
+    importRules: 'Only SC records with status "Approved" or "Finished" can be imported. Required fields: SC NO, SC Amount, Status. Leave SC ID empty to auto-generate.',
   },
 
   po: {
@@ -292,7 +305,8 @@ home: {
     purchaser: 'Purchaser',
     activeDate: 'Active Date',
     poNotFound: 'PO not found.',
-    draftSaved: 'Draft saved'
+    draftSaved: 'Draft saved',
+    importRules: 'Only PO records with status "Active" or "Finished" can be imported. Required fields: SC ID, PO NO, PO Amount, Status. Leave PO ID empty to auto-generate.',
   },
 
   gr: {
@@ -371,7 +385,8 @@ home: {
     deliveryTo: 'Delivery To',
     lastDelivery: 'Last Delivery',
     confirmSubmit: 'Submit this GR for confirmation?',
-    grSubmitted: 'GR submitted'
+    grSubmitted: 'GR submitted',
+    importRules: 'Only GR records with status "Approved" or "Finished" can be imported. Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. Leave GR ID empty to auto-generate.',
   },
 
   vendor: {
