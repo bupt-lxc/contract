@@ -86,6 +86,7 @@ export default {
     importSelectFile: 'Select file',
     importDropHint: 'Drop file here or click to upload',
     importFormatHint: 'Only .xlsx/.xls files',
+    importRecords: 'Import {entity}',
     importValidation: 'Validation',
     template: 'Template'
   },

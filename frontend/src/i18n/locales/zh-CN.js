@@ -86,6 +86,7 @@ export default {
     importSelectFile: '选择文件',
     importDropHint: '将文件拖到此处或点击上传',
     importFormatHint: '仅支持 .xlsx/.xls 文件',
+    importRecords: '导入 {entity}',
     importValidation: '校验结果',
     template: '模板'
   },
