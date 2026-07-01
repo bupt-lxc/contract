@@ -650,6 +650,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         currency = ?,
                         status = 'manager_confirm',
                         submitted_date = ?,
+                        pending_date = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -664,6 +665,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
                         merged.get("currency", "CNY"),
+                        timestamp,
                         timestamp,
                         timestamp,
                         sc_id,

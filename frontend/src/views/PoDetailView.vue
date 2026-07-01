@@ -145,6 +145,7 @@
       :record="grDialogRecord"
       :users="activeUsers"
       @save="handleGrSave"
+      @save-draft="handleGrSaveDraft"
     />
   </div>
 </template>
@@ -379,6 +380,26 @@ async function handleGrSave(data) {
       }
     }
     ElMessage.success(t('common.saved'))
+    await fetchDetail(scId.value)
+    grDialogVisible.value = false
+  } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+async function handleGrSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const payload = { ...formData, po_id: poId.value, status: 'draft' }
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = scId.value
+      payload._parent_po_id = poId.value
+    }
+    const created = await createGr(payload)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: created.gr_id, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
+    }
+    ElMessage.success(t('po.draftSaved'))
     await fetchDetail(scId.value)
     grDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }

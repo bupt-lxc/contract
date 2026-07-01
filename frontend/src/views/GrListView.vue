@@ -120,6 +120,7 @@
       :record="grDialogRecord"
       :users="activeUsers"
       @save="handleGrSave"
+      @save-draft="handleGrSaveDraft"
     />
 
     <el-dialog v-model="importVisible" title="Import GR" width="500px">
@@ -322,6 +323,26 @@ async function handleGrSave(data) {
     }
     await callApi('create_gr', { data: payload })
     ElMessage.success(t('common.saved'))
+    grDialogVisible.value = false
+    await searchGrs()
+  } catch (e) {
+    ElMessage.error(e.message)
+    throw e
+  }
+}
+
+async function handleGrSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
+    const payload = { ...formData, po_id: grSelectedPoId.value, status: 'draft' }
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = po?.sc_id
+      payload._parent_po_id = grSelectedPoId.value
+    }
+    await callApi('create_gr', { data: payload })
+    ElMessage.success(t('po.draftSaved'))
     grDialogVisible.value = false
     await searchGrs()
   } catch (e) {

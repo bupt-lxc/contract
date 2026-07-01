@@ -117,7 +117,10 @@
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="handleSave" :loading="submitting">{{ $t('common.save') }}</el-button>
+      <el-button v-if="mode === 'create'" @click="handleSaveDraft" :disabled="submitting">{{ $t('common.saveDraft') }}</el-button>
+      <el-button type="primary" @click="handleSave" :loading="submitting">
+        {{ mode === 'edit' ? $t('common.save') : $t('common.submit') }}
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -138,7 +141,7 @@ const props = defineProps({
   users: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['update:visible', 'save'])
+const emit = defineEmits(['update:visible', 'save', 'save-draft'])
 
 const currentUser = computed(() => window.__currentUser || {})
 const isAdmin = computed(() => currentUser.value?.role === 'admin')
@@ -211,6 +214,18 @@ async function handlePickFiles() {
     if (files?.length) pickedFiles.value.push(...files)
   } catch (e) {
     ElMessage.error(e.message)
+  }
+}
+
+async function handleSaveDraft() {
+  // Draft doesn't require field validation
+  submitting.value = true
+  try {
+    emit('save-draft', { ...form, _attachments: pickedFiles.value.map(f => f.path) })
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    submitting.value = false
   }
 }
 
