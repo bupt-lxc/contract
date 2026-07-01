@@ -288,7 +288,8 @@ home: {
     costCenter: '成本中心',
     purchaser: '采购员',
     activingDate: '生效日期',
-    poNotFound: '未找到PO记录。'
+    poNotFound: '未找到PO记录。',
+    draftSaved: '草稿已保存'
   },
 
   gr: {
@@ -694,6 +695,13 @@ home: {
     titleSubmit: '批量提交',
     titleConfirm: '批量确认',
     titleApprove: '批量审批'
+  },
+
+  update: {
+    newVersionAvailable: '版本更新',
+    mustInstall: '新版本 {version} 已发布，必须安装才能继续使用。',
+    installNow: '立即安装',
+    installing: '安装中...'
   },
 
   exportCol: {

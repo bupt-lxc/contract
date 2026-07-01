@@ -288,7 +288,8 @@ home: {
     costCenter: 'Cost Center',
     purchaser: 'Purchaser',
     activingDate: 'Activing Date',
-    poNotFound: 'PO not found.'
+    poNotFound: 'PO not found.',
+    draftSaved: 'Draft saved'
   },
 
   gr: {
@@ -694,6 +695,13 @@ home: {
     titleSubmit: 'Batch Submit',
     titleConfirm: 'Batch Confirm',
     titleApprove: 'Batch Approve'
+  },
+
+  update: {
+    newVersionAvailable: 'Update Required',
+    mustInstall: 'A new version {version} is available. You must install it to continue.',
+    installNow: 'Install Now',
+    installing: 'Installing...'
   },
 
   exportCol: {
