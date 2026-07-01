@@ -8,8 +8,8 @@
       <div class="header-actions">
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="isRequester && po.status === 'activing'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'active'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="isRequester && po.status === 'active'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="po.po_id" :disabled="loadingState.count > 0" @click="handleSendEmail('po', po.po_id)">
           <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
@@ -52,7 +52,7 @@
           <el-descriptions-item :label="$t('po.contractType')">{{ po.contract_type || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.costCenter')">{{ po.cost_center || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.purchaser')">{{ po.purchaser || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('po.activingDate')">{{ (po.activing_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.activeDate')">{{ (po.active_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
 

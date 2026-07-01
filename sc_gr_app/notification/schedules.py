@@ -37,7 +37,7 @@ def check_custom_schedules(conn: sqlite3.Connection) -> int:
            JOIN sc_records sc ON sc.sc_id = po.sc_id
            WHERE ncs.entity_type = 'po'
              AND ncs.enabled = 1
-             AND po.status IN ('activing', 'finished')
+             AND po.status IN ('active', 'finished')
            ORDER BY ncs.entity_id, ncs.id"""
     ).fetchall()
 

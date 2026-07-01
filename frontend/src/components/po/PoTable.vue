@@ -41,15 +41,15 @@
     <el-table-column prop="contract_to" :label="$t('po.contractEndDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_to) }}</template>
     </el-table-column>
-    <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120" sortable>
-      <template #default="{ row }">{{ formatDate(row.activing_date) }}</template>
+    <el-table-column prop="active_date" :label="$t('po.activeDate')" width="120" sortable>
+      <template #default="{ row }">{{ formatDate(row.active_date) }}</template>
     </el-table-column>
     <el-table-column :label="$t('po.actions')" width="200" fixed="right">
       <template #default="{ row }">
         <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
         <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
         <el-button v-if="row.status === 'draft'" type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="row.status === 'activing'" type="info" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
+        <el-button v-if="row.status === 'active'" type="info" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
       </template>
     </el-table-column>
     <template #empty><el-empty :description="$t('po.noRecords')" /></template>

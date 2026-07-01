@@ -56,7 +56,7 @@ def seed_query_data(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO-ALPHA",
             "po_amount": 800,
-            "status": "activing",
+            "status": "active",
         },
     )
     po_id = created_po["po_id"]
@@ -354,7 +354,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO-BETA",
             "po_amount": 300,
-            "status": "activing",
+            "status": "active",
         },
     )
     po2_id = created_po2["po_id"]
@@ -500,11 +500,11 @@ def test_workbench_data_po_has_requester_name(app_config):
     add_sc_vendor(app_config, ADMIN, sc["sc_id"], "V1")
     create_po(app_config, ADMIN, {
         "sc_id": sc["sc_id"], "vendor_id": "V1",
-        "po_no": "PO-1", "po_amount": 500, "status": "activing",
+        "po_no": "PO-1", "po_amount": 500, "status": "active",
     })
 
     result = workbench_data(app_config, USER)
-    po_row = result["po"]["activing"]["rows"][0]
+    po_row = result["po"]["active"]["rows"][0]
     assert "requester_name" in po_row
     assert po_row["requester_name"] == "Requester"
     assert "vendor_name" not in po_row

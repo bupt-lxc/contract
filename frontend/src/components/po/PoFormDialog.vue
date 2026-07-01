@@ -76,8 +76,8 @@
       </el-row>
       <el-row v-if="mode === 'edit'" :gutter="16">
         <el-col :span="12">
-          <el-form-item :label="$t('po.activingDate')">
-            <el-date-picker v-model="form.activing_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          <el-form-item :label="$t('po.activeDate')">
+            <el-date-picker v-model="form.active_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -138,7 +138,7 @@ const emptyForm = () => ({
   po_no: '', vendor_id: '', po_amount: null,
   contract_from: null, contract_to: null, contract_no: '', payment_frequency: '',
   contract_pos: '', contract_type: '', cost_center: '', purchaser: '',
-  activing_date: null
+  active_date: null
 })
 
 const form = reactive(emptyForm())

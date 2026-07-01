@@ -1205,7 +1205,7 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
     """Approve an SC (pending → approved). Admin only.
 
     If cascade_pos=True, draft POs under this SC are submitted
-    (draft → activing) in the same transaction.
+    (draft → active) in the same transaction.
     If cascade_pos=False (default), draft POs are left as-is.
     """
     require_admin(current_user)

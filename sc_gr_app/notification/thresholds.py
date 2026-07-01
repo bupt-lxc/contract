@@ -20,7 +20,7 @@ def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
         """SELECT po.*, sc.requester_id
            FROM pos po
            JOIN sc_records sc ON sc.sc_id = po.sc_id
-           WHERE po.status IN ('activing', 'finished')
+           WHERE po.status IN ('active', 'finished')
              AND po.contract_to IS NOT NULL
              AND po.po_amount IS NOT NULL"""
     ).fetchall()

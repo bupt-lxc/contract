@@ -34,7 +34,7 @@ def _format_entity_timestamps(entity: dict) -> dict:
     """Format timestamp fields in an entity dict for display."""
     _TIMESTAMP_FIELDS = (
         "created_at", "updated_at", "pending_date", "approved_date",
-        "finished_at", "denied_at", "confirmed_at", "activing_date",
+        "finished_at", "denied_at", "confirmed_at", "active_date",
         "approved_at", "sent_at", "submitted_date",
     )
     for f in _TIMESTAMP_FIELDS:
@@ -372,7 +372,7 @@ class ApiBridge:
             return fail(exc)
 
     def submit_po(self, payload) -> dict:
-        """Submit a draft PO to activing (admin or SC owner)."""
+        """Submit a draft PO to active (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
@@ -1731,7 +1731,7 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional (must exist if provided)",
                  "Optional", "Optional (defaults to importer)", "Required",
-                 "draft/activing/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "draft/active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
         sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",

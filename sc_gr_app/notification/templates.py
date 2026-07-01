@@ -56,7 +56,7 @@ _STATUS_LABELS: dict[str, str] = {
     "denied": "Denied",
     "denied": "Denied",
     "finished": "Finished",
-    "activing": "Activing",
+    "active": "Active",
     "po_pending": "PO Pending",
     "po_approved": "PO Approved",
 }
@@ -89,7 +89,7 @@ _SC_EXCLUDE = {
     "created_by", "approved_by",
 }
 _PO_EXCLUDE = {"consumed_amount", "pending_total", "pending_total_incl_tax",
-               "open_po_amount", "activing_date", "created_at", "updated_at"}
+               "open_po_amount", "active_date", "created_at", "updated_at"}
 _GR_EXCLUDE = {"created_at", "pending_date", "approved_date", "denied_at", "finished_at", "confirmed_at"}
 
 _GR_RENAMES = {

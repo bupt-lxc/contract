@@ -70,7 +70,7 @@ def seed_approved_sc_vendor_po(
     *,
     sc_no="SC001",
     po_no="PO001",
-    po_status="activing",
+    po_status="active",
     sc_amount=1000,
     po_amount=800,
 ):
@@ -263,7 +263,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
             "vendor_id": "V1",
             "po_no": "PO001",
             "po_amount": 500,
-            "status": "activing",
+            "status": "active",
         },
     )
     po_id = created_po["po_id"]
@@ -432,7 +432,7 @@ def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
 @pytest.mark.parametrize(
     ("sc_no", "po_no", "po_status", "amount", "message"),
     [
-        ("SC001", "PO001", "activing", 900, "PO open amount is insufficient"),
+        ("SC001", "PO001", "active", 900, "PO open amount is insufficient"),
     ],
 )
 def test_create_gr_requires_complete_approved_sc_and_po(
@@ -553,7 +553,7 @@ def test_create_gr_requires_approved_sc(app_config):
                 "V1",
                 "PO001",
                 800,
-                "activing",
+                "active",
                 None,
                 None,
                 None,
@@ -760,7 +760,7 @@ def test_create_po_allows_exact_decimal_budget_boundary(app_config):
             "sc_id": sc_id,
             "vendor_id": vendor_id,
             "po_amount": 0.2,
-            "status": "activing",
+            "status": "active",
         },
     )
 
@@ -1121,7 +1121,7 @@ def test_update_sc_allows_exact_decimal_boundary(app_config):
             "sc_id": sc_id,
             "vendor_id": vendor_id,
             "po_amount": 0.2,
-            "status": "activing",
+            "status": "active",
         },
     )
 
@@ -1244,7 +1244,7 @@ def test_admin_updates_po_with_budget_validation(app_config):
 def test_admin_approves_and_finishes_po(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="active")
 
     from sc_gr_app.services.po_service import finish_po
 
@@ -1329,7 +1329,7 @@ def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
 def test_po_update_approve_finish_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="active")
 
     from sc_gr_app.services.po_service import finish_po, update_po
 
@@ -1454,7 +1454,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
                 vendor_id,
                 "PO002",
                 200,
-                "activing",
+                "active",
                 None,
                 None,
                 None,
@@ -1517,7 +1517,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO002",
             "po_amount": 500,
-            "status": "activing",
+            "status": "active",
         },
     )
     po2_id = created_po2["po_id"]
@@ -1639,7 +1639,7 @@ def test_create_draft_po_under_draft_sc(app_config):
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
     )
     assert po["status"] == "draft"
-    assert po["activing_date"] is None
+    assert po["active_date"] is None
 
 
 def test_reject_non_draft_po_under_draft_sc(app_config):
@@ -1656,7 +1656,7 @@ def test_reject_non_draft_po_under_draft_sc(app_config):
     with pytest.raises(ConflictError, match="Draft SC only allows draft PO"):
         create_po(
             app_config, USER,
-            {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "activing"},
+            {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "active"},
         )
 
 
@@ -1813,9 +1813,9 @@ def test_approve_sc_with_cascade_pos(app_config):
     # Both draft POs should now be po_pending
     with connect(app_config) as conn:
         for po_id in [po1["po_id"], po2["po_id"]]:
-            po_check = conn.execute("SELECT status, activing_date FROM pos WHERE po_id = ?", (po_id,)).fetchone()
-            assert po_check["status"] == "activing"
-            assert po_check["activing_date"] is not None
+            po_check = conn.execute("SELECT status, active_date FROM pos WHERE po_id = ?", (po_id,)).fetchone()
+            assert po_check["status"] == "active"
+            assert po_check["active_date"] is not None
 
 
 def test_finish_sc_blocked_by_unfinished_pos(app_config):
@@ -1844,7 +1844,7 @@ def test_finish_sc_blocked_by_unfinished_pos(app_config):
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc_draft["sc_id"])
-    # PO is activing, not finished — finish_sc should block
+    # PO is active, not finished — finish_sc should block
     with pytest.raises(ConflictError, match="PO.*not finished"):
         finish_sc(app_config, ADMIN, sc_draft["sc_id"])
 
@@ -1923,7 +1923,7 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc["sc_id"])
 
-    # PO is activing → submit_gr allowed
+    # PO is active → submit_gr allowed
     result = submit_gr(app_config, USER, gr["gr_id"])
     assert result["status"] == "manager_confirm"
 

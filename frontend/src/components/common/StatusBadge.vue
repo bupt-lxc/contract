@@ -20,7 +20,7 @@ const STATUS_LABELS = {
   pending: 'Pending',
   approved: 'Approved',
   denied: 'Denied',
-  activing: 'Activing',
+  active: 'Active',
   finished: 'Finished'
 }
 
@@ -30,7 +30,7 @@ const STATUS_TYPES = {
   pending: 'warning',
   approved: 'success',
   denied: 'danger',
-  activing: 'warning',
+  active: 'warning',
   finished: 'info'
 }
 

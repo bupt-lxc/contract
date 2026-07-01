@@ -146,7 +146,7 @@ def _validate_gr_creation_context(
     """Validate that a GR can be created in the given PO/SC context.
 
     - draft PO under draft SC → only draft GR allowed, no budget check
-    - activing PO under approved SC → only pending / manager_confirm GR allowed, full budget check
+    - active PO under approved SC → only pending / manager_confirm GR allowed, full budget check
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
@@ -157,9 +157,9 @@ def _validate_gr_creation_context(
             raise ConflictError("Draft PO only allows draft GR")
         return  # no budget check for draft
 
-    if po_status == "activing" and sc_status == "approved":
+    if po_status == "active" and sc_status == "approved":
         if gr_status not in ("draft", "pending", "manager_confirm"):
-            raise ConflictError("Activing PO only allows draft, pending or manager_confirm GR")
+            raise ConflictError("Active PO only allows draft, pending or manager_confirm GR")
         sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
         po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
         if sc_budget["sc_available_amount"] < amount:
@@ -432,8 +432,8 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 ).fetchone()
                 if po is None:
                     raise ConflictError("PO not found")
-                if po["status"] != "activing":
-                    raise ConflictError("PO must be activing before submitting GR")
+                if po["status"] != "active":
+                    raise ConflictError("PO must be active before submitting GR")
 
                 # Budget check at submission time
                 estimated_amount = Decimal(str(before["estimated_amount"]))
@@ -693,8 +693,8 @@ def update_gr(
                     else:
                         if po_sc["sc_status"] != "approved":
                             raise ConflictError("SC must be approved")
-                        if po_sc["status"] != "activing":
-                            raise ConflictError("PO must be activing")
+                        if po_sc["status"] != "active":
+                            raise ConflictError("PO must be active")
 
                     # Recalculate gross_cost when estimated_amount or tax_rate changes
                     if "estimated_amount" in allowed or "tax_rate" in allowed:

@@ -71,7 +71,7 @@ def check_monthly_summary(conn: sqlite3.Connection) -> int:
            JOIN sc_records sc ON sc.sc_id = p.sc_id
            JOIN users u ON u.user_id = p.requester_id
            JOIN vendors v ON v.vendor_id = p.vendor_id
-           WHERE p.status IN ('activing', 'finished')
+           WHERE p.status IN ('active', 'finished')
              AND p.contract_to IS NOT NULL
              AND p.po_amount IS NOT NULL
            ORDER BY p.requester_id, p.contract_to"""

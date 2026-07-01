@@ -444,9 +444,9 @@ def search_pos(
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
             "purchaser": "po.purchaser",
-            "activing_date": "po.activing_date",
-            "activing_date_from": "po.activing_date",
-            "activing_date_to": "po.activing_date",
+            "active_date": "po.active_date",
+            "active_date_from": "po.active_date",
+            "active_date_to": "po.active_date",
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
@@ -465,7 +465,7 @@ def search_pos(
             "contract_to": "po.contract_to",
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
-            "activing_date": "po.activing_date",
+            "active_date": "po.active_date",
             "created_at": "po.created_at",
             "updated_at": "po.updated_at",
         },
@@ -625,7 +625,7 @@ def workbench_data(
       - Pending: all records
     """
     sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
-    po_statuses = ["draft", "activing", "finished"]
+    po_statuses = ["draft", "active"]
     gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
 
     def _is_own_only(status: str) -> bool:
@@ -635,7 +635,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "activing", "manager_confirm", "approved")
+            return status not in ("pending", "active", "manager_confirm", "approved")
         return False
 
     user_id = current_user["user_id"] if current_user else None
@@ -679,11 +679,22 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
-                f"po.created_at, po.activing_date AS pending_date, "
-                f"po.contract_to AS deadline, "
-                f"u.user_name AS requester_name "
+                f"po.created_at, po.contract_from, po.contract_to, "
+                f"sc.sc_no, "
+                f"u.user_name AS requester_name, "
+                f"po.po_amount - COALESCE(gr_sums.pending_total, 0) "
+                f"- COALESCE(gr_sums.con_value_total, 0) AS open_po_amount "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"LEFT JOIN ("
+                f"  SELECT po_id,"
+                f"    SUM(CASE WHEN status IN ('pending', 'manager_confirm') "
+                f"THEN estimated_amount ELSE 0 END) AS pending_total,"
+                f"    SUM(CASE WHEN status = 'approved' "
+                f"THEN con_value ELSE 0 END) AS con_value_total"
+                f"  FROM gr_requests GROUP BY po_id"
+                f") gr_sums ON gr_sums.po_id = po.po_id "
                 f"{where} ORDER BY po.contract_to ASC LIMIT 6",
                 params,
             ).fetchall()

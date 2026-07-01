@@ -124,11 +124,11 @@ sc4 = approve_sc(config, admin, sc4["sc_id"])
 _link_vendors(sc4["sc_id"], [v_ids[1], v_ids[2]])
 print(f"  {sc4['sc_id']} (approved)")
 
-# PO-2: Activing under approved SC-4
+# PO-2: Active under approved SC-4
 po2 = create_po(config, req2, {"sc_id": sc4["sc_id"], "vendor_id": v_ids[1],
     "po_amount": 350000, "contract_no": "C-2026-002", "contract_from": "2026-04-15",
     "contract_to": "2026-09-15", "payment_frequency": "Quarterly"})
-print(f"  {po2['po_id']} (activing)")
+print(f"  {po2['po_id']} (active)")
 
 # SC-5: Approved
 sc5 = make_sc(req3, "SC-5: powertrain calibration tools")
@@ -137,11 +137,11 @@ sc5 = approve_sc(config, admin, sc5["sc_id"])
 _link_vendors(sc5["sc_id"], [v_ids[3]])
 print(f"  {sc5['sc_id']} (approved)")
 
-# PO-3: Activing under approved SC-5
+# PO-3: Active under approved SC-5
 po3 = create_po(config, req3, {"sc_id": sc5["sc_id"], "vendor_id": v_ids[2],
     "po_amount": 450000, "contract_no": "C-2026-003", "contract_from": "2026-05-01",
     "contract_to": "2026-12-31", "payment_frequency": "Monthly"})
-print(f"  {po3['po_id']} (activing)")
+print(f"  {po3['po_id']} (active)")
 
 # SC-6: Approved FC
 sc6 = make_sc(req1, "SC-6: KSRM system integration (FC)")
@@ -151,11 +151,11 @@ sc6 = approve_sc(config, admin, sc6["sc_id"])
 _link_vendors(sc6["sc_id"], [v_ids[4]])
 print(f"  {sc6['sc_id']} (approved, FC)")
 
-# PO-5: Activing under FC SC-6
+# PO-5: Active under FC SC-6
 po5 = create_po(config, req1, {"sc_id": sc6["sc_id"], "vendor_id": v_ids[4],
     "po_amount": 600000, "contract_no": "C-2026-005", "contract_from": "2026-01-01",
     "contract_to": "2027-12-31", "payment_frequency": "Annual"})
-print(f"  {po5['po_id']} (activing)")
+print(f"  {po5['po_id']} (active)")
 
 # SC-7: Create + approve + PO + GR, THEN close
 sc7 = make_sc(req2, "SC-7: brake system testing (completed)")
@@ -166,7 +166,7 @@ po4 = create_po(config, req2, {"sc_id": sc7["sc_id"], "vendor_id": v_ids[3],
     "po_amount": 200000, "contract_no": "C-2026-004", "contract_from": "2026-01-01",
     "contract_to": "2026-03-31", "payment_frequency": "Monthly"})
 
-# GR-4: Create while PO-4 is still activing, before finishing
+# GR-4: Create while PO-4 is still active, before finishing
 gr4 = create_gr(config, req2, {"po_id": po4["po_id"], "requester_id": req2["user_id"],
     "estimated_amount": 200000, "remark": "Final payment - brake testing complete"})
 gr4 = approve_gr(config, admin, gr4["gr_id"], con_value=198000)
@@ -206,5 +206,5 @@ print(f"{'='*60}")
 print(f"  Users:    7")
 print(f"  Vendors:  {len(v_ids)}")
 print(f"  SC:       7 (draft, 2 pending, 3 approved, closed)")
-print(f"  PO:       5 (draft, 3 activing, finished)")
+print(f"  PO:       5 (draft, 3 active, finished)")
 print(f"  GR:       5 (draft, 2 pending, 2 approved)")

@@ -128,7 +128,7 @@ const scLinkedVendors = ref([])
 
 const poStatuses = [
   { label: t('status.draft'), value: 'draft' },
-  { label: t('status.activing'), value: 'activing' },
+  { label: t('status.active'), value: 'active' },
   { label: t('status.finished'), value: 'finished' }
 ]
 
@@ -169,7 +169,7 @@ const poFilterConfig = [
   { name: 'po_amount', label: t('filter.poAmount'), type: 'amount-range' },
   { name: 'contract_from', label: t('filter.contractFrom'), type: 'date-range' },
   { name: 'contract_to', label: t('filter.contractTo'), type: 'date-range' },
-  { name: 'activing_date', label: t('filter.activingDate'), type: 'date-range' },
+  { name: 'active_date', label: t('filter.activeDate'), type: 'date-range' },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
@@ -313,7 +313,7 @@ async function handleExport() {
       { key: 'open_po_amount', label: t('export.openPoAmount') },
       { key: 'contract_from', label: t('export.contractFrom'), getValue: r => (r.contract_from || '').slice(0, 10) },
       { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) },
-      { key: 'activing_date', label: t('exportCol.activingDate'), getValue: r => (r.activing_date || '').slice(0, 10) }
+      { key: 'active_date', label: t('exportCol.activeDate'), getValue: r => (r.active_date || '').slice(0, 10) }
     ]
     await exportAll('search_pos', {
       filters: state.filters,
