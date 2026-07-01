@@ -623,7 +623,7 @@ git commit -m "feat: add preview functions for SC/PO/GR import validation"
 ### Task 4: Add bridge preview endpoints and update templates
 
 **Files:**
-- Modify: `sc_gr_app/api/bridge.py` (after line 1624 for SC, 1719 for PO, 1815 for GR)
+- Modify: `sc_gr_app/api/bridge.py` (after line 1703 for SC, 1798 for PO, 1894 for GR — after each `download_*_template` method)
 
 - [ ] **Step 1: Add preview_sc_import bridge method**
 
@@ -631,7 +631,11 @@ Insert after `download_sc_template` method (after line 1703):
 
 ```python
     def preview_sc_import(self, payload) -> dict:
-        """Validate SC import rows without inserting. Returns annotated rows."""
+        """Validate SC import rows without inserting. Returns annotated rows.
+        
+        Note: intentionally does NOT call _require_current_user() — preview is read-only
+        validation that does not write to the database, so no auth check is needed.
+        """
         try:
             from sc_gr_app.services import import_service
             payload = self._required_payload(payload)
@@ -703,6 +707,8 @@ hints = ["Optional (auto-generated if empty)", "Required",
 ```
 
 And add the info row. The current template has rows r=1 (headers), r=2 (hints), r=3 (sample). We need to shift all to r=2/r=3/r=4 and add r=1 as a merged info cell.
+
+**Note:** The `_inline_str_cell`, `_xml_escape`, and `_col_letter` helper functions are defined above the replacement point inside the same method and remain available — only the sheet_xml construction block is being replaced.
 
 Replace the sheet_xml construction (lines 1666-1673) with:
 
@@ -852,7 +858,6 @@ git commit -m "feat: add preview import endpoints and update templates with info
 In `frontend/src/i18n/locales/en-US.js`, add to the `common` section (before line 80 `},`):
 
 ```javascript
-    search: 'Search all fields...',
     importValid: 'Valid: {n}',
     importInvalid: 'Invalid: {n}',
     importSelected: 'Selected: {n}',
@@ -863,7 +868,7 @@ In `frontend/src/i18n/locales/en-US.js`, add to the `common` section (before lin
     importDropHint: 'Drop file here or click to upload',
     importFormatHint: 'Only .xlsx/.xls files',
     importValidation: 'Validation',
-    reset: 'Reset',
+    template: 'Template',
 ```
 
 - [ ] **Step 2: Add sc.importRules to en-US.js**
@@ -901,7 +906,6 @@ In `frontend/src/i18n/locales/en-US.js`, add at the end of the `gr` section (bef
 In `frontend/src/i18n/locales/zh-CN.js`, add to the `common` section:
 
 ```javascript
-    search: '搜索全部字段...',
     importValid: '有效: {n}',
     importInvalid: '无效: {n}',
     importSelected: '已选: {n}',
@@ -912,7 +916,7 @@ In `frontend/src/i18n/locales/zh-CN.js`, add to the `common` section:
     importDropHint: '将文件拖到此处或点击上传',
     importFormatHint: '仅支持 .xlsx/.xls 文件',
     importValidation: '校验结果',
-    reset: '重置',
+    template: '模板',
 ```
 
 - [ ] **Step 6: Add sc.importRules to zh-CN.js**
@@ -968,7 +972,6 @@ git commit -m "feat: add i18n keys for import rules and preview UI"
     :title="'Import ' + entityType"
     width="1000px"
     top="3vh"
-    @update:model-value="$emit('update:visible', $event)"
     @close="handleClose"
   >
     <!-- Step 1: File selection -->
@@ -1198,13 +1201,22 @@ function handleClose() {
   selectedRows.value = []
   emit('update:visible', false)
 }
+
+watch(() => props.visible, (newVal) => {
+  if (!newVal) {
+    preview.value = null
+    fileName.value = ''
+    importResult.value = null
+    selectedRows.value = []
+  }
+})
 </script>
 ```
 
 Wait — `nextTick` needs to be imported. Add it to the import:
 
 ```javascript
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 ```
 
 - [ ] **Step 2: Commit**
@@ -1262,9 +1274,9 @@ const scImportColumns = [
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
   { prop: 'request_type', label: t('sc.requestType'), width: '100' },
   { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },
-  { prop: 'sc_amount', label: t('sc.amount'), width: '100' },
-  { prop: 'service_period_start', label: t('sc.periodStart'), width: '110' },
-  { prop: 'service_period_end', label: t('sc.periodEnd'), width: '110' },
+  { prop: 'sc_amount', label: t('sc.scAmount'), width: '100' },
+  { prop: 'service_period_start', label: t('sc.servicePeriodStart'), width: '110' },
+  { prop: 'service_period_end', label: t('sc.servicePeriodEnd'), width: '110' },
   { prop: 'status', label: t('common.status'), width: '90' },
   { prop: 'description', label: t('common.description'), minWidth: '140' },
   { prop: 'currency', label: t('sc.currency'), width: '70' },
@@ -1281,6 +1293,8 @@ import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 Remove the `XLSX` import if it's no longer needed (check if it's used elsewhere in the file — if not, remove `import * as XLSX from 'xlsx'`).
 
 Remove the `UploadFilled` icon import if no longer used.
+
+**Important:** Do NOT remove the `downloadTemplate()` function — it is used by the Template toolbar button in the template and is separate from the import dialog. Only the old `handleFileSelect()`, `importResult`, and any now-unused imports should be removed.
 
 - [ ] **Step 2: Replace PoListView import dialog**
 
@@ -1307,8 +1321,8 @@ const poImportColumns = [
   { prop: 'sc_id', label: 'SC ID', width: '160' },
   { prop: 'vendor_id', label: t('po.vendor'), width: '100' },
   { prop: 'po_no', label: t('po.poNo'), width: '120' },
-  { prop: 'requester_id', label: t('po.requester'), width: '100' },
-  { prop: 'po_amount', label: t('po.amount'), width: '100' },
+  { prop: 'requester_id', label: t('sc.requester'), width: '100' },
+  { prop: 'po_amount', label: t('po.poAmount'), width: '100' },
   { prop: 'status', label: t('common.status'), width: '90' },
   { prop: 'contract_from', label: t('po.contractFrom'), width: '110' },
   { prop: 'contract_to', label: t('po.contractTo'), width: '110' },
