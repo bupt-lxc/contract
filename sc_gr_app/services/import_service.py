@@ -306,6 +306,92 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     return errors
 
 
+def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
+    """Validate SC rows without inserting. Returns rows annotated with _errors and _valid."""
+    with connect(config) as conn:
+        preview = []
+        for row in rows:
+            if _is_template_meta_row(row, "sc_id"):
+                continue
+            errors_list = []
+            for field in ["sc_no", "sc_amount", "status"]:
+                if not row.get(field):
+                    errors_list.append(f"{field} is required")
+            status = row.get("status", "")
+            if status and status not in SC_IMPORT_ALLOWED_STATUSES:
+                errors_list.append(f"Invalid status: {status}")
+            if row.get("requester_id"):
+                exists = conn.execute(
+                    "SELECT 1 FROM users WHERE user_id = ?", (row["requester_id"],)
+                ).fetchone()
+                if not exists:
+                    errors_list.append(f"User {row['requester_id']} not found")
+            annotated = dict(row)
+            annotated["_errors"] = errors_list
+            annotated["_valid"] = len(errors_list) == 0
+            preview.append(annotated)
+    return preview
+
+
+def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
+    """Validate PO rows without inserting. Returns rows annotated with _errors and _valid."""
+    with connect(config) as conn:
+        preview = []
+        for row in rows:
+            if _is_template_meta_row(row, "po_id"):
+                continue
+            errors_list = []
+            for field in ["sc_id", "po_no", "po_amount", "status"]:
+                if not row.get(field):
+                    errors_list.append(f"{field} is required")
+            status = row.get("status", "")
+            if status and status not in PO_IMPORT_ALLOWED_STATUSES:
+                errors_list.append(f"Invalid status: {status}")
+            if row.get("sc_id"):
+                exists = conn.execute(
+                    "SELECT 1 FROM sc_records WHERE sc_id = ?", (row["sc_id"],)
+                ).fetchone()
+                if not exists:
+                    errors_list.append(f"SC {row['sc_id']} not found")
+            if row.get("vendor_id"):
+                exists = conn.execute(
+                    "SELECT 1 FROM vendors WHERE vendor_id = ?", (row["vendor_id"],)
+                ).fetchone()
+                if not exists:
+                    errors_list.append(f"Vendor {row['vendor_id']} not found")
+            annotated = dict(row)
+            annotated["_errors"] = errors_list
+            annotated["_valid"] = len(errors_list) == 0
+            preview.append(annotated)
+    return preview
+
+
+def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
+    """Validate GR rows without inserting. Returns rows annotated with _errors and _valid."""
+    with connect(config) as conn:
+        preview = []
+        for row in rows:
+            if _is_template_meta_row(row, "gr_id"):
+                continue
+            errors_list = []
+            for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+                if not row.get(field):
+                    errors_list.append(f"{field} is required")
+            status = row.get("status", "")
+            if status and status not in GR_IMPORT_ALLOWED_STATUSES:
+                errors_list.append(f"Invalid status: {status}")
+            if row.get("po_id"):
+                exists = conn.execute(
+                    "SELECT 1 FROM pos WHERE po_id = ?", (row["po_id"],)
+                ).fetchone()
+                if not exists:
+                    errors_list.append(f"PO {row['po_id']} not found")
+            annotated = dict(row)
+            annotated["_errors"] = errors_list
+            annotated["_valid"] = len(errors_list) == 0
+            preview.append(annotated)
+    return preview
+
 def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
     """Import GR records with direct status writes.
 

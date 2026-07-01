@@ -318,7 +318,9 @@ class TestConfirmImport:
         with connect(app_config) as conn:
             _seed_user(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
-        rows = [{"sc_no": "SC-CONFIRM", "sc_amount": "50000", "status": "approved"}]
+        rows = [{"sc_no": "SC-CONFIRM", "sc_amount": "50000", "status": "approved",
+                  "request_type": "service", "cost_center": "1000",
+                  "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}]
         result = import_service.import_scs(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
