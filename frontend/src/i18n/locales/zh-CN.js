@@ -287,7 +287,8 @@ home: {
     contractType: '合同类型',
     costCenter: '成本中心',
     purchaser: '采购员',
-    activingDate: '生效日期'
+    activingDate: '生效日期',
+    poNotFound: '未找到PO记录。'
   },
 
   gr: {

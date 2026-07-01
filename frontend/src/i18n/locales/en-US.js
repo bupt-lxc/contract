@@ -287,7 +287,8 @@ home: {
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
     purchaser: 'Purchaser',
-    activingDate: 'Activing Date'
+    activingDate: 'Activing Date',
+    poNotFound: 'PO not found.'
   },
 
   gr: {
