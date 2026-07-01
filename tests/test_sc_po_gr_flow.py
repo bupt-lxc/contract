@@ -975,6 +975,37 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
     assert denied["status"] == "denied"
 
 
+def test_deny_sc_works_when_manager_confirm(app_config):
+    """deny_sc should accept manager_confirm status, not just pending."""
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, deny_sc
+    from sc_gr_app.services.vendor_service import create_vendor
+
+    sc_id = create_sc_draft(app_config, USER, {"requester_id": "U1"})["sc_id"]
+    create_vendor(
+        app_config, USER,
+        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
+    )
+    submitted = submit_sc(
+        app_config, USER, sc_id,
+        {
+            "sc_no": "SC-DENY-001",
+            "request_type": "service",
+            "cost_center": 1001,
+            "sc_amount": 1000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+            "vendor_ids": ["V1"],
+        },
+    )
+    assert submitted["status"] == "manager_confirm"
+
+    denied = deny_sc(app_config, ADMIN, sc_id)
+    assert denied["status"] == "denied"
+
+
 def test_get_sc_detail_returns_related_data_and_permissions(app_config):
     migrate(app_config)
     seed_users(app_config)

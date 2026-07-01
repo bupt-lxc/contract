@@ -11,7 +11,7 @@
         <el-button v-if="scDetail?.permissions?.is_admin && gr.status === 'manager_confirm'" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('gr.confirm') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'approved'" type="success" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('gr.finishGr') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_gr && gr.status === 'pending'" type="danger" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('gr.deny') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_gr && ['pending','manager_confirm'].includes(gr.status)" type="danger" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('gr.deny') }}</el-button>
         <el-button v-if="isRequester && (gr.status === 'manager_confirm' || gr.status === 'pending')" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('gr.recall') }}</el-button>
         <el-button v-if="scDetail?.permissions?.can_delete_gr && gr.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="gr.gr_id" :disabled="loadingState.count > 0" @click="handleSendEmail('gr', gr.gr_id)">
