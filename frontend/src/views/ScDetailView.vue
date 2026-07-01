@@ -35,7 +35,7 @@
         <div class="section-header">
           <h3>{{ $t('sc.scInformation') }}</h3>
           <el-button
-            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'finished')"
+            v-if="permissions.can_manage_po && detail.sc?.status === 'approved'"
             type="primary" size="small"
             :disabled="loadingState.count > 0"
             @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
@@ -124,6 +124,7 @@
       :vendors="scVendors"
       :sc-record="detail.sc"
       @save="handlePoSave"
+      @save-draft="handlePoSaveDraft"
     />
 
     <el-dialog v-model="transferDialogVisible" :title="$t('sc.transferOwner')" width="480px">
@@ -357,6 +358,20 @@ async function handlePoSave(data) {
       attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
+    await fetchDetail(scId.value)
+    poDialogVisible.value = false
+  } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+async function handlePoSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const created = await createPo({ ...formData, sc_id: scId.value, status: 'draft' })
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: created.po_id, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
+    }
+    ElMessage.success(t('po.draftSaved'))
     await fetchDetail(scId.value)
     poDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }

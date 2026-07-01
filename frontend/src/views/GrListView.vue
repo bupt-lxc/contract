@@ -291,7 +291,7 @@ async function onGrScChange(scId) {
       limit: 200, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
-    eligiblePos.value = result.rows || result || []
+    eligiblePos.value = (result.rows || result || []).filter(p => p.status !== 'finished')
   } catch { eligiblePos.value = [] }
 }
 

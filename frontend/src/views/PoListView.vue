@@ -73,6 +73,7 @@
       :vendors="scLinkedVendors"
       :sc-record="selectedScRecord"
       @save="handlePoSave"
+      @save-draft="handlePoSaveDraft"
     />
 
     <el-dialog v-model="importVisible" title="Import PO" width="500px">
@@ -270,6 +271,23 @@ async function handlePoSave(data) {
       await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId })
     }
     ElMessage.success(t('common.saved'))
+    poDialogVisible.value = false
+    await searchPos()
+  } catch (e) {
+    ElMessage.error(e.message)
+    throw e
+  }
+}
+
+async function handlePoSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id, status: 'draft' }
+    const created = await createPo(payload)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: created.po_id, file_paths: _attachments, parent_sc_id: created.sc_id })
+    }
+    ElMessage.success(t('po.draftSaved'))
     poDialogVisible.value = false
     await searchPos()
   } catch (e) {

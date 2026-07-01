@@ -103,6 +103,23 @@
         :schedules="customSchedules"
         @save="handleCustomSchedulesSave"
       />
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('record.record') }}</h3>
+        </div>
+        <el-table :data="poOperationRecords" stripe border size="small">
+          <el-table-column prop="created_at" :label="$t('record.created')" width="160">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
+          <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+          <el-table-column prop="object_id" :label="$t('record.objectId')" width="120" />
+          <el-table-column prop="operator_id" :label="$t('record.operator')" width="120" />
+          <el-table-column prop="changes_summary" :label="$t('record.changes')" min-width="220" />
+          <template #empty><el-empty :description="$t('record.noRecordsInSc')" /></template>
+        </el-table>
+      </div>
     </template>
 
     <AttachmentDialog
@@ -153,6 +170,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import PoNotificationCard from '@/components/notification/PoNotificationCard.vue'
 import PoCustomScheduleCard from '@/components/notification/PoCustomScheduleCard.vue'
 import { useNotification } from '@/composables/useNotification.js'
+import { formatDateTime } from '@/utils/format.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -177,6 +195,10 @@ const grs = computed(() => {
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
 })
 const scVendors = computed(() => scDetail.value?.vendors || [])
+const poOperationRecords = computed(() => {
+  const logs = scDetail.value?.operation_records || []
+  return logs.filter(l => l.object_type === 'po' && l.object_id === poId.value)
+})
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 const notificationConfig = computed(() => notifState.poConfig)
 const customSchedules = computed(() => notifState.customSchedules || [])
