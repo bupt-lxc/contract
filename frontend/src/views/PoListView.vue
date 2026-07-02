@@ -24,6 +24,8 @@
     <PoTable
       :rows="state.rows"
       :loading="state.loading"
+      selectable
+      @selection-change="val => selectedRows = val"
       @detail="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
       @submit="row => handleSubmitPo(row)"
@@ -83,6 +85,17 @@
       :rules-text="$t('po.importRules')"
       @imported="searchPos"
     />
+
+    <ExportDialog
+      v-model:visible="exportDialogVisible"
+      entity-type="po"
+      :filters="state.filters"
+      :sort="state.sort"
+      :direction="state.direction"
+      :selected-ids="selectedRows.map(r => r.po_id)"
+      :filtered-count="state.total"
+      :total-count="state.total"
+    />
   </div>
 </template>
 
@@ -98,6 +111,7 @@ import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
+import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -106,6 +120,8 @@ const { t } = useI18n()
 const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
 const { exportAll } = useExport()
 const exporting = ref(false)
+const selectedRows = ref([])
+const exportDialogVisible = ref(false)
 
 const scLinkedVendors = ref([])
 
@@ -282,33 +298,8 @@ async function handlePoSaveDraft(data) {
 function handlePageChange(page) { onPageChange(page); searchPos() }
 function handleSizeChange(size) { onPageSizeChange(size); searchPos() }
 
-async function handleExport() {
-  exporting.value = true
-  try {
-    const columns = [
-      { key: 'status', label: t('export.status') },
-      { key: 'po_no', label: t('export.poNo') },
-      { key: 'sc_no', label: t('export.scNo') },
-      { key: 'vendor_name', label: t('export.vendor') },
-      { key: 'contract_type', label: t('exportCol.contractType') },
-      { key: 'cost_center', label: t('exportCol.costCenter') },
-      { key: 'po_amount', label: t('export.poAmount') },
-      { key: 'open_po_amount', label: t('export.openPoAmount') },
-      { key: 'contract_from', label: t('export.contractFrom'), getValue: r => (r.contract_from || '').slice(0, 10) },
-      { key: 'contract_to', label: t('export.contractTo'), getValue: r => (r.contract_to || '').slice(0, 10) },
-      { key: 'active_date', label: t('exportCol.activeDate'), getValue: r => (r.active_date || '').slice(0, 10) }
-    ]
-    await exportAll('search_pos', {
-      filters: state.filters,
-      sort: state.sort,
-      direction: state.direction
-    }, columns, `PO_List_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success(t('msg.exportedSuccessfully'))
-  } catch (e) {
-    ElMessage.error(e.message || t('msg.exportFailed'))
-  } finally {
-    exporting.value = false
-  }
+function handleExport() {
+  exportDialogVisible.value = true
 }
 
 // PO import

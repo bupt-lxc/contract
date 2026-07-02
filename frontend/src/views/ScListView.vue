@@ -72,6 +72,17 @@
       :rules-text="$t('sc.importRules')"
       @imported="searchScs"
     />
+
+    <ExportDialog
+      v-model:visible="exportDialogVisible"
+      entity-type="sc"
+      :filters="state.filters"
+      :sort="state.sort"
+      :direction="state.direction"
+      :selected-ids="selectedRows.map(r => r.sc_id)"
+      :filtered-count="state.total"
+      :total-count="state.total"
+    />
   </div>
 </template>
 
@@ -91,6 +102,7 @@ import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { useBatchAction } from '@/composables/useBatchAction.js'
 import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
 import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
+import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -100,6 +112,7 @@ const { exportAll } = useExport()
 const { t } = useI18n()
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const exporting = ref(false)
+const exportDialogVisible = ref(false)
 
 const scStatuses = [
   { label: t('status.manager_confirm'), value: 'manager_confirm' },
@@ -268,34 +281,8 @@ async function handleSaveSubmit(data) {
   }
 }
 
-async function handleExport() {
-  exporting.value = true
-  try {
-    const columns = [
-      { key: 'status', label: t('exportCol.status') },
-      { key: 'sc_no', label: t('exportCol.scNo') },
-      { key: 'requester_name', label: t('exportCol.requester') },
-      { key: 'request_type', label: t('exportCol.type') },
-      { key: 'asset', label: t('exportCol.asset') },
-      { key: 'cost_center', label: t('exportCol.costCenter') },
-      { key: 'sc_amount', label: t('exportCol.scAmount') },
-      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
-      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) },
-      { key: 'created_at', label: t('exportCol.created'), getValue: r => formatDateTime(r.created_at) },
-      { key: 'submitted_date', label: t('sc.submittedDate'), getValue: r => (r.submitted_date || '').slice(0, 10) },
-      { key: 'description', label: t('exportCol.description') }
-    ]
-    await exportAll('search_scs', {
-      filters: state.filters,
-      sort: state.sort,
-      direction: state.direction
-    }, columns, `SC_List_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success(t('export.exported'))
-  } catch (e) {
-    ElMessage.error(e.message || t('export.failed'))
-  } finally {
-    exporting.value = false
-  }
+function handleExport() {
+  exportDialogVisible.value = true
 }
 
 // SC import
@@ -308,11 +295,13 @@ const scImportColumns = [
   { prop: 'request_type', label: t('sc.requestType'), width: '100' },
   { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },
   { prop: 'sc_amount', label: t('sc.scAmount'), width: '100' },
+  { prop: 'currency', label: t('sc.currency'), width: '70' },
   { prop: 'service_period_start', label: t('sc.servicePeriodStart'), width: '110' },
   { prop: 'service_period_end', label: t('sc.servicePeriodEnd'), width: '110' },
+  { prop: 'asset', label: t('sc.asset'), width: '60' },
+  { prop: 'asset_nums', label: t('sc.assetNums'), width: '100' },
   { prop: 'status', label: t('common.status'), width: '90' },
   { prop: 'description', label: t('common.description'), minWidth: '140' },
-  { prop: 'currency', label: t('sc.currency'), width: '70' },
   { prop: 'internal_system_number', label: t('sc.internalSystemNumber'), width: '100' },
 ]
 

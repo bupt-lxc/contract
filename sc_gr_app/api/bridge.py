@@ -6,7 +6,7 @@ from sc_gr_app.api.schemas import fail, ok
 from sc_gr_app.config import AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
-from sc_gr_app.services import gr_service, notification_service, po_service, query_service, sc_service, vendor_service
+from sc_gr_app.services import export_service, gr_service, notification_service, po_service, query_service, sc_service, vendor_service
 from sc_gr_app.services.record_service import format_timestamp, write_operation_record
 from sc_gr_app.services.user_service import enable_user, get_user_by_machine_id, register_user
 
@@ -817,6 +817,80 @@ class ApiBridge:
             data = _require_payload_field(payload, "data")
             notification_service.save_notification_defaults(self.config, data)
             return ok()
+        except Exception as exc:
+            return fail(exc)
+
+    def export_scs_cascade(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            filters = payload.get("filters", {})
+            sort = payload.get("sort", "created_at")
+            direction = payload.get("direction", "desc")
+            cascade = payload.get("cascade", {"po": False, "gr": False})
+            selected_ids = payload.get("selected_ids")
+
+            cascade_options = {"po": bool(cascade.get("po")), "gr": bool(cascade.get("gr"))}
+            entity_types = {"SC"}
+            if cascade_options["po"]:
+                entity_types.add("PO")
+            if cascade_options["po"] and cascade_options["gr"]:
+                entity_types.add("GR")
+
+            cascade_rows = export_service.build_cascade_rows(
+                self.config, "sc", filters, sort, direction,
+                cascade_options, current_user, selected_ids,
+            )
+            statistics = export_service.compute_statistics(
+                self.config, entity_types, filters, selected_ids,
+            )
+            return ok({"cascade_rows": cascade_rows, "statistics": statistics})
+        except Exception as exc:
+            return fail(exc)
+
+    def export_pos_cascade(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            filters = payload.get("filters", {})
+            sort = payload.get("sort", "created_at")
+            direction = payload.get("direction", "desc")
+            cascade = payload.get("cascade", {"gr": False})
+            selected_ids = payload.get("selected_ids")
+
+            cascade_options = {"gr": bool(cascade.get("gr"))}
+            entity_types = {"PO"}
+            if cascade_options["gr"]:
+                entity_types.add("GR")
+
+            cascade_rows = export_service.build_cascade_rows(
+                self.config, "po", filters, sort, direction,
+                cascade_options, current_user=current_user, selected_ids=selected_ids,
+            )
+            statistics = export_service.compute_statistics(
+                self.config, entity_types, filters, selected_ids,
+            )
+            return ok({"cascade_rows": cascade_rows, "statistics": statistics})
+        except Exception as exc:
+            return fail(exc)
+
+    def export_grs_with_stats(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            filters = payload.get("filters", {})
+            sort = payload.get("sort", "created_at")
+            direction = payload.get("direction", "desc")
+            selected_ids = payload.get("selected_ids")
+
+            cascade_rows = export_service.build_cascade_rows(
+                self.config, "gr", filters, sort, direction,
+                cascade_options={}, current_user=current_user, selected_ids=selected_ids,
+            )
+            statistics = export_service.compute_statistics(
+                self.config, {"GR"}, filters, selected_ids,
+            )
+            return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
             return fail(exc)
 

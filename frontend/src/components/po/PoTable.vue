@@ -6,7 +6,9 @@
     border
     :row-class-name="rowClass"
     :default-sort="{ prop: 'po_no', order: 'ascending' }"
+    @selection-change="val => $emit('selection-change', val)"
   >
+    <el-table-column v-if="selectable" type="selection" width="50" />
     <el-table-column prop="status" :label="$t('po.status')" width="100" sortable>
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
@@ -28,12 +30,30 @@
     <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip sortable />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip sortable />
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" sortable />
+    <el-table-column prop="contract_no" :label="$t('po.contractNo')" width="130" sortable>
+      <template #default="{ row }">{{ row.contract_no || '-' }}</template>
+    </el-table-column>
+    <el-table-column prop="payment_frequency" :label="$t('po.paymentFrequency')" width="110" sortable>
+      <template #default="{ row }">{{ row.payment_frequency || '-' }}</template>
+    </el-table-column>
+    <el-table-column prop="contract_pos" :label="$t('po.contractPos')" width="100" sortable>
+      <template #default="{ row }">{{ row.contract_pos || '-' }}</template>
+    </el-table-column>
     <el-table-column prop="cost_center" :label="$t('po.costCenter')" width="110" sortable />
+    <el-table-column prop="purchaser" :label="$t('po.purchaser')" width="110" sortable>
+      <template #default="{ row }">{{ row.purchaser || '-' }}</template>
+    </el-table-column>
     <el-table-column prop="po_amount" :label="$t('po.poAmount')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.po_amount" /></template>
     </el-table-column>
     <el-table-column prop="open_po_amount" :label="$t('po.openCon')" width="120" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.open_po_amount" /></template>
+    </el-table-column>
+    <el-table-column prop="po_pending_total_incl_tax" :label="$t('po.pendingInclTax')" width="140" sortable>
+      <template #default="{ row }"><AmountDisplay :value="row.po_pending_total_incl_tax" /></template>
+    </el-table-column>
+    <el-table-column prop="consumed_amount" :label="$t('po.consumedAmount')" width="130" sortable>
+      <template #default="{ row }"><AmountDisplay :value="row.consumed_amount" /></template>
     </el-table-column>
     <el-table-column prop="contract_from" :label="$t('po.startDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_from) }}</template>
@@ -64,10 +84,11 @@ import { loadingState } from '@/api/bridge.js'
 defineProps({
   rows: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  hideScInfo: { type: Boolean, default: false }
+  hideScInfo: { type: Boolean, default: false },
+  selectable: { type: Boolean, default: false }
 })
 
-defineEmits(['detail', 'edit', 'finish', 'submit'])
+defineEmits(['detail', 'edit', 'finish', 'submit', 'selection-change'])
 
 function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
