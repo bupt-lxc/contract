@@ -3,7 +3,13 @@
     <el-table-column prop="status" :label="$t('gr.status')" width="100" sortable>
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
-    <el-table-column prop="gr_id" :label="$t('gr.id')" width="120" sortable />
+    <el-table-column prop="gr_id" :label="$t('gr.id')" width="135" sortable>
+      <template #default="{ row }">
+        <el-tooltip :content="row.gr_id" placement="top" :disabled="!row.gr_id">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.gr_id) }}</span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
       <template #default="{ row }">{{ row.gr_no || '-' }}</template>
     </el-table-column>
@@ -22,7 +28,7 @@
     </el-table-column>
     <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip sortable />
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
-      <template #default="{ row }">{{ (row.created_at || '').replace('T', ' ').slice(0, 19) || '-' }}</template>
+      <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
     </el-table-column>
     <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
@@ -32,16 +38,17 @@
     </el-table-column>
     <el-table-column :label="$t('gr.actions')" width="280" fixed="right">
       <template #default="{ row }">
-        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
-        <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
-        <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="row.status === 'pending'" type="success" link size="small" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
-        <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.cancelConfirm')" @confirm="$emit('cancel', row)">
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('edit', row)">{{ $t('gr.edit') }}</el-button>
+        <el-button v-if="row.status === 'draft'" type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="row.status === 'approved'" type="success" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('finish', row)">{{ $t('gr.finishGr') }}</el-button>
+        <el-button v-if="row.status === 'pending'" type="success" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('approve', row)">{{ $t('gr.approve') }}</el-button>
+        <el-popconfirm v-if="row.status === 'pending'" :title="$t('gr.denyConfirm')" @confirm="$emit('deny', row)">
           <template #reference>
-            <el-button type="danger" link size="small" @click.stop>{{ $t('gr.cancel') }}</el-button>
+            <el-button type="danger" link size="small" :disabled="loadingState.count > 0" @click.stop>{{ $t('gr.deny') }}</el-button>
           </template>
         </el-popconfirm>
-        <el-button type="info" link size="small" @click.stop="$emit('attachments', row)">
+        <el-button type="info" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('attachments', row)">
           <el-icon><Paperclip /></el-icon>
         </el-button>
       </template>
@@ -54,9 +61,12 @@
 import { Paperclip } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import { loadingState } from '@/api/bridge.js'
+import { formatDateTime } from '@/utils/format.js'
 
 defineProps({ rows: { type: Array, default: () => [] } })
-defineEmits(['detail', 'edit', 'approve', 'cancel', 'attachments', 'row-click', 'submit'])
+defineEmits(['detail', 'edit', 'approve', 'deny', 'finish', 'attachments', 'row-click', 'submit'])
 
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

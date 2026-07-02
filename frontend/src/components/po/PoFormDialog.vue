@@ -35,7 +35,7 @@
       </el-row>
       <el-form-item :label="$t('po.vendor')" prop="vendor_id">
         <el-select v-model="form.vendor_id" filterable>
-          <el-option v-for="v in vendors" :key="v.vendor_id" :label="`${v.vendor_name} - ${v.company_name_cn || '-'} - ${v.vendor_id} - ${v.ksrm_vendor_code || '-'}`" :value="v.vendor_id" />
+          <el-option v-for="v in vendors" :key="v.vendor_id" :label="`${v.service_scope} —— ${v.vendor_name} | ${v.vendor_id}`" :value="v.vendor_id" />
         </el-select>
       </el-form-item>
       <el-row :gutter="16">
@@ -76,8 +76,8 @@
       </el-row>
       <el-row v-if="mode === 'edit'" :gutter="16">
         <el-col :span="12">
-          <el-form-item :label="$t('po.activingDate')">
-            <el-date-picker v-model="form.activing_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
+          <el-form-item :label="$t('po.activeDate')">
+            <el-date-picker v-model="form.active_date" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -103,7 +103,10 @@
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:visible', false)" :disabled="submitting">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="handleSave" :loading="submitting">{{ $t('common.save') }}</el-button>
+      <el-button v-if="mode === 'create'" @click="handleSaveDraft" :disabled="submitting">{{ $t('common.saveDraft') }}</el-button>
+      <el-button type="primary" @click="handleSave" :loading="submitting">
+        {{ mode === 'edit' ? $t('common.save') : $t('common.submit') }}
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -123,7 +126,7 @@ const props = defineProps({
   scRecord: { type: Object, default: null }
 })
 
-const emit = defineEmits(['update:visible', 'save'])
+const emit = defineEmits(['update:visible', 'save', 'save-draft'])
 
 const { t } = useI18n()
 
@@ -135,7 +138,7 @@ const emptyForm = () => ({
   po_no: '', vendor_id: '', po_amount: null,
   contract_from: null, contract_to: null, contract_no: '', payment_frequency: '',
   contract_pos: '', contract_type: '', cost_center: '', purchaser: '',
-  activing_date: null
+  active_date: null
 })
 
 const form = reactive(emptyForm())
@@ -168,6 +171,18 @@ async function handlePickFiles() {
     if (files?.length) pickedFiles.value.push(...files)
   } catch (e) {
     ElMessage.error(e.message)
+  }
+}
+
+async function handleSaveDraft() {
+  // Draft doesn't require field validation
+  submitting.value = true
+  try {
+    emit('save-draft', { ...form, _attachments: pickedFiles.value.map(f => f.path) })
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    submitting.value = false
   }
 }
 

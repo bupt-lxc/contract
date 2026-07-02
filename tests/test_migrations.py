@@ -48,7 +48,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     assert rows[0][1]
     assert rows[1][1]
 
@@ -64,7 +64,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
     migrate(app_config)
@@ -92,7 +92,7 @@ def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
             insert into sc_records (
               sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
               service_period_start, service_period_end, status, description,
-              created_by, created_at, updated_at, approved_by, approved_at, closed_at
+              created_by, created_at, updated_at, approved_by, approved_at, finished_at
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -149,7 +149,7 @@ def test_sc_records_requires_business_fields_after_draft(app_config):
                 insert into sc_records (
                   sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
                   service_period_start, service_period_end, status, description,
-                  created_by, created_at, updated_at, approved_by, approved_at, closed_at
+                  created_by, created_at, updated_at, approved_by, approved_at, finished_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -259,7 +259,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
                 insert into sc_records (
                   sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
                   service_period_start, service_period_end, status, description,
-                  created_by, created_at, updated_at, approved_by, approved_at, closed_at
+                  created_by, created_at, updated_at, approved_by, approved_at, finished_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -286,7 +286,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
     with connect(app_config) as conn:
@@ -607,7 +607,7 @@ def test_migration_v2_preserves_dependent_foreign_keys_and_indexes(app_config):
                 "V1",
                 "PO-002",
                 250,
-                "activing",
+                "active",
                 None,
                 None,
                 None,

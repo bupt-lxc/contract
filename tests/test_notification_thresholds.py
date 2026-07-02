@@ -35,7 +35,7 @@ def _seed_vendor(conn, vendor_id="V1"):
     )
 
 
-def _seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=100000, status="activing", contract_to=None):
+def _seed_po(conn, po_id="PO1", sc_id="SC1", po_amount=100000, status="active", contract_to=None):
     conn.execute(
         """INSERT OR IGNORE INTO pos (po_id, sc_id, vendor_id, po_amount, status, contract_to, created_at, updated_at)
            VALUES (?, ?, 'V1', ?, ?, ?, ?, ?)""",
@@ -68,7 +68,7 @@ class TestDateThresholds:
             end_date = date.today() + timedelta(days=150)
             _seed_vendor(conn, "V1")
             _seed_sc(conn, "SC1", "U1")
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             conn.commit()
 
         with connect(app_config) as conn:
@@ -103,7 +103,7 @@ class TestDateThresholds:
             end_date = date.today() + timedelta(days=365)
             _seed_vendor(conn, "V1")
             _seed_sc(conn, "SC1", "U1")
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             conn.commit()
 
         with connect(app_config) as conn:
@@ -124,7 +124,7 @@ class TestDateThresholds:
             end_date = date.today() + timedelta(days=150)
             _seed_vendor(conn, "V1")
             _seed_sc(conn, "SC1", "U1")
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             # Pre-record that 6m threshold was already sent
             conn.execute(
                 "INSERT INTO notification_sent_threshold (entity_type, entity_id, event_key, sent_at) "
@@ -154,7 +154,7 @@ class TestAmountThresholds:
             _seed_vendor(conn, "V1")
             # contract_to required for threshold scanning
             end_date = date.today() + timedelta(days=365)
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             # Create approved GR consuming 80% of PO amount (20% remaining)
             _seed_gr(conn, "GR1", "PO1", estimated_amount=80000, con_value=80000, status="approved")
             conn.commit()
@@ -185,7 +185,7 @@ class TestAmountThresholds:
             _seed_sc(conn, "SC1", "U1")
             _seed_vendor(conn, "V1")
             end_date = date.today() + timedelta(days=365)
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             # 60% remaining -- above all thresholds (50%, 30%, 10%)
             _seed_gr(conn, "GR1", "PO1", estimated_amount=40000, con_value=40000, status="approved")
             conn.commit()
@@ -210,7 +210,7 @@ class TestDisabledConfig:
             end_date = date.today() + timedelta(days=150)
             _seed_vendor(conn, "V1")
             _seed_sc(conn, "SC1", "U1")
-            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="activing", contract_to=end_date.isoformat())
+            _seed_po(conn, "PO1", "SC1", po_amount=100000, status="active", contract_to=end_date.isoformat())
             conn.execute(
                 "INSERT INTO notification_config (entity_type, entity_id, enabled) VALUES ('po', 'PO1', 0)"
             )

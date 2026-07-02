@@ -32,7 +32,13 @@
       <el-table-column :label="$t('common.status')" width="100" prop="status" sortable>
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
-      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="120" sortable />
+      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="135" sortable>
+        <template #default="{ row }">
+          <el-tooltip :content="row.gr_id" placement="top" :disabled="!row.gr_id">
+            <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.gr_id) }}</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
         <template #default="{ row }">{{ row.gr_no || '-' }}</template>
       </el-table-column>
@@ -63,7 +69,6 @@
     </el-table>
 
     <el-pagination
-      v-if="state.total > state.pageSize"
       :current-page="state.currentPage"
       :page-size="state.pageSize"
       :total="state.total"
@@ -115,6 +120,7 @@
       :record="grDialogRecord"
       :users="activeUsers"
       @save="handleGrSave"
+      @save-draft="handleGrSaveDraft"
     />
 
     <el-dialog v-model="importVisible" title="Import GR" width="500px">
@@ -177,7 +183,8 @@ const { exportAll } = useExport()
 const exporting = ref(false)
 
 const grStatuses = [
-  { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' }, { label: t('status.cancelled'), value: 'cancelled' }
+  { label: t('status.manager_confirm'), value: 'manager_confirm' },
+  { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' }, { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
 
 const deadlineOptions = [
@@ -192,6 +199,8 @@ const deadlineOptions = [
   { label: t('filter.within2Months'), value: '2m' },
   { label: t('filter.within1Month'), value: '1m' },
 ]
+
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 
 function computeDeadlineEnd(value) {
   const today = new Date()
@@ -283,7 +292,7 @@ async function onGrScChange(scId) {
       limit: 200, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
-    eligiblePos.value = result.rows || result || []
+    eligiblePos.value = (result.rows || result || []).filter(p => p.status !== 'finished')
   } catch { eligiblePos.value = [] }
 }
 
@@ -305,19 +314,35 @@ function confirmGrSelection() {
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
+    const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
     const payload = { ...formData, po_id: grSelectedPoId.value, status: 'manager_confirm' }
-    const result = await callApi('create_gr', { data: payload })
-    const created = result
-    if (_attachments?.length && created?.gr_id) {
-      // Get po info for parent references
-      const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
-      await callApi('add_attachments', {
-        entity_type: 'gr', entity_id: created.gr_id,
-        file_paths: _attachments,
-        parent_sc_id: po?.sc_id, parent_po_id: grSelectedPoId.value
-      })
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = po?.sc_id
+      payload._parent_po_id = grSelectedPoId.value
     }
+    await callApi('create_gr', { data: payload })
     ElMessage.success(t('common.saved'))
+    grDialogVisible.value = false
+    await searchGrs()
+  } catch (e) {
+    ElMessage.error(e.message)
+    throw e
+  }
+}
+
+async function handleGrSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const po = eligiblePos.value.find(p => p.po_id === grSelectedPoId.value)
+    const payload = { ...formData, po_id: grSelectedPoId.value, status: 'draft' }
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = po?.sc_id
+      payload._parent_po_id = grSelectedPoId.value
+    }
+    await callApi('create_gr', { data: payload })
+    ElMessage.success(t('po.draftSaved'))
     grDialogVisible.value = false
     await searchGrs()
   } catch (e) {

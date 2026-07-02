@@ -6,11 +6,14 @@
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'activing'" type="info" @click="handleFinish">{{ $t('common.finish') }}</el-button>
-        <el-button v-if="isRequester && po.status === 'activing'" type="warning" @click="handleRevoke">{{ $t('po.revoke') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && (po.status === 'draft' || po.status === 'activing' || po.status === 'finished')" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'active'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="isRequester && po.status === 'active'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
+        <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="po.po_id" :disabled="loadingState.count > 0" @click="handleSendEmail('po', po.po_id)">
+          <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
+        </el-button>
       </div>
     </div>
 
@@ -22,7 +25,7 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poInformation') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
         </div>
@@ -49,7 +52,7 @@
           <el-descriptions-item :label="$t('po.contractType')">{{ po.contract_type || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.costCenter')">{{ po.cost_center || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.purchaser')">{{ po.purchaser || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('po.activingDate')">{{ (po.activing_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('po.activeDate')">{{ (po.active_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
 
@@ -66,7 +69,8 @@
           @detail="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
-          @cancel="row => handleGrCancel(row)"
+          @deny="row => handleGrDeny(row)"
+          @finish="row => handleGrFinish(row)"
           @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
@@ -99,6 +103,23 @@
         :schedules="customSchedules"
         @save="handleCustomSchedulesSave"
       />
+
+      <div class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('record.record') }}</h3>
+        </div>
+        <el-table :data="poOperationRecords" stripe border size="small">
+          <el-table-column prop="created_at" :label="$t('record.created')" width="160">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
+          <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
+          <el-table-column prop="object_id" :label="$t('record.objectId')" width="120" />
+          <el-table-column prop="operator_id" :label="$t('record.operator')" width="120" />
+          <el-table-column prop="changes_summary" :label="$t('record.changes')" min-width="220" />
+          <template #empty><el-empty :description="$t('record.noRecordsInSc')" /></template>
+        </el-table>
+      </div>
     </template>
 
     <AttachmentDialog
@@ -124,6 +145,7 @@
       :record="grDialogRecord"
       :users="activeUsers"
       @save="handleGrSave"
+      @save-draft="handleGrSaveDraft"
     />
   </div>
 </template>
@@ -132,8 +154,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, Download } from '@element-plus/icons-vue'
-import { callApi } from '@/api/bridge.js'
+import { Plus, Download, Message } from '@element-plus/icons-vue'
+import { callApi, loadingState } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
 import { usePo } from '@/composables/usePo.js'
@@ -149,6 +171,7 @@ import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import PoNotificationCard from '@/components/notification/PoNotificationCard.vue'
 import PoCustomScheduleCard from '@/components/notification/PoCustomScheduleCard.vue'
 import { useNotification } from '@/composables/useNotification.js'
+import { formatDateTime } from '@/utils/format.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -156,7 +179,7 @@ const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
 const { updatePo, finishPo, submitPo } = usePo()
-const { createGr, updateGr, approveGr, cancelGr, submitGr } = useGr()
+const { createGr, updateGr, approveGr, denyGr, submitGr, finishGr } = useGr()
 
 const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
 const { exportRows } = useExport()
@@ -173,6 +196,10 @@ const grs = computed(() => {
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
 })
 const scVendors = computed(() => scDetail.value?.vendors || [])
+const poOperationRecords = computed(() => {
+  const logs = scDetail.value?.operation_records || []
+  return logs.filter(l => l.object_type === 'po' && l.object_id === poId.value)
+})
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 const notificationConfig = computed(() => notifState.poConfig)
 const customSchedules = computed(() => notifState.customSchedules || [])
@@ -214,11 +241,11 @@ async function handleFinish() {
   }
 }
 
-async function handleRevoke() {
+async function handleRecall() {
   try {
-    await ElMessageBox.confirm(t('po.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
-    await callApi('revoke_po', { po_id: poId.value })
-    ElMessage.success(t('po.revoked'))
+    await ElMessageBox.confirm(t('po.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
+    await callApi('recall_po', { po_id: poId.value })
+    ElMessage.success(t('po.recalled'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -269,11 +296,11 @@ async function handleGrApprove(row) {
   }
 }
 
-async function handleGrCancel(row) {
+async function handleGrDeny(row) {
   try {
-    await ElMessageBox.confirm(t('gr.cancelConfirm'), t('common.confirm'), { type: 'warning' })
-    await cancelGr(row.gr_id)
-    ElMessage.success(t('gr.grCancelled'))
+    await ElMessageBox.confirm(t('gr.denyConfirm'), t('common.confirm'), { type: 'warning' })
+    await denyGr(row.gr_id)
+    ElMessage.success(t('gr.grDenied'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -287,6 +314,17 @@ async function handleGrSubmit(row) {
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+}
+
+async function handleGrFinish(row) {
+  try {
+    await ElMessageBox.confirm(t('gr.finishGrConfirm'), t('gr.finishGr'), { type: 'warning' })
+    await finishGr(row.gr_id)
+    ElMessage.success(t('gr.grFinished'))
+    await fetchDetail(scId.value)
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleExportGrs() {
@@ -309,6 +347,14 @@ async function handleExportGrs() {
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 
+async function handleSendEmail(entityType, entityId) {
+  try {
+    await callApi('open_entity_email', { entity_type: entityType, entity_id: entityId })
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
+  }
+}
+
 async function handleGrSave(data) {
   try {
     const { _attachments, ...formData } = data
@@ -318,17 +364,42 @@ async function handleGrSave(data) {
       if (po.value?.status !== 'draft') {
         payload.status = 'manager_confirm'
       }
+      if (_attachments?.length) {
+        payload._attachments = _attachments
+        payload._parent_sc_id = scId.value
+        payload._parent_po_id = poId.value
+      }
       const created = await createGr(payload)
       grId = created.gr_id
     } else {
       grId = formData.gr_id
       await updateGr(grId, formData)
-    }
-    if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
-      attachRefreshKey.value++
+      if (_attachments?.length) {
+        await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+        attachRefreshKey.value++
+      }
     }
     ElMessage.success(t('common.saved'))
+    await fetchDetail(scId.value)
+    grDialogVisible.value = false
+  } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+async function handleGrSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const payload = { ...formData, po_id: poId.value, status: 'draft' }
+    if (_attachments?.length) {
+      payload._attachments = _attachments
+      payload._parent_sc_id = scId.value
+      payload._parent_po_id = poId.value
+    }
+    const created = await createGr(payload)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: created.gr_id, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      attachRefreshKey.value++
+    }
+    ElMessage.success(t('po.draftSaved'))
     await fetchDetail(scId.value)
     grDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }

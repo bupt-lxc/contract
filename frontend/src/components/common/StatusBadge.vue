@@ -16,14 +16,12 @@ const { t } = useI18n()
 
 const STATUS_LABELS = {
   draft: 'Draft',
-  manager_confirm: 'Manager Confirm',
+  manager_confirm: 'To be confirmed',
   pending: 'Pending',
   approved: 'Approved',
   denied: 'Denied',
-  closed: 'Closed',
-  activing: 'Activing',
-  finished: 'Finished',
-  cancelled: 'Cancelled'
+  active: 'Active',
+  finished: 'Finished'
 }
 
 const STATUS_TYPES = {
@@ -32,10 +30,8 @@ const STATUS_TYPES = {
   pending: 'warning',
   approved: 'success',
   denied: 'danger',
-  closed: 'info',
-  activing: 'warning',
-  finished: 'info',
-  cancelled: 'danger'
+  active: 'warning',
+  finished: 'info'
 }
 
 const tagType = computed(() => STATUS_TYPES[props.status] || 'info')

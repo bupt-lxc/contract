@@ -6,13 +6,13 @@
       @reset="handleReset"
     >
       <template #actions>
-        <el-button type="primary" @click="scDialogVisible = true; scDialogMode = 'create'">
+        <el-button type="primary" :disabled="loadingState.count > 0" @click="scDialogVisible = true; scDialogMode = 'create'">
           <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
         </el-button>
-        <el-button @click="importVisible = true">
+        <el-button :disabled="loadingState.count > 0" @click="importVisible = true">
           <el-icon><Upload /></el-icon> Import
         </el-button>
-        <el-button @click="downloadTemplate">
+        <el-button :disabled="loadingState.count > 0" @click="downloadTemplate">
           <el-icon><Download /></el-icon> Template
         </el-button>
         <el-button @click="handleExport" :loading="exporting">
@@ -23,9 +23,9 @@
 
     <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
       <span style="font-size:13px;color:#1d4ed8;font-weight:500">{{ $t('batch.selected', { count: selectedRows.length }) }}</span>
-      <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
-      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
-      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'pending')" size="small" type="success" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
+      <el-button v-if="selectedRows.some(r => r.status === 'draft')" size="small" type="primary" :disabled="loadingState.count > 0" @click="handleBatchSubmit">{{ $t('batch.submit') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" :disabled="loadingState.count > 0" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
+      <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'pending')" size="small" type="success" :disabled="loadingState.count > 0" @click="handleBatchApprove">{{ $t('batch.approve') }}</el-button>
     </div>
 
     <ScTable
@@ -39,7 +39,6 @@
     />
 
     <el-pagination
-      v-if="state.total > state.pageSize"
       :current-page="state.currentPage"
       :page-size="state.pageSize"
       :total="state.total"
@@ -102,7 +101,8 @@ import * as XLSX from 'xlsx'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
-import { callApi } from '@/api/bridge.js'
+import { formatDateTime } from '@/utils/format.js'
+import { callApi, loadingState } from '@/api/bridge.js'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
@@ -119,8 +119,9 @@ const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const exporting = ref(false)
 
 const scStatuses = [
+  { label: t('status.manager_confirm'), value: 'manager_confirm' },
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
-  { label: t('status.denied'), value: 'denied' }, { label: t('status.closed'), value: 'closed' }
+  { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
 const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
 const activeUsers = ref([])
@@ -271,10 +272,10 @@ async function handleSaveSubmit(data) {
   try {
     const { _attachments, ...formData } = data
     const created = await createDraft(formData)
-    await submitSc(created.sc_id, formData)
     if (_attachments?.length) {
       await callApi('add_attachments', { entity_type: 'sc', entity_id: created.sc_id, file_paths: _attachments })
     }
+    await submitSc(created.sc_id, formData)
     ElMessage.success(t('common.saved'))
     scDialogVisible.value = false
     await searchScs()
@@ -297,7 +298,8 @@ async function handleExport() {
       { key: 'sc_amount', label: t('exportCol.scAmount') },
       { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
       { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) },
-      { key: 'created_at', label: t('exportCol.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+      { key: 'created_at', label: t('exportCol.created'), getValue: r => formatDateTime(r.created_at) },
+      { key: 'submitted_date', label: t('sc.submittedDate'), getValue: r => (r.submitted_date || '').slice(0, 10) },
       { key: 'description', label: t('exportCol.description') }
     ]
     await exportAll('search_scs', {

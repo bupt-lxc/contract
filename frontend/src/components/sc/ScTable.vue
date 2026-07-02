@@ -14,10 +14,11 @@
         <StatusBadge :status="row.status" />
       </template>
     </el-table-column>
-    <el-table-column prop="sc_no" :label="$t('sc.scNo')" sortable="custom" width="130" />
-    <el-table-column prop="sc_id" :label="$t('sc.scId')" sortable="custom" width="180">
+    <el-table-column prop="sc_id" :label="$t('sc.scId')" sortable="custom" width="135">
       <template #default="{ row }">
-        <span style="font-family:monospace;font-size:12px">{{ row.sc_id }}</span>
+        <el-tooltip :content="row.sc_id" placement="top" :disabled="!row.sc_id">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortScId(row.sc_id) }}</span>
+        </el-tooltip>
       </template>
     </el-table-column>
     <el-table-column prop="requester_name" :label="$t('sc.requester')" sortable="custom" width="130" />
@@ -37,6 +38,9 @@
     </el-table-column>
     <el-table-column prop="created_at" :label="$t('sc.created')" sortable="custom" width="120">
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+    </el-table-column>
+    <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" sortable="custom" width="120">
+      <template #default="{ row }">{{ formatDate(row.submitted_date) }}</template>
     </el-table-column>
     <el-table-column prop="pending_date" :label="$t('sc.pendingDate')" sortable="custom" width="120">
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
@@ -71,6 +75,12 @@ defineEmits(['sort-change', 'detail', 'selection-change'])
 
 function rowClass({ row }) {
   return `status-row-${row.status || ''}`
+}
+
+function shortScId(scId) {
+  if (!scId) return '-'
+  const parts = scId.split('-')
+  return parts.slice(2).join('-')
 }
 
 function formatDate(val) {

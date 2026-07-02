@@ -5,9 +5,9 @@ import pytest
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, ValidationError
-from sc_gr_app.services.gr_service import approve_gr, cancel_gr, create_gr, update_gr, submit_gr, delete_gr
+from sc_gr_app.services.gr_service import approve_gr, deny_gr, finish_gr, create_gr, update_gr, submit_gr, delete_gr
 from sc_gr_app.services.po_service import create_po, submit_po, delete_po
-from sc_gr_app.services.sc_service import approve_sc, close_sc, confirm_sc, create_sc, create_sc_draft, submit_sc, transfer_sc, add_sc_vendor
+from sc_gr_app.services.sc_service import approve_sc, finish_sc, confirm_sc, create_sc, create_sc_draft, submit_sc, transfer_sc, add_sc_vendor
 from sc_gr_app.services.vendor_service import create_vendor
 
 
@@ -70,7 +70,7 @@ def seed_approved_sc_vendor_po(
     *,
     sc_no="SC001",
     po_no="PO001",
-    po_status="activing",
+    po_status="active",
     sc_amount=1000,
     po_amount=800,
 ):
@@ -167,11 +167,11 @@ def test_approve_gr_rejects_closed_parent_sc(app_config):
         },
     )
     gr_id = created_gr["gr_id"]
-    cancel_gr(app_config, ADMIN, gr_id)  # finalize GR, then finish PO, then close SC
+    deny_gr(app_config, ADMIN, gr_id)  # finalize GR, then finish PO, then close SC
     finish_po(app_config, ADMIN, po_id)
-    close_sc(app_config, ADMIN, sc_id)
+    finish_sc(app_config, ADMIN, sc_id)
 
-    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+    with pytest.raises(ConflictError, match="Finished SC cannot be edited"):
         approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
 
@@ -190,15 +190,15 @@ def test_update_gr_rejects_closed_parent_sc(app_config):
         },
     )
     gr_id = created_gr["gr_id"]
-    cancel_gr(app_config, ADMIN, gr_id)
+    deny_gr(app_config, ADMIN, gr_id)
     finish_po(app_config, ADMIN, po_id)
-    close_sc(app_config, ADMIN, sc_id)
+    finish_sc(app_config, ADMIN, sc_id)
 
-    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+    with pytest.raises(ConflictError, match="Finished SC cannot be edited"):
         update_gr(app_config, ADMIN, gr_id, {"remark": "after close"})
 
 
-def test_cancel_gr_rejects_closed_parent_sc(app_config):
+def test_deny_gr_rejects_finished_parent_sc(app_config):
     from sc_gr_app.services.po_service import finish_po
     migrate(app_config)
     seed_users(app_config)
@@ -213,13 +213,13 @@ def test_cancel_gr_rejects_closed_parent_sc(app_config):
         },
     )
     gr_id = created_gr["gr_id"]
-    # First cancel: GR → cancelled (final state), close SC, then second cancel should fail
-    cancel_gr(app_config, ADMIN, gr_id)
+    # First deny: GR → denied (final state), finish SC, then second deny should fail
+    deny_gr(app_config, ADMIN, gr_id)
     finish_po(app_config, ADMIN, po_id)
-    close_sc(app_config, ADMIN, sc_id)
+    finish_sc(app_config, ADMIN, sc_id)
 
-    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
-        cancel_gr(app_config, ADMIN, gr_id)
+    with pytest.raises(ConflictError, match="Finished SC cannot be edited"):
+        deny_gr(app_config, ADMIN, gr_id)
 
 
 def test_requester_cannot_approve_sc_or_gr(app_config):
@@ -263,7 +263,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
             "vendor_id": "V1",
             "po_no": "PO001",
             "po_amount": 500,
-            "status": "activing",
+            "status": "active",
         },
     )
     po_id = created_po["po_id"]
@@ -432,7 +432,7 @@ def test_create_po_rejects_non_finite_po_amount(app_config, po_amount):
 @pytest.mark.parametrize(
     ("sc_no", "po_no", "po_status", "amount", "message"),
     [
-        ("SC001", "PO001", "activing", 900, "PO open amount is insufficient"),
+        ("SC001", "PO001", "active", 900, "PO open amount is insufficient"),
     ],
 )
 def test_create_gr_requires_complete_approved_sc_and_po(
@@ -553,7 +553,7 @@ def test_create_gr_requires_approved_sc(app_config):
                 "V1",
                 "PO001",
                 800,
-                "activing",
+                "active",
                 None,
                 None,
                 None,
@@ -638,8 +638,8 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
               created_at,
               approved_by,
               approved_at,
-              cancelled_by,
-              cancelled_at
+              denied_by,
+              denied_at
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -760,7 +760,7 @@ def test_create_po_allows_exact_decimal_budget_boundary(app_config):
             "sc_id": sc_id,
             "vendor_id": vendor_id,
             "po_amount": 0.2,
-            "status": "activing",
+            "status": "active",
         },
     )
 
@@ -921,7 +921,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
     seed_users(app_config)
 
     from sc_gr_app.services.sc_service import (
-        close_sc,
+        finish_sc,
         confirm_sc,
         create_sc_draft,
         deny_sc,
@@ -952,11 +952,11 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
     )
     confirm_sc(app_config, ADMIN, draft_sc_id)
     approved = approve_sc(app_config, ADMIN, draft_sc_id)
-    closed = close_sc(app_config, ADMIN, draft_sc_id)
+    closed = finish_sc(app_config, ADMIN, draft_sc_id)
 
     assert approved["sc_no"] == "SC001"
     assert approved["status"] == "approved"
-    assert closed["status"] == "closed"
+    assert closed["status"] == "finished"
 
     created_sc = create_sc(
         app_config,
@@ -1008,17 +1008,19 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_submit_sc": False,
         "can_approve_sc": False,
         "can_deny_sc": False,
-        "can_close_sc": True,
-        "can_revoke_sc": False,
+        "can_finish_sc": True,
+        "can_recall_sc": False,
         "can_delete_sc": False,
         "can_delete_po": True,
         "can_delete_gr": True,
+        "can_finish_gr": True,
         "can_manage_po": True,
         "can_manage_gr": True,
         "can_transfer_sc": True,
     }
     assert requester_detail["permissions"]["can_manage_po"] is True
     assert requester_detail["permissions"]["can_manage_gr"] is True
+    assert requester_detail["permissions"]["can_finish_gr"] is True
 
 
 def test_get_sc_detail_includes_po_budget_data(app_config):
@@ -1119,7 +1121,7 @@ def test_update_sc_allows_exact_decimal_boundary(app_config):
             "sc_id": sc_id,
             "vendor_id": vendor_id,
             "po_amount": 0.2,
-            "status": "activing",
+            "status": "active",
         },
     )
 
@@ -1242,7 +1244,7 @@ def test_admin_updates_po_with_budget_validation(app_config):
 def test_admin_approves_and_finishes_po(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="active")
 
     from sc_gr_app.services.po_service import finish_po
 
@@ -1265,10 +1267,10 @@ def test_update_po_rejects_invalid_vendor_closed_sc_and_sc_overallocation(app_co
         update_po(app_config, ADMIN, po_id, {"po_amount": 1001})
 
     with connect(app_config) as conn:
-        conn.execute("update sc_records set status = 'closed' where sc_id = ?", (sc_id,))
+        conn.execute("update sc_records set status = 'finished' where sc_id = ?", (sc_id,))
         conn.commit()
 
-    with pytest.raises(ConflictError, match="Closed SC cannot be edited"):
+    with pytest.raises(ConflictError, match="Finished SC cannot be edited"):
         update_po(app_config, ADMIN, po_id, {"po_no": "PO-CLOSED"})
 
 
@@ -1327,7 +1329,7 @@ def test_update_po_allows_exact_decimal_gr_usage_boundary(app_config):
 def test_po_update_approve_finish_are_audited(app_config):
     migrate(app_config)
     seed_users(app_config)
-    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="activing")
+    sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config, po_status="active")
 
     from sc_gr_app.services.po_service import finish_po, update_po
 
@@ -1346,13 +1348,13 @@ def test_po_update_approve_finish_are_audited(app_config):
 
 
 def test_gr_write_permissions(app_config):
-    """Requester owner can create/update GRs, but approve/cancel require admin."""
+    """Requester owner can create/update GRs, but approve/deny require admin."""
     migrate(app_config)
     seed_users(app_config)
     seed_other_user(app_config)
     sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
 
-    from sc_gr_app.services.gr_service import cancel_gr, create_gr, update_gr
+    from sc_gr_app.services.gr_service import deny_gr, create_gr, update_gr
 
     OTHER = {"user_id": "U2", "role": "requester", "machine_id": "M2", "user_name": "Other"}
 
@@ -1373,9 +1375,9 @@ def test_gr_write_permissions(app_config):
     with pytest.raises(PermissionDenied):
         update_gr(app_config, OTHER, gr_id, {"remark": "other changed"})
 
-    # Cancel remains admin-only (even owner cannot cancel)
+    # Deny remains admin-only (even owner cannot deny)
     with pytest.raises(PermissionDenied):
-        cancel_gr(app_config, USER, gr_id)
+        deny_gr(app_config, USER, gr_id)
 
 
 def test_admin_create_gr_preserves_business_requester_and_creator(app_config):
@@ -1452,7 +1454,7 @@ def test_admin_moves_pending_gr_between_pos_on_same_sc_using_sc_delta(app_config
                 vendor_id,
                 "PO002",
                 200,
-                "activing",
+                "active",
                 None,
                 None,
                 None,
@@ -1515,7 +1517,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO002",
             "po_amount": 500,
-            "status": "activing",
+            "status": "active",
         },
     )
     po2_id = created_po2["po_id"]
@@ -1584,7 +1586,7 @@ def test_update_pending_gr_rejects_unknown_requester_id(app_config):
         update_gr(app_config, ADMIN, gr_id, {"requester_id": "MISSING"})
 
 
-def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
+def test_admin_updates_approved_gr_con_value_and_denies_pending_gr(app_config):
     migrate(app_config)
     seed_users(app_config)
     sc_id, po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
@@ -1602,7 +1604,7 @@ def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
     )
     gr2_id = created_gr2["gr_id"]
 
-    from sc_gr_app.services.gr_service import cancel_gr, update_gr
+    from sc_gr_app.services.gr_service import deny_gr, update_gr
 
     updated = update_gr(
         app_config,
@@ -1610,11 +1612,11 @@ def test_admin_updates_approved_gr_con_value_and_cancels_pending_gr(app_config):
         gr1_id,
         {"con_value": 95, "remark": "invoice adjusted"},
     )
-    cancelled = cancel_gr(app_config, ADMIN, gr2_id)
+    denied = deny_gr(app_config, ADMIN, gr2_id)
 
     assert updated["con_value"] == 95
     assert updated["remark"] == "invoice adjusted"
-    assert cancelled["status"] == "cancelled"
+    assert denied["status"] == "denied"
 
 
 # ── Draft PO/GR + cascade submission ──
@@ -1637,7 +1639,7 @@ def test_create_draft_po_under_draft_sc(app_config):
         {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500},
     )
     assert po["status"] == "draft"
-    assert po["activing_date"] is None
+    assert po["active_date"] is None
 
 
 def test_reject_non_draft_po_under_draft_sc(app_config):
@@ -1654,7 +1656,7 @@ def test_reject_non_draft_po_under_draft_sc(app_config):
     with pytest.raises(ConflictError, match="Draft SC only allows draft PO"):
         create_po(
             app_config, USER,
-            {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "activing"},
+            {"sc_id": sc["sc_id"], "vendor_id": "V1", "po_amount": 500, "status": "active"},
         )
 
 
@@ -1811,15 +1813,15 @@ def test_approve_sc_with_cascade_pos(app_config):
     # Both draft POs should now be po_pending
     with connect(app_config) as conn:
         for po_id in [po1["po_id"], po2["po_id"]]:
-            po_check = conn.execute("SELECT status, activing_date FROM pos WHERE po_id = ?", (po_id,)).fetchone()
-            assert po_check["status"] == "activing"
-            assert po_check["activing_date"] is not None
+            po_check = conn.execute("SELECT status, active_date FROM pos WHERE po_id = ?", (po_id,)).fetchone()
+            assert po_check["status"] == "active"
+            assert po_check["active_date"] is not None
 
 
-def test_close_sc_blocked_by_unfinished_pos(app_config):
-    """close_sc is blocked if any PO is not finished."""
+def test_finish_sc_blocked_by_unfinished_pos(app_config):
+    """finish_sc is blocked if any PO is not finished."""
     from sc_gr_app.services.po_service import finish_po
-    from sc_gr_app.services.sc_service import close_sc
+    from sc_gr_app.services.sc_service import finish_sc
     migrate(app_config)
     seed_users(app_config)
 
@@ -1834,7 +1836,7 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
     )
     # Submit SC → submit PO → approve SC → approve PO
-    sc_data = {"sc_no": "SC-CLOS1", "requester_id": "U1", "request_type": "service",
+    sc_data = {"sc_no": "SC-FIN1", "requester_id": "U1", "request_type": "service",
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
                "vendor_ids": ["V1"]}
@@ -1842,18 +1844,18 @@ def test_close_sc_blocked_by_unfinished_pos(app_config):
     confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc_draft["sc_id"])
-    # PO is po_approved, not finished — close_sc should block
+    # PO is active, not finished — finish_sc should block
     with pytest.raises(ConflictError, match="PO.*not finished"):
-        close_sc(app_config, ADMIN, sc_draft["sc_id"])
+        finish_sc(app_config, ADMIN, sc_draft["sc_id"])
 
     # Finish PO
     finish_po(app_config, ADMIN, po["po_id"])
 
-    # Now close_sc should succeed
-    close_sc(app_config, ADMIN, sc_draft["sc_id"])
+    # Now finish_sc should succeed
+    finish_sc(app_config, ADMIN, sc_draft["sc_id"])
     with connect(app_config) as conn:
         sc_check = conn.execute("SELECT status FROM sc_records WHERE sc_id = ?", (sc_draft["sc_id"],)).fetchone()
-        assert sc_check["status"] == "closed"
+        assert sc_check["status"] == "finished"
 
 
 
@@ -1921,7 +1923,7 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
     submit_po(app_config, USER, po["po_id"])
     approve_sc(app_config, ADMIN, sc["sc_id"])
 
-    # PO is activing → submit_gr allowed
+    # PO is active → submit_gr allowed
     result = submit_gr(app_config, USER, gr["gr_id"])
     assert result["status"] == "manager_confirm"
 

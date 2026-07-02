@@ -32,25 +32,25 @@ def test_filter_with_range_suffixes(app_config):
 
     # Range filter: sc_amount_min
     results = search_scs(app_config, filters={"sc_amount_min": 150}, current_user={"role": "admin"})
-    assert len(results) == 1
-    assert results[0]["sc_id"] == "SC-B"
+    assert results["total"] == 1
+    assert results["rows"][0]["sc_id"] == "SC-B"
 
     # Range filter: sc_amount_max
     results = search_scs(app_config, filters={"sc_amount_max": 150}, current_user={"role": "admin"})
-    assert len(results) == 1
-    assert results[0]["sc_id"] == "SC-A"
+    assert results["total"] == 1
+    assert results["rows"][0]["sc_id"] == "SC-A"
 
     # Date range: service_period_start_from
     results = search_scs(app_config, filters={"service_period_start_from": "2026-03-01"}, current_user={"role": "admin"})
-    assert len(results) == 1
-    assert results[0]["sc_id"] == "SC-B"
+    assert results["total"] == 1
+    assert results["rows"][0]["sc_id"] == "SC-B"
 
     # Date range: service_period_start_to (upper bound)
     results = search_scs(app_config, filters={"service_period_start_to": "2026-03-01"}, current_user={"role": "admin"})
-    assert len(results) == 1
-    assert results[0]["sc_id"] == "SC-A"
+    assert results["total"] == 1
+    assert results["rows"][0]["sc_id"] == "SC-A"
 
     # Exact match still works
     results = search_scs(app_config, filters={"status": "approved"}, current_user={"role": "admin"})
-    assert len(results) == 1
-    assert results[0]["sc_id"] == "SC-B"
+    assert results["total"] == 1
+    assert results["rows"][0]["sc_id"] == "SC-B"

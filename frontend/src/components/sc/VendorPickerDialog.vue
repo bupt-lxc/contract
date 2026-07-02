@@ -22,12 +22,13 @@
       @selection-change="onSelectionChange"
     >
       <el-table-column type="selection" width="40" />
-      <el-table-column prop="vendor_name" :label="$t('vendor.vendorName')" width="180" />
+      <el-table-column :label="$t('vendor.vendor')" min-width="200">
+        <template #default="{ row }">
+          <span>{{ row.service_scope }} —— {{ row.vendor_name }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="vendor_id" :label="$t('vendor.vendorId')" width="120" />
-      <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140" />
-      <el-table-column prop="ksrm_vendor_code" :label="$t('vendor.ksrmCode')" width="120" />
-      <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="140" />
-      <el-table-column prop="contact_person" :label="$t('vendor.contact')" width="100" />
+      <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="120" />
       <template #empty><el-empty :description="$t('vendor.noRecords')" /></template>
     </el-table>
 

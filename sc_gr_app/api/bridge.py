@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 from sc_gr_app.api.schemas import fail, ok
@@ -33,8 +34,8 @@ def _format_entity_timestamps(entity: dict) -> dict:
     """Format timestamp fields in an entity dict for display."""
     _TIMESTAMP_FIELDS = (
         "created_at", "updated_at", "pending_date", "approved_date",
-        "closed_at", "cancelled_at", "confirmed_at", "activing_date",
-        "approved_at", "sent_at",
+        "finished_at", "denied_at", "confirmed_at", "active_date",
+        "approved_at", "sent_at", "submitted_date",
     )
     for f in _TIMESTAMP_FIELDS:
         if f in entity and entity[f]:
@@ -62,6 +63,56 @@ class ApiBridge:
     def get_version(self, _payload=None) -> dict:
         from sc_gr_app import __version__
         return ok(__version__)
+
+    def install_update(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            version = _require_payload_field(payload, "version")
+            installer_name = _require_payload_field(payload, "installer_name")
+            expected_hash = _require_payload_field(payload, "sha256")
+        except Exception as exc:
+            return fail(exc)
+
+        from sc_gr_app.update import _releases_dir, sha256_file
+
+        releases_dir = _releases_dir()
+        installer_src = releases_dir / installer_name
+        temp_dir = Path(os.getenv("TEMP")) / "pomp-update"
+
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return fail(exc)
+
+        installer_dst = temp_dir / installer_name
+
+        try:
+            import shutil
+            shutil.copy2(str(installer_src), str(installer_dst))
+        except OSError as exc:
+            return fail(exc)
+
+        actual_hash = sha256_file(installer_dst)
+        if actual_hash != expected_hash:
+            return fail(Exception(
+                "Update file is corrupted. Contact your administrator."
+            ))
+
+        install_dir = Path(sys.executable).parent
+        try:
+            import subprocess
+            subprocess.Popen(
+                [
+                    str(installer_dst),
+                    "/SILENT",
+                    f"/DIR={install_dir}",
+                ],
+            )
+        except OSError as exc:
+            return fail(exc)
+
+        os._exit(0)
+        return ok(None)  # unreachable, but satisfies the return type
 
     def switch_dev_role(self, payload) -> dict:
         """Switch the dev user's role between admin and requester. Dev mode only."""
@@ -194,7 +245,7 @@ class ApiBridge:
             sc_id = _require_payload_field(payload, "sc_id")
             data = _require_payload_field(payload, "data")
             result = sc_service.submit_sc(self.config, current_user, sc_id, data)
-            self._auto_open_outlook_draft("sc", sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "submit")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -216,7 +267,7 @@ class ApiBridge:
             sc_id = _require_payload_field(payload, "sc_id")
             cascade_pos = payload.get("cascade_pos", False)
             result = sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)
-            self._auto_open_outlook_draft("sc", sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "approve")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -227,18 +278,18 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             result = sc_service.deny_sc(self.config, current_user, sc_id)
-            self._auto_open_outlook_draft("sc", sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "deny")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
-    def close_sc(self, payload) -> dict:
+    def finish_sc(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            result = sc_service.close_sc(self.config, current_user, sc_id)
-            self._auto_open_outlook_draft("sc", sc_id)
+            result = sc_service.finish_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "finish")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -250,19 +301,19 @@ class ApiBridge:
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
             result = sc_service.confirm_sc(self.config, current_user, sc_id)
-            self._auto_open_outlook_draft("sc", sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "confirm")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
-    def revoke_sc(self, payload) -> dict:
-        """Move a pending SC back to draft."""
+    def recall_sc(self, payload) -> dict:
+        """Recall SC back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            result = sc_service.revoke_sc(self.config, current_user, sc_id)
-            self._auto_open_outlook_draft("sc", sc_id)
+            result = sc_service.recall_sc(self.config, current_user, sc_id)
+            self._auto_open_outlook_draft("sc", sc_id, "recall")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -294,7 +345,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
             result = po_service.create_po(self.config, current_user, data)
-            self._auto_open_outlook_draft("po", result["po_id"])
+            self._auto_open_outlook_draft("po", result["po_id"], "submit")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -315,37 +366,37 @@ class ApiBridge:
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             result = po_service.finish_po(self.config, current_user, po_id)
-            self._auto_open_outlook_draft("po", po_id)
+            self._auto_open_outlook_draft("po", po_id, "finish")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
     def submit_po(self, payload) -> dict:
-        """Submit a draft PO to activing (admin or SC owner)."""
+        """Submit a draft PO to active (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
             result = po_service.submit_po(self.config, current_user, po_id)
-            self._auto_open_outlook_draft("po", po_id)
+            self._auto_open_outlook_draft("po", po_id, "submit")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
-    def revoke_po(self, payload) -> dict:
-        """Roll back PO status (admin only)."""
+    def recall_po(self, payload) -> dict:
+        """Recall PO back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             po_id = _require_payload_field(payload, "po_id")
-            result = po_service.revoke_po(self.config, current_user, po_id)
-            self._auto_open_outlook_draft("po", po_id)
+            result = po_service.recall_po(self.config, current_user, po_id)
+            self._auto_open_outlook_draft("po", po_id, "recall")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
     def delete_po(self, payload) -> dict:
-        """Delete a po_pending or finished PO (admin or SC owner)."""
+        """Delete a draft PO (admin or SC owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
@@ -359,8 +410,17 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             data = _require_payload_field(payload, "data")
+            file_paths = data.pop("_attachments", None) or []
+            parent_sc_id = data.pop("_parent_sc_id", None)
+            parent_po_id = data.pop("_parent_po_id", None)
             result = gr_service.create_gr(self.config, current_user, data)
-            self._auto_open_outlook_draft("gr", result["gr_id"])
+            if file_paths:
+                self._add_attachments_inline(
+                    entity_type="gr", entity_id=result["gr_id"],
+                    file_paths=file_paths, current_user=current_user,
+                    parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                )
+            self._auto_open_outlook_draft("gr", result["gr_id"], "submit")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -382,18 +442,29 @@ class ApiBridge:
             gr_id = _require_payload_field(payload, "gr_id")
             con_value = payload.get("con_value")  # optional — auto-calculated from tax_rate if omitted
             result = gr_service.approve_gr(self.config, current_user, gr_id, con_value)
-            self._auto_open_outlook_draft("gr", gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "approve")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
-    def cancel_gr(self, payload) -> dict:
+    def deny_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            result = gr_service.cancel_gr(self.config, current_user, gr_id)
-            self._auto_open_outlook_draft("gr", gr_id)
+            result = gr_service.deny_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "deny")
+            return ok(_format_entity_timestamps(result))
+        except Exception as exc:
+            return fail(exc)
+
+    def finish_gr(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            gr_id = _require_payload_field(payload, "gr_id")
+            result = gr_service.finish_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "finish")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -405,7 +476,7 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             result = gr_service.confirm_gr(self.config, current_user, gr_id)
-            self._auto_open_outlook_draft("gr", gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "confirm")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
@@ -417,25 +488,25 @@ class ApiBridge:
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
             result = gr_service.submit_gr(self.config, current_user, gr_id)
-            self._auto_open_outlook_draft("gr", gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "submit")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
-    def revoke_gr(self, payload) -> dict:
-        """Roll back GR status (admin only)."""
+    def recall_gr(self, payload) -> dict:
+        """Recall GR back to draft."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            result = gr_service.revoke_gr(self.config, current_user, gr_id)
-            self._auto_open_outlook_draft("gr", gr_id)
+            result = gr_service.recall_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "recall")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
     def delete_gr(self, payload) -> dict:
-        """Delete a pending or cancelled GR (admin or GR owner)."""
+        """Delete a draft GR (admin or GR owner)."""
         try:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
@@ -465,7 +536,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_scs(self.config, **payload)))
+            result = query_service.search_scs(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -473,7 +545,8 @@ class ApiBridge:
         try:
             payload = self._payload(payload)
             self._require_current_user()
-            return ok(_format_list_timestamps(query_service.search_vendors(self.config, **payload)))
+            result = query_service.search_vendors(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -640,7 +713,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_pos(self.config, **payload)))
+            result = query_service.search_pos(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -649,7 +723,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_grs(self.config, **payload)))
+            result = query_service.search_grs(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -658,7 +733,8 @@ class ApiBridge:
             payload = self._payload(payload)
             current_user = self._require_current_user()
             payload = {**payload, "current_user": current_user}
-            return ok(_format_list_timestamps(query_service.search_operation_records(self.config, **payload)))
+            result = query_service.search_operation_records(self.config, **payload)
+            return ok({"rows": _format_list_timestamps(result["rows"]), "total": result["total"]})
         except Exception as exc:
             return fail(exc)
 
@@ -860,8 +936,147 @@ class ApiBridge:
         except (PermissionDenied, ValidationError, NotFound) as e:
             return fail(e)
 
-    def _auto_open_outlook_draft(self, entity_type: str, entity_id: str) -> None:
-        """After a status transition, find the latest pending queue entry
+    def open_entity_email(self, payload) -> dict:
+        """Generate and open an email draft for an SC/PO/GR entity in Outlook.
+
+        Uses notification config to determine recipients (requester as To,
+        admin_recipients + per-entity CC + default CC as Cc).
+        """
+        try:
+            user = self._require_current_user()
+            payload = self._required_payload(payload)
+            entity_type = _require_payload_field(payload, "entity_type")
+            entity_id = _require_payload_field(payload, "entity_id")
+
+            if entity_type not in ("sc", "po", "gr"):
+                return fail(ValidationError(f"Invalid entity_type: {entity_type}"))
+
+            import json
+            import pythoncom
+            import win32com.client
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.notification import sender
+
+            with connect(self.config) as conn:
+                # Fetch entity
+                entity_info = {}
+                if entity_type == "sc":
+                    row = conn.execute(
+                        "SELECT * FROM sc_records WHERE sc_id = ?", (entity_id,)
+                    ).fetchone()
+                elif entity_type == "po":
+                    row = conn.execute(
+                        """SELECT p.*, v.vendor_name FROM pos p
+                           LEFT JOIN vendors v ON v.vendor_id = p.vendor_id
+                           WHERE p.po_id = ?""", (entity_id,)
+                    ).fetchone()
+                elif entity_type == "gr":
+                    row = conn.execute(
+                        "SELECT * FROM gr_requests WHERE gr_id = ?", (entity_id,)
+                    ).fetchone()
+
+                if not row:
+                    return fail(NotFound(f"{entity_type.upper()} {entity_id} not found"))
+                entity_info = dict(row)
+
+                requester_id = entity_info.get("requester_id") or ""
+                to_ids = [requester_id] if requester_id else []
+
+                # Cc: admin_recipients + per-entity CC + default CC
+                cc_ids = []
+                admin_setting = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.admin_recipients'"
+                ).fetchone()
+                if admin_setting:
+                    cc_ids.extend(json.loads(admin_setting["setting_value"]) or [])
+
+                default_cc = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.default_cc'"
+                ).fetchone()
+                if default_cc:
+                    cc_ids.extend(json.loads(default_cc["setting_value"]) or [])
+
+                # Per-entity CC config
+                if entity_type == "sc":
+                    config_row = conn.execute(
+                        "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'sc' AND entity_id = ? AND enabled = 1",
+                        (entity_id,),
+                    ).fetchone()
+                elif entity_type == "po":
+                    config_row = conn.execute(
+                        "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+                        (entity_id,),
+                    ).fetchone()
+                elif entity_type == "gr":
+                    gr_po = conn.execute(
+                        "SELECT po_id FROM gr_requests WHERE gr_id = ?", (entity_id,)
+                    ).fetchone()
+                    if gr_po:
+                        config_row = conn.execute(
+                            "SELECT cc_user_ids FROM notification_config WHERE entity_type = 'po' AND entity_id = ? AND enabled = 1",
+                            (gr_po["po_id"],),
+                        ).fetchone()
+                    else:
+                        config_row = None
+
+                if config_row:
+                    extra_cc = json.loads(config_row["cc_user_ids"])
+                    cc_ids.extend(extra_cc or [])
+
+                # Deduplicate and remove To recipients from CC
+                seen = set()
+                unique_cc = []
+                for uid in cc_ids:
+                    if uid and uid not in seen:
+                        seen.add(uid)
+                        unique_cc.append(uid)
+                cc_ids = [uid for uid in unique_cc if uid not in to_ids]
+
+                # If no To recipients, promote CC to To
+                if not to_ids:
+                    if cc_ids:
+                        to_ids = cc_ids
+                        cc_ids = []
+                    else:
+                        to_ids = [user["user_id"]]
+
+                # Build synthetic entry for generate_draft
+                entry = {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "event_type": "status_change",
+                    "event_key": "notify",
+                    "to_recipients": json.dumps(to_ids),
+                    "cc_recipients": json.dumps(cc_ids),
+                    "actor_id": user["user_id"],
+                }
+                draft = sender.generate_draft(conn, entry)
+
+            pythoncom.CoInitialize()
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.Subject = draft["subject"]
+                mail.HTMLBody = draft["html_body"]
+                mail.To = "; ".join(draft["to_addresses"])
+                if draft["cc_addresses"]:
+                    mail.CC = "; ".join(draft["cc_addresses"])
+                for att_path in draft["attachment_paths"]:
+                    try:
+                        mail.Attachments.Add(att_path)
+                    except Exception:
+                        pass
+                mail.Save()
+                mail.Display()
+            finally:
+                pythoncom.CoUninitialize()
+
+            return ok({"message": "Draft opened in Outlook"})
+        except (PermissionDenied, ValidationError, NotFound) as e:
+            return fail(e)
+
+    def _auto_open_outlook_draft(self, entity_type: str, entity_id: str, event_key: str = "") -> None:
+        """After a status transition, find the matching pending queue entry
         and open the email draft in Outlook. Best-effort — failures are
         logged but never raise."""
         try:
@@ -871,12 +1086,21 @@ class ApiBridge:
             from sc_gr_app.notification import sender
 
             with connect(self.config) as conn:
-                entry = conn.execute(
-                    """SELECT * FROM notification_queue
-                       WHERE entity_type = ? AND entity_id = ? AND status = 'pending'
-                       ORDER BY id DESC LIMIT 1""",
-                    (entity_type, entity_id),
-                ).fetchone()
+                if event_key:
+                    entry = conn.execute(
+                        """SELECT * FROM notification_queue
+                           WHERE entity_type = ? AND entity_id = ? AND status = 'pending'
+                             AND event_key = ?
+                           ORDER BY id DESC LIMIT 1""",
+                        (entity_type, entity_id, event_key),
+                    ).fetchone()
+                else:
+                    entry = conn.execute(
+                        """SELECT * FROM notification_queue
+                           WHERE entity_type = ? AND entity_id = ? AND status = 'pending'
+                           ORDER BY id DESC LIMIT 1""",
+                        (entity_type, entity_id),
+                    ).fetchone()
                 if not entry:
                     return
                 draft = sender.generate_draft(conn, dict(entry))
@@ -996,6 +1220,67 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def _add_attachments_inline(self, entity_type, entity_id, file_paths, current_user,
+                                  parent_sc_id=None, parent_po_id=None):
+        """Copy files and create DB records inline — best-effort, never raises.
+
+        Used internally so create_gr / submit_sc can attach files before
+        _auto_open_outlook_draft runs.
+        """
+        try:
+            import shutil
+            from datetime import datetime, timezone
+            if not isinstance(file_paths, list) or len(file_paths) == 0:
+                return
+            timestamp = datetime.now(timezone.utc).isoformat()
+            sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                for fp in file_paths:
+                    src = Path(fp)
+                    if not src.exists():
+                        continue
+                    dest = self._resolve_target_path(
+                        entity_type, entity_id, src.name,
+                        parent_sc_id=parent_sc_id, parent_po_id=parent_po_id,
+                    )
+                    shutil.copy2(src, dest)
+                    conn.execute(
+                        "INSERT INTO attachments (entity_type, entity_id, filename, stored_path, file_size, created_by, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            entity_type, entity_id, dest.name,
+                            str(dest), dest.stat().st_size,
+                            current_user["user_id"], timestamp,
+                        ),
+                    )
+                    attach_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    attach_record = {
+                        "id": attach_id,
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "filename": dest.name,
+                        "stored_path": str(dest),
+                        "file_size": dest.stat().st_size,
+                        "created_by": current_user["user_id"],
+                        "created_at": timestamp,
+                    }
+                    write_operation_record(
+                        conn,
+                        action_type="add_attachment",
+                        object_type="attachment",
+                        object_id=str(attach_id),
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=None,
+                        after=attach_record,
+                    )
+                conn.commit()
+        except Exception:
+            pass  # best-effort; never block the parent operation
+
     def add_attachments(self, payload) -> dict:
         """Copy selected files into the attachments directory and create DB records."""
         try:
@@ -1020,6 +1305,7 @@ class ApiBridge:
             sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 for fp in file_paths:
                     src = Path(fp)
                     if not src.exists():
@@ -1132,6 +1418,7 @@ class ApiBridge:
             sc_id = _attachment_sc_id(entity_type, entity_id, parent_sc_id, parent_po_id)
             from sc_gr_app.db.connection import connect
             with connect(self.config) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 for src in file_paths:
                     src_path = Path(src)
                     filename = src_path.name
@@ -1251,6 +1538,8 @@ class ApiBridge:
                     "created_by": row["created_by"],
                     "created_at": row["created_at"],
                 }
+
+                conn.execute("BEGIN IMMEDIATE")
                 write_operation_record(
                     conn,
                     action_type="delete_attachment",
@@ -1347,7 +1636,7 @@ class ApiBridge:
                  "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
-                 "draft/pending/approved/closed/denied/manager_confirm", "Optional",
+                 "draft/pending/approved/finished/denied/manager_confirm", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
@@ -1442,7 +1731,7 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional (must exist if provided)",
                  "Optional", "Optional (defaults to importer)", "Required",
-                 "draft/activing/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "draft/active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
         sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
@@ -1537,7 +1826,7 @@ class ApiBridge:
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional", "Optional (defaults to importer)",
                  "Required", "Optional",
-                 "draft/manager_confirm/pending/approved/cancelled", "Optional",
+                 "draft/manager_confirm/pending/approved/denied/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
                  "YYYY-MM-DD", "YYYY-MM-DD", "YYYY-MM-DD"]
         sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",

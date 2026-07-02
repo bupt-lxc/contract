@@ -25,14 +25,14 @@ test("visibleDetailActions includes PO and GR management actions from permission
       can_manage_po: true,
       can_manage_gr: true,
       can_approve_sc: false,
-      can_close_sc: true,
+      can_finish_sc: true,
     },
   });
 
-  assert.deepEqual(actions, ["close-sc", "add-po", "add-gr"]);
+  assert.deepEqual(actions, ["finish-sc", "add-po", "add-gr"]);
   assert.equal(actions.includes("add-po"), true);
   assert.equal(actions.includes("add-gr"), true);
-  assert.equal(actions.includes("close-sc"), true);
+  assert.equal(actions.includes("finish-sc"), true);
   assert.equal(actions.includes("approve-sc"), false);
 });
 
@@ -62,7 +62,7 @@ test("visibleGrActions shows GR row actions only when status and permission matc
 
   assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "pending" }, detail), ["edit", "approve", "cancel"]);
   assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "approved" }, detail), ["edit"]);
-  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "cancelled" }, detail), []);
+  assert.deepEqual(visibleGrActions({ gr_id: "GR1", status: "denied" }, detail), []);
 });
 
 test("setScDetailTarget keeps SC context and switches between PO and GR targets", () => {

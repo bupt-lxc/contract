@@ -22,9 +22,9 @@
           </div>
           <div class="wb-cell__table">
             <div class="wb-cell__th">
-              <span class="wb-cell__th-id">{{ $t('home.colScNo') }}</span>
+              <span class="wb-cell__th-id">{{ $t('sc.scId') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.sc?.[cell.status]?.rows || [])"
@@ -32,9 +32,9 @@
               class="wb-cell__tr"
               @click="$router.push(`/sc/${row.sc_id}`)"
             >
-              <span class="wb-cell__td-id">{{ row.sc_no || row.sc_id }}</span>
+              <span class="wb-cell__td-id" :title="row.sc_id">{{ shortId(row.sc_id) }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -51,28 +51,57 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div class="wb-grid">
-        <div v-for="cell in poCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
+      <div class="wb-grid wb-grid--po">
+        <div v-for="cell in poCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`, { 'wb-cell--span2': cell.status === 'active' }]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.po?.[cell.status]?.count ?? 0 }}</span>
           </div>
           <div class="wb-cell__table">
-            <div class="wb-cell__th">
-              <span class="wb-cell__th-id">{{ $t('home.colPoNo') }}</span>
-              <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
-            </div>
-            <div
-              v-for="row in (data.po?.[cell.status]?.rows || [])"
-              :key="row.po_id"
-              class="wb-cell__tr"
-              @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
-            >
-              <span class="wb-cell__td-id">{{ row.po_no || row.po_id }}</span>
-              <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
-            </div>
+            <!-- Draft: PO No | SC NO | Requester | Created At -->
+            <template v-if="cell.status === 'draft'">
+              <div class="wb-cell__th">
+                <span class="wb-cell__th-id">{{ $t('home.colPoNo') }}</span>
+                <span class="wb-cell__th-sc">{{ $t('home.colScNo') }}</span>
+                <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+                <span class="wb-cell__th-date">{{ $t('home.colCreatedAt') }}</span>
+              </div>
+              <div
+                v-for="row in (data.po?.[cell.status]?.rows || [])"
+                :key="row.po_id"
+                class="wb-cell__tr"
+                @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+              >
+                <span class="wb-cell__td-id" :title="row.po_id">{{ row.po_no || shortId(row.po_id) }}</span>
+                <span class="wb-cell__td-sc">{{ row.sc_no }}</span>
+                <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+                <span class="wb-cell__td-date">{{ (row.created_at || '').slice(0, 10) || '-' }}</span>
+              </div>
+            </template>
+            <!-- Activating: PO No | SC NO | Requester | Start Day | End Day | Open PO Amt -->
+            <template v-else>
+              <div class="wb-cell__th wb-cell__th--activating">
+                <span class="wb-cell__th-id">{{ $t('home.colPoNo') }}</span>
+                <span class="wb-cell__th-sc">{{ $t('home.colScNo') }}</span>
+                <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+                <span class="wb-cell__th-day">{{ $t('home.colStartDay') }}</span>
+                <span class="wb-cell__th-day">{{ $t('home.colEndDay') }}</span>
+                <span class="wb-cell__th-amt">{{ $t('home.colOpenPoAmount') }}</span>
+              </div>
+              <div
+                v-for="row in (data.po?.[cell.status]?.rows || [])"
+                :key="row.po_id"
+                class="wb-cell__tr wb-cell__tr--activating"
+                @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+              >
+                <span class="wb-cell__td-id" :title="row.po_id">{{ row.po_no || shortId(row.po_id) }}</span>
+                <span class="wb-cell__td-sc">{{ row.sc_no }}</span>
+                <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+                <span class="wb-cell__td-day">{{ (row.contract_from || '').slice(0, 10) || '-' }}</span>
+                <span class="wb-cell__td-day">{{ (row.contract_to || '').slice(0, 10) || '-' }}</span>
+                <span class="wb-cell__td-amt">{{ formatCurrency(row.open_po_amount) }}</span>
+              </div>
+            </template>
             <div v-if="!data.po?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
           <div class="wb-cell__link" @click="$router.push(`/po?status=${cell.status}`)">{{ $t('home.viewAllOfType') }}</div>
@@ -98,7 +127,7 @@
             <div class="wb-cell__th">
               <span class="wb-cell__th-id">{{ $t('home.colGrId') }}</span>
               <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
-              <span class="wb-cell__th-date">{{ $t('home.colCreatedAt') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.gr?.[cell.status]?.rows || [])"
@@ -106,9 +135,9 @@
               class="wb-cell__tr"
               @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)"
             >
-              <span class="wb-cell__td-id">{{ row.gr_id }}</span>
+              <span class="wb-cell__td-id" :title="row.gr_id">{{ shortId(row.gr_id) }}</span>
               <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
-              <span class="wb-cell__td-date">{{ (row.created_at || '').slice(0, 10) || '-' }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.gr?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
           </div>
@@ -139,8 +168,7 @@ const scCells = computed(() => [
 
 const poCells = computed(() => [
   { status: 'draft',    label: t('status.draft') },
-  { status: 'activing', label: t('status.activing') },
-  { status: 'finished', label: t('status.finished') },
+  { status: 'active', label: t('status.active') },
 ])
 
 const grCells = computed(() => [
@@ -153,11 +181,38 @@ const grCells = computed(() => [
 function headStatus(status) {
   if (status.includes('draft')) return 'draft'
   if (status.includes('manager')) return 'manager'
-  if (status.includes('activing')) return 'pending'
+  if (status.includes('active')) return 'pending'
   if (status.includes('pending')) return 'pending'
   if (status.includes('approved')) return 'approved'
   if (status.includes('finished')) return 'approved'
   return 'draft'
+}
+
+function shortId(id) {
+  if (!id) return '-'
+  const parts = id.split('-')
+  return parts.slice(2).join('-')
+}
+
+function formatCurrency(val) {
+  if (val == null || isNaN(val)) return '-'
+  return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function dateColLabel(status) {
+  if (status === 'draft') return t('home.colCreatedAt')
+  if (status === 'manager_confirm') return t('home.colSubmitted')
+  if (status === 'approved' || status === 'finished') return t('home.colDeadline')
+  return t('home.colPendingDate')
+}
+
+function cellDate(status, row) {
+  let val
+  if (status === 'draft') val = row.created_at
+  else if (status === 'manager_confirm') val = row.submitted_date
+  else if (status === 'approved' || status === 'finished') val = row.deadline
+  else val = row.pending_date
+  return (val || '').slice(0, 10) || '-'
 }
 
 onMounted(async () => {
@@ -221,6 +276,14 @@ onMounted(async () => {
 
 .wb-grid--4 {
   grid-template-columns: repeat(4, 1fr);
+}
+
+.wb-grid--po {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.wb-cell--span2 {
+  grid-column: span 2;
 }
 
 /* Cell */
@@ -310,7 +373,53 @@ onMounted(async () => {
 
 .wb-cell__th-date,
 .wb-cell__td-date {
-  flex: 0 0 28%;
+  flex: 0 0 22%;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SC NO column */
+.wb-cell__th-sc,
+.wb-cell__td-sc {
+  flex: 0 0 18%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Activating: 6-column layout */
+.wb-cell__th--activating .wb-cell__th-id,
+.wb-cell__tr--activating .wb-cell__td-id {
+  flex: 1 1 20%;
+}
+
+.wb-cell__th--activating .wb-cell__th-sc,
+.wb-cell__tr--activating .wb-cell__td-sc {
+  flex: 0 0 14%;
+}
+
+.wb-cell__th--activating .wb-cell__th-sub,
+.wb-cell__tr--activating .wb-cell__td-sub {
+  flex: 0 0 14%;
+}
+
+.wb-cell__th-day,
+.wb-cell__td-day {
+  flex: 0 0 16%;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th-amt,
+.wb-cell__td-amt {
+  flex: 0 0 18%;
   min-width: 0;
   text-align: right;
   overflow: hidden;

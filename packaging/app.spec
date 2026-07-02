@@ -14,11 +14,7 @@ _pathext = [str(project_root), _sitepkg]
 
 # Collect all webview submodules — pywebview uses dynamic imports inside guilib.py
 # and empty __init__.py files that PyInstaller's static analysis skips.
-_hiddenimports = [
-    "pystray",
-    "PIL",
-    "PIL.Image",
-]
+_hiddenimports = []
 _hiddenimports.extend(collect_submodules("webview"))
 
 a = Analysis(

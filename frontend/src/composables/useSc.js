@@ -1,7 +1,7 @@
 import { reactive, readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
 
-export function useSc(pageSize = 20) {
+export function useSc(pageSize = 10) {
   const state = reactive({
     rows: [],
     total: 0,
@@ -73,8 +73,8 @@ export function useSc(pageSize = 20) {
     await callApi('deny_sc', { sc_id: scId })
   }
 
-  async function closeSc(scId) {
-    await callApi('close_sc', { sc_id: scId })
+  async function finishSc(scId) {
+    await callApi('finish_sc', { sc_id: scId })
   }
 
   function setFilters(filters) {
@@ -99,7 +99,7 @@ export function useSc(pageSize = 20) {
     state: readonly(state),
     searchScs, fetchDetail,
     createDraft, submitSc, updateSc,
-    approveSc, denySc, closeSc,
+    approveSc, denySc, finishSc,
     setFilters, resetFilters,
     onSortChange, onPageChange, onPageSizeChange
   }

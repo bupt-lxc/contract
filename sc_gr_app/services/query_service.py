@@ -165,6 +165,9 @@ def _search(
     _append_filters(clauses, params, filters, allowed_filters, like_fields)
 
     where_sql = f" where {' and '.join(clauses)}" if clauses else ""
+
+    count_sql = f"select count(*) from ({select_sql}{where_sql}) subq"
+
     sql = (
         f"{select_sql}{where_sql} "
         f"order by {sort_column} {_normalize_direction(direction)} "
@@ -173,9 +176,10 @@ def _search(
     params.extend([_normalize_limit(limit), _normalize_offset(offset)])
 
     with connect(config) as conn:
+        total = conn.execute(count_sql, params[:-2]).fetchone()[0]
         rows = conn.execute(sql, params).fetchall()
 
-    return [_row_to_dict(row) for row in rows]
+    return {"rows": [_row_to_dict(row) for row in rows], "total": total}
 
 
 def search_scs(
@@ -253,7 +257,7 @@ def search_scs(
             "updated_at": "sc.updated_at",
             "approved_by": "sc.approved_by",
             "approved_at": "sc.approved_at",
-            "closed_at": "sc.closed_at",
+            "closed_at": "sc.finished_at",
             "asset": "sc.asset",
             "pending_date": "sc.pending_date",
             "pending_date_from": "sc.pending_date",
@@ -440,9 +444,9 @@ def search_pos(
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
             "purchaser": "po.purchaser",
-            "activing_date": "po.activing_date",
-            "activing_date_from": "po.activing_date",
-            "activing_date_to": "po.activing_date",
+            "active_date": "po.active_date",
+            "active_date_from": "po.active_date",
+            "active_date_to": "po.active_date",
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
@@ -461,7 +465,7 @@ def search_pos(
             "contract_to": "po.contract_to",
             "contract_type": "po.contract_type",
             "cost_center": "po.cost_center",
-            "activing_date": "po.activing_date",
+            "active_date": "po.active_date",
             "created_at": "po.created_at",
             "updated_at": "po.updated_at",
         },
@@ -561,8 +565,8 @@ def search_grs(
             "created_at_to": "gr.created_at",
             "approved_by": "gr.approved_by",
             "approved_at": "gr.approved_at",
-            "cancelled_by": "gr.cancelled_by",
-            "cancelled_at": "gr.cancelled_at",
+            "cancelled_by": "gr.denied_by",
+            "cancelled_at": "gr.denied_at",
             "pending_date": "gr.pending_date",
             "pending_date_from": "gr.pending_date",
             "pending_date_to": "gr.pending_date",
@@ -595,7 +599,7 @@ def search_grs(
             "status": "gr.status",
             "created_at": "gr.created_at",
             "approved_at": "gr.approved_at",
-            "cancelled_at": "gr.cancelled_at",
+            "cancelled_at": "gr.denied_at",
             "pending_date": "gr.pending_date",
             "approved_date": "gr.approved_date",
             "confirmed_at": "gr.confirmed_at",
@@ -621,7 +625,7 @@ def workbench_data(
       - Pending: all records
     """
     sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
-    po_statuses = ["draft", "activing", "finished"]
+    po_statuses = ["draft", "active"]
     gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
 
     def _is_own_only(status: str) -> bool:
@@ -631,7 +635,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "activing", "manager_confirm", "approved")
+            return status not in ("pending", "active", "manager_confirm", "approved")
         return False
 
     user_id = current_user["user_id"] if current_user else None
@@ -651,6 +655,7 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
+                f"sc.created_at, sc.pending_date, sc.submitted_date, "
                 f"sc.service_period_end AS deadline, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
@@ -674,10 +679,22 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
-                f"po.contract_to AS deadline, "
-                f"u.user_name AS requester_name "
+                f"po.created_at, po.contract_from, po.contract_to, "
+                f"sc.sc_no, "
+                f"u.user_name AS requester_name, "
+                f"po.po_amount - COALESCE(gr_sums.pending_total, 0) "
+                f"- COALESCE(gr_sums.con_value_total, 0) AS open_po_amount "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
+                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"LEFT JOIN ("
+                f"  SELECT po_id,"
+                f"    SUM(CASE WHEN status IN ('pending', 'manager_confirm') "
+                f"THEN estimated_amount ELSE 0 END) AS pending_total,"
+                f"    SUM(CASE WHEN status = 'approved' "
+                f"THEN con_value ELSE 0 END) AS con_value_total"
+                f"  FROM gr_requests GROUP BY po_id"
+                f") gr_sums ON gr_sums.po_id = po.po_id "
                 f"{where} ORDER BY po.contract_to ASC LIMIT 6",
                 params,
             ).fetchall()
@@ -699,7 +716,7 @@ def workbench_data(
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
-                f"gr.created_at, "
+                f"gr.created_at, gr.pending_date, gr.submitted_date, "
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "

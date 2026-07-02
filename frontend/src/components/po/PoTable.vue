@@ -11,10 +11,20 @@
       <template #default="{ row }"><StatusBadge :status="row.status" /></template>
     </el-table-column>
     <el-table-column prop="po_no" :label="$t('po.poNo')" width="130" sortable>
-      <template #default="{ row }">{{ row.po_no || row.po_id }}</template>
+      <template #default="{ row }">
+        <template v-if="row.po_no">{{ row.po_no }}</template>
+        <el-tooltip v-else :content="row.po_id" placement="top">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.po_id) }}</span>
+        </el-tooltip>
+      </template>
     </el-table-column>
-    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" sortable />
-    <el-table-column v-if="!hideScInfo" prop="sc_no" :label="$t('filter.scNo')" width="130" sortable />
+    <el-table-column v-if="!hideScInfo" prop="sc_id" :label="$t('filter.scId')" width="130" sortable>
+      <template #default="{ row }">
+        <el-tooltip :content="row.sc_id" placement="top" :disabled="!row.sc_id">
+          <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.sc_id) }}</span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip sortable />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip sortable />
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" sortable />
@@ -31,15 +41,15 @@
     <el-table-column prop="contract_to" :label="$t('po.contractEndDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_to) }}</template>
     </el-table-column>
-    <el-table-column prop="activing_date" :label="$t('po.activingDate')" width="120" sortable>
-      <template #default="{ row }">{{ formatDate(row.activing_date) }}</template>
+    <el-table-column prop="active_date" :label="$t('po.activeDate')" width="120" sortable>
+      <template #default="{ row }">{{ formatDate(row.active_date) }}</template>
     </el-table-column>
     <el-table-column :label="$t('po.actions')" width="200" fixed="right">
       <template #default="{ row }">
-        <el-button type="primary" link size="small" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
-        <el-button type="primary" link size="small" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
-        <el-button v-if="row.status === 'draft'" type="primary" link size="small" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="row.status === 'activing'" type="info" link size="small" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('detail', row)">{{ $t('common.detail') }}</el-button>
+        <el-button type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('edit', row)">{{ $t('po.edit') }}</el-button>
+        <el-button v-if="row.status === 'draft'" type="primary" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('submit', row)">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="row.status === 'active'" type="info" link size="small" :disabled="loadingState.count > 0" @click.stop="$emit('finish', row)">{{ $t('po.finish') }}</el-button>
       </template>
     </el-table-column>
     <template #empty><el-empty :description="$t('po.noRecords')" /></template>
@@ -49,6 +59,7 @@
 <script setup>
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import { loadingState } from '@/api/bridge.js'
 
 defineProps({
   rows: { type: Array, default: () => [] },
@@ -58,6 +69,7 @@ defineProps({
 
 defineEmits(['detail', 'edit', 'finish', 'submit'])
 
+function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function rowClass({ row }) { return `status-row-${row.status || ''}` }
 function formatDate(val) { return val ? val.slice(0, 10) : '-' }
 </script>

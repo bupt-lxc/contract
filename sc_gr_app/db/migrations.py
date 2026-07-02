@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 30
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1056,6 +1056,277 @@ def _migrate_v27(conn) -> None:
     _record(conn, 27)
 
 
+def _migrate_v28(conn) -> None:
+    """Rename status values: SC closed→finished, GR cancelled→denied. Add GR finished.
+    Rename columns: closed_at→finished_at, cancelled_by→denied_by, cancelled_at→denied_at.
+    Add finished_by, finished_at to gr_requests."""
+    # --- sc_records: closed → finished, closed_at → finished_at ---
+    if _table_exists(conn, "sc_records"):
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+        conn.execute("""
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              finished_at TEXT,
+              confirmed_at TEXT,
+              asset TEXT NOT NULL DEFAULT 'N',
+              asset_nums TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              internal_system_number TEXT,
+              currency TEXT NOT NULL DEFAULT 'CNY',
+              CHECK (
+                status = 'draft'
+                OR status = 'manager_confirm'
+                OR (
+                  request_type IS NOT NULL
+                  AND cost_center IS NOT NULL
+                  AND sc_amount IS NOT NULL
+                  AND service_period_start IS NOT NULL
+                  AND service_period_end IS NOT NULL
+                )
+              )
+            )
+        """)
+        conn.execute("""
+            INSERT INTO sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end, status, description,
+              created_by, created_at, updated_at, approved_by, approved_at, finished_at,
+              confirmed_at, asset, asset_nums, pending_date, approved_date,
+              internal_system_number, currency
+            )
+            SELECT
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end,
+              CASE WHEN status = 'closed' THEN 'finished' ELSE status END,
+              description,
+              created_by, created_at, updated_at, approved_by, approved_at, closed_at,
+              confirmed_at, asset, asset_nums, pending_date, approved_date,
+              internal_system_number, COALESCE(currency, 'CNY')
+            FROM sc_records_old
+        """)
+        conn.execute("DROP TABLE sc_records_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+
+    # --- gr_requests: cancelled → denied, add finished ---
+    if _table_exists(conn, "gr_requests"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        has_finished_cols = "finished_by" in existing and "finished_at" in existing
+        has_denied_cols = "denied_by" in existing and "denied_at" in existing
+
+        if not has_finished_cols or not has_denied_cols:
+            conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+            conn.execute("""
+                CREATE TABLE gr_requests (
+                  gr_id TEXT PRIMARY KEY,
+                  gr_no TEXT,
+                  po_id TEXT NOT NULL REFERENCES pos(po_id),
+                  requester_id TEXT NOT NULL REFERENCES users(user_id),
+                  estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+                  con_value REAL CHECK (con_value >= 0),
+                  gross_cost REAL,
+                  tax_rate REAL,
+                  status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+                  remark TEXT,
+                  created_by TEXT NOT NULL REFERENCES users(user_id),
+                  created_at TEXT NOT NULL,
+                  approved_by TEXT REFERENCES users(user_id),
+                  approved_at TEXT,
+                  denied_by TEXT REFERENCES users(user_id),
+                  denied_at TEXT,
+                  finished_by TEXT REFERENCES users(user_id),
+                  finished_at TEXT,
+                  confirmed_at TEXT,
+                  pending_date TEXT,
+                  approved_date TEXT,
+                  goods_service_description TEXT,
+                  confirmation_name TEXT,
+                  delivery_from TEXT,
+                  delivery_to TEXT,
+                  last_delivery TEXT
+                )
+            """)
+            conn.execute("""
+                INSERT INTO gr_requests (
+                  gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+                  gross_cost, tax_rate, status, remark,
+                  created_by, created_at, approved_by, approved_at,
+                  denied_by, denied_at,
+                  finished_by, finished_at,
+                  confirmed_at, pending_date, approved_date,
+                  goods_service_description, confirmation_name,
+                  delivery_from, delivery_to, last_delivery
+                )
+                SELECT
+                  gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+                  gross_cost, tax_rate,
+                  CASE WHEN status = 'cancelled' THEN 'denied' ELSE status END,
+                  remark,
+                  created_by, created_at, approved_by, approved_at,
+                  cancelled_by, cancelled_at,
+                  NULL, NULL,
+                  confirmed_at, pending_date, approved_date,
+                  goods_service_description, confirmation_name,
+                  delivery_from, delivery_to, last_delivery
+                FROM gr_requests_old
+            """)
+            conn.execute("DROP TABLE gr_requests_old")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+
+    # Update notification transition defaults
+    if _table_exists(conn, "app_settings"):
+        timestamp = utc_now()
+        sc_transitions = (
+            '{"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"confirm":{"to":["requester"],"cc":["actor"]},'
+            '"approve":{"to":["requester"],"cc":["actor"]},'
+            '"deny":{"to":["requester"],"cc":["actor"]},'
+            '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"recall":{"to":["requester"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.sc", sc_transitions, timestamp),
+        )
+        gr_transitions = (
+            '{"create":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"submit":{"to":["notify.admin_recipients"],"cc":["requester"]},'
+            '"confirm":{"to":["requester"],"cc":["actor"]},'
+            '"approve":{"to":["requester"],"cc":["actor"]},'
+            '"deny":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"finish":{"to":["requester","notify.admin_recipients"],"cc":[]},'
+            '"recall":{"to":["requester"],"cc":[]}}'
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+            ("notify.transitions.gr", gr_transitions, timestamp),
+        )
+
+    _record(conn, 28)
+
+
+def _migrate_v29(conn) -> None:
+    """Add submitted_date column to sc_records and gr_requests."""
+    if _table_exists(conn, "sc_records"):
+        sc_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "submitted_date" not in sc_cols:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN submitted_date TEXT")
+    if _table_exists(conn, "gr_requests"):
+        gr_cols = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "submitted_date" not in gr_cols:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN submitted_date TEXT")
+    _record(conn, 29)
+
+
+def _migrate_v30(conn) -> None:
+    """Rename activing to active: status value, column name, CHECK constraint."""
+    if not _table_exists(conn, "pos"):
+        _record(conn, 30)
+        return
+
+    conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    conn.execute("""
+        CREATE TABLE pos (
+          po_id TEXT PRIMARY KEY,
+          sc_id TEXT NOT NULL REFERENCES sc_records(sc_id),
+          vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+          po_no TEXT,
+          requester_id TEXT,
+          po_amount REAL NOT NULL CHECK (po_amount > 0),
+          status TEXT NOT NULL CHECK (status IN ('draft','active','finished')),
+          contract_from TEXT,
+          contract_to TEXT,
+          contract_no TEXT,
+          payment_frequency TEXT,
+          contract_pos TEXT,
+          contract_type TEXT,
+          cost_center TEXT,
+          purchaser TEXT,
+          active_date TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO pos (
+          po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+          contract_from, contract_to, contract_no, payment_frequency,
+          contract_pos, contract_type, cost_center, purchaser,
+          active_date, created_at, updated_at
+        )
+        SELECT
+          po_id, sc_id, vendor_id, po_no, requester_id, po_amount,
+          CASE WHEN status = 'activing' THEN 'active' ELSE status END AS status,
+          contract_from, contract_to, contract_no, payment_frequency,
+          contract_pos, contract_type, cost_center, purchaser,
+          activing_date, created_at, updated_at
+        FROM pos_old
+    """)
+    conn.execute("DROP TABLE pos_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+
+    # Rebuild gr_requests to fix FK references (they point to pos_old after rename)
+    if _table_exists(conn, "gr_requests"):
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              gr_no TEXT,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              gross_cost REAL,
+              tax_rate REAL,
+              status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              denied_by TEXT REFERENCES users(user_id),
+              denied_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              finished_at TEXT,
+              confirmed_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              submitted_date TEXT,
+              goods_service_description TEXT,
+              confirmation_name TEXT,
+              delivery_from TEXT,
+              delivery_to TEXT,
+              last_delivery TEXT
+            )
+        """)
+        conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+        conn.execute("DROP TABLE gr_requests_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+
+    _record(conn, 30)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1200,6 +1471,24 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v27(conn)
                 conn.commit()
+            if 28 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("PRAGMA legacy_alter_table = ON")
+                conn.execute("BEGIN")
+                _migrate_v28(conn)
+                conn.commit()
+                conn.execute("PRAGMA legacy_alter_table = OFF")
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 29 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v29(conn)
+                conn.commit()
+            if 30 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v30(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

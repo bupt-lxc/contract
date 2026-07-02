@@ -56,7 +56,7 @@ def seed_query_data(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO-ALPHA",
             "po_amount": 800,
-            "status": "activing",
+            "status": "active",
         },
     )
     po_id = created_po["po_id"]
@@ -77,16 +77,16 @@ def seed_query_data(app_config):
 def test_query_service_searches_seeded_sc_vendor_and_po(app_config):
     seed_query_data(app_config)
 
-    assert search_scs(app_config, text="alpha")[0]["sc_no"] == "SC-ALPHA"
-    assert search_scs(app_config, text="Alpha Vendor")[0]["sc_no"] == "SC-ALPHA"
-    assert search_vendors(app_config, text="KV-1")[0]["vendor_name"] == "Alpha Vendor"
-    assert search_pos(app_config, text="PO-ALPHA")[0]["po_no"] == "PO-ALPHA"
+    assert search_scs(app_config, text="alpha")["rows"][0]["sc_no"] == "SC-ALPHA"
+    assert search_scs(app_config, text="Alpha Vendor")["rows"][0]["sc_no"] == "SC-ALPHA"
+    assert search_vendors(app_config, text="KV-1")["rows"][0]["vendor_name"] == "Alpha Vendor"
+    assert search_pos(app_config, text="PO-ALPHA")["rows"][0]["po_no"] == "PO-ALPHA"
 
 
 def test_search_pos_returns_derived_open_po_amount(app_config):
     seed_query_data(app_config)
 
-    row = search_pos(app_config, text="PO-ALPHA")[0]
+    row = search_pos(app_config, text="PO-ALPHA")["rows"][0]
 
     assert row["open_po_amount"] == 700
 
@@ -95,7 +95,7 @@ def test_search_pos_returns_zero_for_fully_consumed_po(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=800)
 
-    row = search_pos(app_config, filters={"po_id": po_id})[0]
+    row = search_pos(app_config, filters={"po_id": po_id})["rows"][0]
 
     assert row["open_po_amount"] == 0
 
@@ -103,7 +103,7 @@ def test_search_pos_returns_zero_for_fully_consumed_po(app_config):
 def test_search_pos_can_sort_by_contract_to(app_config):
     seed_query_data(app_config)
 
-    rows = search_pos(app_config, sort="contract_to", direction="asc")
+    rows = search_pos(app_config, sort="contract_to", direction="asc")["rows"]
 
     assert rows[0]["po_no"] == "PO-ALPHA"
 
@@ -148,7 +148,7 @@ def test_filters_and_pagination_work_for_scs(app_config):
         },
     )
 
-    rows = search_scs(
+    result = search_scs(
         app_config,
         filters={"requester_id": "U1"},
         sort="sc_no",
@@ -157,13 +157,14 @@ def test_filters_and_pagination_work_for_scs(app_config):
         offset=1,
     )
 
-    assert [row["sc_no"] for row in rows] == ["SC-BETA"]
+    assert [row["sc_no"] for row in result["rows"]] == ["SC-BETA"]
+    assert result["total"] == 2
 
 
 def test_search_grs_finds_by_remark(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
-    rows = search_grs(app_config, text="remark")
+    rows = search_grs(app_config, text="remark")["rows"]
 
     assert rows[0]["gr_id"] == gr_id
     assert rows[0]["po_no"] == "PO-ALPHA"
@@ -180,7 +181,7 @@ def test_search_operation_records_returns_audit_rows(app_config):
         filters={"object_type": "gr"},
         sort="action_type",
         direction="asc",
-    )
+    )["rows"]
 
     assert [row["action_type"] for row in rows] == ["approve_gr", "create_gr"]
 
@@ -189,9 +190,9 @@ def test_search_operation_records_searches_text_fields(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
     approve_gr(app_config, ADMIN, gr_id, con_value=90)
 
-    assert search_operation_records(app_config, text="approve_gr")[0]["action_type"] == "approve_gr"
-    assert search_operation_records(app_config, text=gr_id.lower())[0]["object_id"] == gr_id
-    assert search_operation_records(app_config, text="90")[0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text="approve_gr")["rows"][0]["action_type"] == "approve_gr"
+    assert search_operation_records(app_config, text=gr_id.lower())["rows"][0]["object_id"] == gr_id
+    assert search_operation_records(app_config, text="90")["rows"][0]["action_type"] == "approve_gr"
 
 
 def test_search_operation_records_scopes_draft_sc_rows_to_owner(app_config):
@@ -201,9 +202,9 @@ def test_search_operation_records_scopes_draft_sc_rows_to_owner(app_config):
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     draft_sc_id = created["sc_id"]
 
-    admin_rows = search_operation_records(app_config, current_user=ADMIN, limit=100)
-    owner_rows = search_operation_records(app_config, current_user=USER, limit=100)
-    other_rows = search_operation_records(app_config, current_user=OTHER_USER, limit=100)
+    admin_rows = search_operation_records(app_config, current_user=ADMIN, limit=100)["rows"]
+    owner_rows = search_operation_records(app_config, current_user=USER, limit=100)["rows"]
+    other_rows = search_operation_records(app_config, current_user=OTHER_USER, limit=100)["rows"]
 
     assert [row["object_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["object_id"] for row in owner_rows] == [draft_sc_id]
@@ -238,10 +239,10 @@ def test_invalid_sort_direction_raises_validation_error(app_config, direction):
 def test_text_search_keeps_sql_looking_input_bound(app_config):
     seed_query_data(app_config)
 
-    rows = search_scs(app_config, text="alpha%' OR 1=1 --")
+    rows = search_scs(app_config, text="alpha%' OR 1=1 --")["rows"]
 
     assert rows == []
-    assert search_scs(app_config, text="alpha")[0]["sc_no"] == "SC-ALPHA"
+    assert search_scs(app_config, text="alpha")["rows"][0]["sc_no"] == "SC-ALPHA"
 
 
 @pytest.mark.parametrize(
@@ -278,17 +279,17 @@ def test_invalid_pagination_values_raise_validation_error(
 def test_pagination_accepts_ints_and_canonical_digit_strings(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
-    rows = search_scs(app_config, limit="10", offset="0")
+    result = search_scs(app_config, limit="10", offset="0")
 
-    assert [row["sc_id"] for row in rows] == [sc_id]
+    assert [row["sc_id"] for row in result["rows"]] == [sc_id]
 
 
 def test_limit_is_clamped_to_max_limit(app_config):
     sc_id, po_id, gr_id, _vendor_id = seed_query_data(app_config)
 
-    rows = search_scs(app_config, limit=501)
+    result = search_scs(app_config, limit=501)
 
-    assert [row["sc_id"] for row in rows] == [sc_id]
+    assert [row["sc_id"] for row in result["rows"]] == [sc_id]
 
 
 def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
@@ -302,13 +303,13 @@ def test_sc_search_hides_drafts_from_admin_and_other_requesters(app_config):
     created = create_sc_draft(app_config, USER, {"requester_id": "U1"})
     draft_sc_id = created["sc_id"]
 
-    admin_rows = query_service.search_scs(app_config, current_user=ADMIN, limit=100)
-    owner_rows = query_service.search_scs(app_config, current_user=USER, limit=100)
+    admin_rows = query_service.search_scs(app_config, current_user=ADMIN, limit=100)["rows"]
+    owner_rows = query_service.search_scs(app_config, current_user=USER, limit=100)["rows"]
     other_rows = query_service.search_scs(
         app_config,
         current_user=OTHER_USER,
         limit=100,
-    )
+    )["rows"]
 
     assert [row["sc_id"] for row in admin_rows] == [draft_sc_id]
     assert [row["sc_id"] for row in owner_rows] == [draft_sc_id]
@@ -323,7 +324,7 @@ def test_sc_search_without_current_user_hides_drafts(app_config):
 
     create_sc_draft(app_config, USER, {"requester_id": "U1"})
 
-    assert search_scs(app_config, limit=100) == []
+    assert search_scs(app_config, limit=100)["rows"] == []
 
 
 def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
@@ -353,7 +354,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
             "vendor_id": vendor_id,
             "po_no": "PO-BETA",
             "po_amount": 300,
-            "status": "activing",
+            "status": "active",
         },
     )
     po2_id = created_po2["po_id"]
@@ -369,22 +370,22 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
     )
     gr2_id = created_gr2["gr_id"]
 
-    admin_pos = search_pos(app_config, current_user=ADMIN, sort="po_id", direction="asc")
-    owner_pos = search_pos(app_config, current_user=USER, sort="po_id", direction="asc")
+    admin_pos = search_pos(app_config, current_user=ADMIN, sort="po_id", direction="asc")["rows"]
+    owner_pos = search_pos(app_config, current_user=USER, sort="po_id", direction="asc")["rows"]
     other_pos = search_pos(
         app_config,
         current_user=OTHER_USER,
         sort="po_id",
         direction="asc",
-    )
-    admin_grs = search_grs(app_config, current_user=ADMIN, sort="gr_id", direction="asc")
-    owner_grs = search_grs(app_config, current_user=USER, sort="gr_id", direction="asc")
+    )["rows"]
+    admin_grs = search_grs(app_config, current_user=ADMIN, sort="gr_id", direction="asc")["rows"]
+    owner_grs = search_grs(app_config, current_user=USER, sort="gr_id", direction="asc")["rows"]
     other_grs = search_grs(
         app_config,
         current_user=OTHER_USER,
         sort="gr_id",
         direction="asc",
-    )
+    )["rows"]
 
     assert sorted([row["po_id"] for row in admin_pos]) == sorted([po_id, po2_id])
     assert [row["po_id"] for row in owner_pos] == [po_id]
@@ -499,11 +500,11 @@ def test_workbench_data_po_has_requester_name(app_config):
     add_sc_vendor(app_config, ADMIN, sc["sc_id"], "V1")
     create_po(app_config, ADMIN, {
         "sc_id": sc["sc_id"], "vendor_id": "V1",
-        "po_no": "PO-1", "po_amount": 500, "status": "activing",
+        "po_no": "PO-1", "po_amount": 500, "status": "active",
     })
 
     result = workbench_data(app_config, USER)
-    po_row = result["po"]["activing"]["rows"][0]
+    po_row = result["po"]["active"]["rows"][0]
     assert "requester_name" in po_row
     assert po_row["requester_name"] == "Requester"
     assert "vendor_name" not in po_row

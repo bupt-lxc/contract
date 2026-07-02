@@ -7,7 +7,7 @@ from sc_gr_app.errors import ValidationError
 from sc_gr_app.services.lock_service import LeaseLock
 from sc_gr_app.services.record_service import write_operation_record
 
-SC_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "closed"}
+SC_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
 def utc_now() -> str:
@@ -171,7 +171,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-PO_ALLOWED_STATUSES = {"draft", "activing", "finished"}
+PO_ALLOWED_STATUSES = {"draft", "active", "finished"}
 
 
 def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
@@ -239,7 +239,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           po_id, sc_id, vendor_id, po_no, requester_id,
                           po_amount, status, contract_from, contract_to, contract_no,
                           payment_frequency, contract_pos, contract_type, cost_center,
-                          purchaser, activing_date, created_at, updated_at
+                          purchaser, active_date, created_at, updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             po_id,
@@ -282,7 +282,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-GR_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "cancelled"}
+GR_ALLOWED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
 def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:

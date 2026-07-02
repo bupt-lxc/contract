@@ -27,7 +27,7 @@ REQUIRED_FIELDS = (
 )
 SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
 SUPPORTED_CURRENCIES = {"CNY", "EUR", "USD"}
-SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "closed"}
+SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "finished"}
 OPTIONAL_UPDATE_FIELDS = (
     "sc_no",
     "request_type",
@@ -141,8 +141,8 @@ def _assert_can_view_sc(user: dict, sc: dict) -> None:
 
 
 def _assert_can_edit_sc(user: dict, sc: dict) -> None:
-    if sc["status"] == "closed":
-        raise ConflictError("Closed SC cannot be edited")
+    if sc["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
     if user.get("role") == "admin":
         return
     if sc["status"] in ("draft", "manager_confirm", "pending", "denied") and user.get("user_id") == sc["requester_id"]:
@@ -157,22 +157,23 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
     is_manager_confirm = sc["status"] == "manager_confirm"
     is_pending = sc["status"] == "pending"
     is_approved = sc["status"] == "approved"
-    is_closed = sc["status"] == "closed"
+    is_finished = sc["status"] == "finished"
     is_denied = sc["status"] == "denied"
-    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_closed)
+    can_edit = (is_owner and (is_draft or is_pending or is_denied)) or (is_admin and not is_draft and not is_finished)
     can_manage = (is_admin or is_owner) and (is_draft or is_approved)
     return {
         "is_admin": is_admin,
         "can_edit_sc": can_edit,
         "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
         "can_confirm_sc": is_admin and is_manager_confirm,
-        "can_approve_sc": is_admin and is_pending and bool(sc.get("sc_no")),
+        "can_approve_sc": is_admin and is_pending,
         "can_deny_sc": is_admin and is_pending,
-        "can_close_sc": is_admin and is_approved,
-        "can_revoke_sc": is_owner and (is_pending or is_manager_confirm),
-        "can_delete_sc": (is_admin or is_owner) and (is_draft or is_closed),
+        "can_finish_sc": (is_admin or is_owner) and is_approved,
+        "can_recall_sc": is_owner and (is_pending or is_manager_confirm or is_approved or is_denied),
+        "can_delete_sc": (is_admin or is_owner) and is_draft,
         "can_delete_po": is_admin or is_owner,
         "can_delete_gr": is_admin or is_owner,
+        "can_finish_gr": is_admin or is_owner,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
         "can_transfer_sc": is_admin or is_owner,
@@ -462,7 +463,7 @@ def create_sc(
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at,
+                      finished_at,
                       asset,
                       asset_nums,
                       pending_date,
@@ -487,7 +488,7 @@ def create_sc(
                         timestamp,
                         current_user["user_id"] if status == "approved" else None,
                         timestamp if status == "approved" else None,
-                        timestamp if status == "closed" else None,
+                        timestamp if status == "finished" else None,
                         data.get("asset", "N"),
                         data.get("asset_nums"),
                         timestamp,
@@ -551,7 +552,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       updated_at,
                       approved_by,
                       approved_at,
-                      closed_at,
+                      finished_at,
                       asset,
                       asset_nums,
                       pending_date,
@@ -648,6 +649,8 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset_nums = ?,
                         currency = ?,
                         status = 'manager_confirm',
+                        submitted_date = ?,
+                        pending_date = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -662,6 +665,8 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
                         merged.get("currency", "CNY"),
+                        timestamp,
+                        timestamp,
                         timestamp,
                         sc_id,
                     ),
@@ -876,8 +881,8 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     return after
 
 
-def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    require_admin(current_user)
+def finish_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    require_requester_or_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -894,7 +899,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 ).fetchall()
                 if unfinished_pos:
                     raise ConflictError(
-                        f"Cannot close SC: {len(unfinished_pos)} PO(s) not finished. "
+                        f"Cannot finish SC: {len(unfinished_pos)} PO(s) not finished. "
                         "Finish all POs first."
                     )
 
@@ -904,22 +909,22 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     SELECT gr.gr_id, gr.status
                     FROM gr_requests gr
                     JOIN pos po ON po.po_id = gr.po_id
-                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'cancelled')
+                    WHERE po.sc_id = ? AND gr.status NOT IN ('approved', 'denied', 'finished')
                     """,
                     (sc_id,),
                 ).fetchall()
                 if non_final_grs:
                     raise ConflictError(
-                        f"Cannot close SC: {len(non_final_grs)} GR(s) not in final state. "
-                        "Approve or cancel all GRs first."
+                        f"Cannot finish SC: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve, deny or finish all GRs first."
                     )
 
                 timestamp = utc_now()
                 conn.execute(
                     """
                     update sc_records
-                    set status = 'closed',
-                        closed_at = ?,
+                    set status = 'finished',
+                        finished_at = ?,
                         updated_at = ?
                     where sc_id = ?
                     """,
@@ -928,7 +933,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 after = _get_sc(conn, sc_id)
                 write_operation_record(
                     conn,
-                    action_type="close_sc",
+                    action_type="finish_sc",
                     object_type="sc",
                     object_id=sc_id,
                     sc_id=sc_id,
@@ -938,7 +943,7 @@ def close_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     after=after,
                 )
                 notification_service.queue_status_change(
-                    conn, "sc", sc_id, "close", before, current_user
+                    conn, "sc", sc_id, "finish", before, current_user
                 )
                 conn.commit()
             except Exception:
@@ -999,8 +1004,9 @@ def transfer_sc(config: AppConfig, current_user: dict, sc_id: str, new_requester
                 raise
 
 
-def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    """Revoke SC back to draft. Only the requester can revoke, and only from manager_confirm or pending."""
+def recall_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Recall SC back to draft. Only the requester can recall.
+    Requires that the SC has no non-draft POs."""
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
             try:
@@ -1010,9 +1016,16 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     raise NotFound(f"SC {sc_id} not found")
 
                 if before["requester_id"] != current_user["user_id"]:
-                    raise PermissionDenied("Only the SC requester can revoke")
-                if before["status"] not in ("manager_confirm", "pending"):
-                    raise ConflictError("Only manager_confirm or pending SC can be revoked back to draft")
+                    raise PermissionDenied("Only the SC requester can recall")
+                if before["status"] not in ("manager_confirm", "pending", "approved", "denied"):
+                    raise ConflictError("SC cannot be recalled back to draft in its current status")
+
+                non_draft_po_count = conn.execute(
+                    "select count(*) from pos where sc_id = ? and status != 'draft'",
+                    (sc_id,),
+                ).fetchone()[0]
+                if non_draft_po_count > 0:
+                    raise ConflictError("Cannot recall SC with existing non-draft POs")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -1022,7 +1035,7 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 after = _get_sc(conn, sc_id)
                 write_operation_record(
                     conn,
-                    action_type="revoke_sc",
+                    action_type="recall_sc",
                     object_type="sc",
                     object_id=sc_id,
                     sc_id=sc_id,
@@ -1032,7 +1045,7 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     after=after,
                 )
                 notification_service.queue_status_change(
-                    conn, "sc", sc_id, "revoke", before, current_user
+                    conn, "sc", sc_id, "recall", before, current_user
                 )
                 conn.commit()
             except Exception:
@@ -1043,7 +1056,7 @@ def revoke_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
 
 
 def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
-    """Delete a draft or closed SC and its attachments. Admin or SC owner."""
+    """Delete a draft SC and its attachments. Admin or SC owner."""
     require_requester_or_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -1051,8 +1064,8 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
-                if before["status"] not in {"draft", "closed"}:
-                    raise ConflictError("Only draft or closed SC can be deleted")
+                if before["status"] != "draft":
+                    raise ConflictError("Only draft SC can be deleted")
                 if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can delete")
 
@@ -1192,7 +1205,7 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
     """Approve an SC (pending → approved). Admin only.
 
     If cascade_pos=True, draft POs under this SC are submitted
-    (draft → activing) in the same transaction.
+    (draft → active) in the same transaction.
     If cascade_pos=False (default), draft POs are left as-is.
     """
     require_admin(current_user)

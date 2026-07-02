@@ -13,7 +13,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 
 
 REQUIRED_FIELDS = ("sc_id", "vendor_id", "po_amount")
-SUPPORTED_STATUSES = {"draft", "activing", "finished"}
+SUPPORTED_STATUSES = {"draft", "active", "finished"}
 
 
 def utc_now() -> str:
@@ -132,7 +132,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 # Derive PO status from SC context
                 status = data.get("status")
                 if status is None:
-                    status = "draft" if sc_status == "draft" else "activing"
+                    status = "draft" if sc_status == "draft" else "active"
                 elif status not in SUPPORTED_STATUSES:
                     raise ValidationError("status is invalid")
                 # Enforce: draft SC → draft PO only
@@ -168,7 +168,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     ):
                         raise ConflictError("PO total would exceed SC amount")
 
-                activing_date_value = None if is_draft else timestamp
+                active_date_value = None if is_draft else timestamp
 
                 conn.execute(
                     """
@@ -188,7 +188,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                       contract_type,
                       cost_center,
                       purchaser,
-                      activing_date,
+                      active_date,
                       created_at,
                       updated_at
                     ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -209,7 +209,7 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("contract_type"),
                         data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
                         data.get("purchaser"),
-                        activing_date_value,
+                        active_date_value,
                         timestamp,
                         timestamp,
                     ),
@@ -225,10 +225,6 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     machine_id=current_user["machine_id"],
                     before=None,
                     after=created,
-                )
-                notification_service.queue_status_change(
-                    conn, "po", po_id, "create",
-                    {"requester_id": sc["requester_id"]}, current_user
                 )
                 conn.commit()
             except Exception:
@@ -253,8 +249,8 @@ def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
         conn.execute(
             """
             update pos
-            set status = 'activing',
-                activing_date = ?,
+            set status = 'active',
+                active_date = ?,
                 updated_at = ?
             where po_id = ?
             """,
@@ -286,7 +282,7 @@ def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
 
 
 def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Manually submit a draft PO to activing status (with budget check)."""
+    """Manually submit a draft PO to active status (with budget check)."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -343,7 +339,7 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
         "contract_type",
         "cost_center",
         "purchaser",
-        "activing_date",
+        "active_date",
     }
     updates = {key: value for key, value in data.items() if key in allowed_fields}
     if not updates:
@@ -361,12 +357,12 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     "select * from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
-                if sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
+                if sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
-                if before["status"] == "draft" and sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
+                if before["status"] == "draft" and sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can edit POs")
 
@@ -419,7 +415,7 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                         contract_type = ?,
                         cost_center = ?,
                         purchaser = ?,
-                        activing_date = ?,
+                        active_date = ?,
                         updated_at = ?
                     where po_id = ?
                     """,
@@ -435,7 +431,7 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                         merged.get("contract_type"),
                         merged.get("cost_center"),
                         merged.get("purchaser"),
-                        merged.get("activing_date"),
+                        merged.get("active_date"),
                         timestamp,
                         po_id,
                     ),
@@ -476,10 +472,24 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     "select status from sc_records where sc_id = ?",
                     (before["sc_id"],),
                 ).fetchone()
-                if sc["status"] == "closed":
-                    raise ConflictError("Closed SC cannot be edited")
-                if before["status"] != "activing":
-                    raise ConflictError("PO must be activing")
+                if sc["status"] == "finished":
+                    raise ConflictError("Finished SC cannot be edited")
+                if before["status"] != "active":
+                    raise ConflictError("PO must be active")
+
+                # Block if any GR is not in a final state
+                non_final_grs = conn.execute(
+                    """
+                    SELECT gr_id, status FROM gr_requests
+                    WHERE po_id = ? AND status NOT IN ('denied', 'finished')
+                    """,
+                    (po_id,),
+                ).fetchall()
+                if non_final_grs:
+                    raise ConflictError(
+                        f"Cannot finish PO: {len(non_final_grs)} GR(s) not in final state. "
+                        "Approve, deny or finish all GRs first."
+                    )
 
                 timestamp = utc_now()
                 conn.execute(
@@ -519,8 +529,9 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     return after
 
 
-def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Revoke PO back to draft. Only the SC requester can revoke, and only from activing."""
+def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Recall PO back to draft. Only the SC requester can recall, and only from active.
+    Requires that the PO has no non-draft GRs."""
 
     with connect(config) as lookup_conn:
         po = _get_po_or_raise(lookup_conn, po_id)
@@ -533,9 +544,9 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     if sc is None:
         raise NotFound(f"SC {sc_id} not found")
     if sc["requester_id"] != current_user["user_id"]:
-        raise PermissionDenied("Only the SC requester can revoke POs")
-    if sc["status"] == "closed":
-        raise ConflictError("Closed SC cannot be edited")
+        raise PermissionDenied("Only the SC requester can recall POs")
+    if sc["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
         with connect(config) as conn:
@@ -543,15 +554,15 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
 
-                if before["status"] != "activing":
-                    raise ConflictError("Only activing PO can be revoked back to draft")
+                if before["status"] != "active":
+                    raise ConflictError("Only active PO can be recalled back to draft")
 
-                gr_count = conn.execute(
-                    "select count(*) from gr_requests where po_id = ?",
+                non_draft_gr_count = conn.execute(
+                    "select count(*) from gr_requests where po_id = ? and status != 'draft'",
                     (po_id,),
                 ).fetchone()[0]
-                if gr_count > 0:
-                    raise ConflictError("Cannot revoke PO with existing GRs")
+                if non_draft_gr_count > 0:
+                    raise ConflictError("Cannot recall PO with existing non-draft GRs")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -561,7 +572,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 after = _get_po_or_raise(conn, po_id)
                 write_operation_record(
                     conn,
-                    action_type="revoke_po",
+                    action_type="recall_po",
                     object_type="po",
                     object_id=po_id,
                     sc_id=sc_id,
@@ -575,7 +586,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     (before["sc_id"],),
                 ).fetchone()
                 notification_service.queue_status_change(
-                    conn, "po", po_id, "revoke",
+                    conn, "po", po_id, "recall",
                     {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
                 )
                 conn.commit()
@@ -587,7 +598,7 @@ def revoke_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Delete a draft, po_pending or finished PO and its GRs/attachments. Admin or SC owner."""
+    """Delete a draft PO and its GRs/attachments. Admin or SC owner."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -599,8 +610,8 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                if before["status"] not in {"draft", "activing", "finished"}:
-                    raise ConflictError("Only draft, activing or finished PO can be deleted")
+                if before["status"] != "draft":
+                    raise ConflictError("Only draft PO can be deleted")
                 sc = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),

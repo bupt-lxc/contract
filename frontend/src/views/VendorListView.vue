@@ -30,7 +30,7 @@
       <el-table-column prop="email" :label="$t('vendor.email')" min-width="160">
         <template #default="{ row }">{{ row.email || '-' }}</template>
       </el-table-column>
-      <el-table-column :label="$t('common.actions')" width="140" fixed="right">
+      <el-table-column :label="$t('common.actions')" width="200" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="dialogVisible = true; dialogMode = 'edit'; dialogRecord = row">{{ $t('common.edit') }}</el-button>
           <el-popconfirm :title="$t('vendor.disableConfirm')" @confirm="handleDisable(row)">

@@ -12,7 +12,8 @@ export function useVendor() {
     state.loading = true
     state.error = null
     try {
-      state.rows = await callApi('search_vendors', { text, filters })
+      const result = await callApi('search_vendors', { text, filters })
+      state.rows = result.rows || result
     } catch (e) {
       state.error = e.message
       state.rows = []

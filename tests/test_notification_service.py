@@ -315,8 +315,8 @@ class TestNotificationDefaults:
         assert "confirm" in sc_transitions
         assert "approve" in sc_transitions
         assert "deny" in sc_transitions
-        assert "close" in sc_transitions
-        assert "revoke" in sc_transitions
+        assert "finish" in sc_transitions
+        assert "recall" in sc_transitions
 
         # PO/GR transitions should be untouched since we didn't send them.
         po_transitions = result["notify.transitions.po"]
@@ -329,8 +329,8 @@ class TestNotificationDefaults:
         assert "submit" in gr_transitions
         assert "confirm" in gr_transitions
         assert "approve" in gr_transitions
-        assert "cancel" in gr_transitions
-        assert "revoke" in gr_transitions
+        assert "deny" in gr_transitions
+        assert "recall" in gr_transitions
 
 
 class TestListNotificationQueue:

@@ -79,6 +79,52 @@ _user32.MessageBoxW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wcha
 _kernel32.CreateMutexW.restype = ctypes.c_void_p
 _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
 
+WM_COPYDATA = 0x004A
+
+
+class COPYDATASTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("dwData", ctypes.c_ulonglong),
+        ("cbData", ctypes.c_uint),
+        ("lpData", ctypes.c_void_p),
+    ]
+
+
+_user32.SendMessageW.restype = ctypes.c_longlong
+_user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_ulonglong, ctypes.c_longlong]
+
+
+def _parse_protocol_url(url: str):
+    """Parse pomp://sc/SC001/confirm into {type, id, action}. Returns None on failure."""
+    if not url or not url.startswith("pomp://"):
+        return None
+    path = url[len("pomp://"):].rstrip("/")
+    parts = path.split("/")
+    if len(parts) < 2:
+        return None
+    entity_type = parts[0]
+    if entity_type not in ("sc", "po", "gr"):
+        return None
+    result = {"type": entity_type, "id": parts[1], "action": None}
+    if len(parts) >= 3 and parts[2] == "confirm":
+        result["action"] = "confirm"
+    return result
+
+
+def _send_to_existing_window(hwnd, url):
+    """Forward a pomp:// URL to an already-running POMP window via WM_COPYDATA."""
+    encoded = url.encode("utf-8")
+    cds = COPYDATASTRUCT()
+    cds.dwData = 0
+    cds.cbData = len(encoded)
+    buf = ctypes.create_string_buffer(encoded)
+    cds.lpData = ctypes.cast(buf, ctypes.c_void_p)
+    _user32.SendMessageW(hwnd, WM_COPYDATA, 0, ctypes.addressof(cds))
+    # Bring existing window to foreground
+    _user32.ShowWindow(hwnd, 5)    # SW_SHOW
+    _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
+    _user32.SetForegroundWindow(hwnd)
+
 
 def _patch_webview2():
     _original = EdgeChrome.on_webview_ready
@@ -99,10 +145,13 @@ def _single_instance_check():
         return
     hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
     if hwnd:
-        # SW_SHOW (5) reveals a window hidden to tray; SW_RESTORE (9) handles minimized
-        _user32.ShowWindow(hwnd, 5)    # SW_SHOW
-        _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
-        _user32.SetForegroundWindow(hwnd)
+        # If launched with a pomp:// URL, forward it to the existing window
+        if len(sys.argv) > 1 and _parse_protocol_url(sys.argv[1]):
+            _send_to_existing_window(hwnd, sys.argv[1])
+        else:
+            _user32.ShowWindow(hwnd, 5)    # SW_SHOW
+            _user32.ShowWindow(hwnd, 9)    # SW_RESTORE
+            _user32.SetForegroundWindow(hwnd)
     sys.exit(0)
 
 
@@ -112,6 +161,56 @@ def _webview2_storage():
     base.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(base))
     return base
+
+
+def _read_update_info():
+    """Silently check for updates. Returns {version, changelog_cn, installer_name, sha256}
+    or None when no update is available or manifest can't be read."""
+    from sc_gr_app.update import (
+        _releases_dir,
+        fetch_manifest,
+        is_update_available,
+        verify_manifest,
+    )
+
+    if os.getenv("SC_GR_DEV") == "1":
+        return None
+
+    manifest = fetch_manifest()
+    if manifest is None:
+        return None
+    if not is_update_available(manifest):
+        return None
+    if not verify_manifest(manifest):
+        logger = logging.getLogger(__name__)
+        logger.warning("Update manifest is invalid — skipping tray update check")
+        return None
+
+    return {
+        "version": manifest["version"],
+        "changelog_cn": manifest.get("changelog_cn", ""),
+        "installer_name": manifest["gui"]["installer"],
+        "sha256": manifest["gui"]["sha256"],
+    }
+
+
+def _trigger_update_check(window):
+    """Run a silent update check in a daemon thread. If an update is found,
+    push it to the JS side via evaluate_js. Must be called after window is shown."""
+    import json
+
+    def _check():
+        try:
+            info = _read_update_info()
+            if info is None:
+                return
+            window.evaluate_js(
+                "window.__updateAvailable(" + json.dumps(info) + ")"
+            )
+        except Exception:
+            pass  # update check failure must never break the app
+
+    threading.Thread(target=_check, daemon=True).start()
 
 
 def _check_update():
@@ -217,69 +316,167 @@ def _check_update():
     sys.exit(0)
 
 
-def _hook_close(hwnd, allow_close):
-    """Subclass the Win32 window to hide on close instead of destroying."""
-    global _tray_wndproc
-
-    GWLP_WNDPROC = -4
-    WM_CLOSE = 0x0010
-
-    original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
-
-    @WNDPROC
-    def wnd_proc(hwnd_, msg, wparam, lparam):
-        if msg == WM_CLOSE and not allow_close[0]:
-            _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
-            return 0
-        return _user32.CallWindowProcW(
-            ctypes.c_void_p(original), hwnd_, msg, wparam, lparam,
-        )
-
-    _user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
-    _tray_wndproc = wnd_proc  # prevent GC
-
-
 def _setup_tray(window):
-    """Minimize to tray on close. Tray icon with context menu."""
-    try:
-        from pystray import Icon, Menu, MenuItem
-        from PIL import Image
-    except ImportError:
-        return
+    """Minimize to tray on close using native Win32 Shell_NotifyIcon.
 
-    icon_path = Path(__file__).parent / "icons" / "tray.png"
-    if not icon_path.exists():
-        return
+    No external dependencies — uses only user32 + shell32 via ctypes.
+    """
+    from ctypes import wintypes
 
-    image = Image.open(icon_path)
+    logger = logging.getLogger(__name__)
 
-    _allow_close = [False]  # mutable container shared across closures
+    # Extract small icon from the EXE (embedded by PyInstaller via app.spec icon=)
+    _shell32 = ctypes.windll.shell32
+    ExtractIconExW = _shell32.ExtractIconExW
+    ExtractIconExW.argtypes = [ctypes.c_wchar_p, ctypes.c_int,
+                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
+    ExtractIconExW.restype = ctypes.c_uint
+    hIconLarge = ctypes.c_void_p()
+    hIconSmall = ctypes.c_void_p()
+    count = ExtractIconExW(sys.executable, 0,
+                           ctypes.byref(hIconLarge), ctypes.byref(hIconSmall), 1)
+    if count == 0 or not hIconSmall:
+        # Fallback: try large icon
+        if hIconLarge:
+            hIcon = hIconLarge
+        else:
+            logger.warning("Tray: ExtractIconExW failed, GetLastError=%s",
+                           ctypes.get_last_error())
+            return
+    else:
+        hIcon = hIconSmall
+        # We took the small icon; destroy the large one to avoid leak
+        if hIconLarge:
+            _user32.DestroyIcon(hIconLarge)
 
-    def show_window(icon, item):
-        window.show()
-        window.restore()
+    _allow_close = [False]
 
-    def exit_app(icon, item):
-        _allow_close[0] = True
-        icon.stop()
-        window.destroy()
-        os._exit(0)
+    # ── constants ──────────────────────────────────────────────────────
+    WM_TRAYICON = 0x8000 + 100
+    WM_COMMAND  = 0x0111
+    IDM_SHOW    = 1001
+    IDM_EXIT    = 1002
+    MF_STRING   = 0
+    TPM_RIGHTBUTTON = 2
+    TPM_BOTTOMALIGN = 0x20
+
+    class POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class NOTIFYICONDATAW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize",           wintypes.DWORD),
+            ("hWnd",             wintypes.HWND),
+            ("uID",              wintypes.UINT),
+            ("uFlags",           wintypes.UINT),
+            ("uCallbackMessage", wintypes.UINT),
+            ("hIcon",            wintypes.HICON),
+            ("szTip",            wintypes.WCHAR * 128),
+        ]
+
+    nid = NOTIFYICONDATAW()
+    nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+    nid.uID = 1
+    nid.uFlags = 1 | 2 | 4          # NIF_MESSAGE | NIF_ICON | NIF_TIP
+    nid.uCallbackMessage = WM_TRAYICON
+    nid.hIcon = hIcon
+    nid.szTip = WINDOW_TITLE
+
+    _shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+    _shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+    _user32.CreatePopupMenu.restype = ctypes.c_void_p
+    _user32.AppendMenuW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.WPARAM, wintypes.LPCWSTR]
+    _user32.AppendMenuW.restype = wintypes.BOOL
+    _user32.DestroyMenu.argtypes = [ctypes.c_void_p]
+    _user32.DestroyMenu.restype = wintypes.BOOL
+    _user32.GetCursorPos.argtypes = [ctypes.c_void_p]
+    _user32.GetCursorPos.restype = wintypes.BOOL
 
     def _on_shown():
-        """Hook WM_CLOSE after the native window is ready."""
-        hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
-        if hwnd:
-            _hook_close(hwnd, _allow_close)
+        import time
+        for _ in range(20):
+            hwnd = _user32.FindWindowW(None, WINDOW_TITLE)
+            if hwnd:
+                nid.hWnd = hwnd
+                _shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # NIM_ADD
+                _subclass_window(hwnd)
+                return
+            time.sleep(0.05)
+        logger.warning("Tray: could not find window HWND after 1s")
+
+    def _subclass_window(hwnd):
+        """Intercept WM_CLOSE (hide to tray) and tray icon messages."""
+        global _tray_wndproc
+
+        GWLP_WNDPROC = -4
+        WM_CLOSE = 0x0010
+
+        original = _user32.GetWindowLongPtrW(hwnd, GWLP_WNDPROC)
+
+        @WNDPROC
+        def wnd_proc(hwnd_, msg, wparam, lparam):
+            # ── close button → hide to tray ──────────────────────────
+            if msg == WM_CLOSE and not _allow_close[0]:
+                _user32.ShowWindow(hwnd_, 0)  # SW_HIDE
+                return 0
+
+            # ── WM_COPYDATA: protocol URL from secondary instance ────
+            if msg == WM_COPYDATA:
+                cds = ctypes.cast(ctypes.c_void_p(lparam), ctypes.POINTER(COPYDATASTRUCT)).contents
+                url_bytes = ctypes.cast(cds.lpData, ctypes.c_char_p).value.decode("utf-8")
+                window.show()
+                window.restore()
+                import json
+                params = _parse_protocol_url(url_bytes)
+                if params:
+                    window.evaluate_js(
+                        f"window.__protocolNavigate({json.dumps(params)})"
+                    )
+                return 0
+
+            # ── tray icon right-click → context menu ──────────────────
+            if msg == WM_TRAYICON and lparam == 0x0205:  # WM_RBUTTONUP
+                pt = POINT()
+                _user32.GetCursorPos(ctypes.byref(pt))
+                hMenu = _user32.CreatePopupMenu()
+                _user32.AppendMenuW(hMenu, MF_STRING, IDM_SHOW, "Show Window")
+                _user32.AppendMenuW(hMenu, MF_STRING, IDM_EXIT, "Exit")
+                _user32.SetForegroundWindow(hwnd_)
+                _user32.TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_RIGHTBUTTON,
+                                       pt.x, pt.y, 0, hwnd_, None)
+                _user32.PostMessageW(hwnd_, 0, 0, 0)  # benign message to dismiss menu
+                _user32.DestroyMenu(hMenu)
+                return 0
+
+            # ── tray icon double-click → restore window ──────────────
+            if msg == WM_TRAYICON and lparam == 0x0203:  # WM_LBUTTONDBLCLK
+                window.show()
+                window.restore()
+                _trigger_update_check(window)
+                return 0
+
+            # ── context menu commands ────────────────────────────────
+            if msg == WM_COMMAND:
+                if wparam == IDM_SHOW:
+                    window.show()
+                    window.restore()
+                    _trigger_update_check(window)
+                    return 0
+                if wparam == IDM_EXIT:
+                    _allow_close[0] = True
+                    _shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # NIM_DELETE
+                    _user32.DestroyIcon(hIcon)
+                    window.destroy()
+                    os._exit(0)
+
+            return _user32.CallWindowProcW(
+                ctypes.c_void_p(original), hwnd_, msg, wparam, lparam)
+
+        _user32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc)
+        _tray_wndproc = wnd_proc  # prevent GC
 
     window.events.shown += _on_shown
-
-    icon = Icon("pomp", image, WINDOW_TITLE, Menu(
-        MenuItem("Show Window", show_window, default=True),
-        MenuItem("Exit", exit_app),
-    ))
-
-    threading.Thread(target=icon.run, daemon=True).start()
-    return icon
 
 
 def _show_error_and_exit(title: str, message: str):
@@ -343,5 +540,20 @@ def run_app():
     )
 
     _setup_tray(window)
+
+    # Check for pomp:// protocol URL on first launch
+    protocol_params = None
+    if len(sys.argv) > 1:
+        protocol_params = _parse_protocol_url(sys.argv[1])
+
+    def _on_loaded():
+        if protocol_params:
+            import json
+            js = json.dumps(protocol_params)
+            window.evaluate_js(f"window.__protocolNavigate({js})")
+
+    loaded_events = getattr(window.events, 'loaded', None)
+    if loaded_events is not None:
+        loaded_events += _on_loaded
 
     webview.start(debug=DEV_MODE)

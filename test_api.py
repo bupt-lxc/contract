@@ -253,10 +253,10 @@ if test_po_id:
             'requester_id': admin_uid,
             'estimated_amount': 800.00
         })
-        gr_service.cancel_gr(config, admin_user, gr2['gr_id'])
+        gr_service.deny_gr(config, admin_user, gr2['gr_id'])
         gfs2 = search_grs(config, filters={'gr_id': gr2['gr_id']})
         gf2 = next((g for g in gfs2 if str(g['gr_id'])==str(gr2['gr_id'])), None)
-        check('5.5 Cancel GR', gf2 and gf2['status']=='cancelled')
+        check('5.5 Deny GR', gf2 and gf2['status']=='denied')
 
         test_gr_id = gr_id
     except Exception as e:

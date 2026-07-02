@@ -71,19 +71,15 @@ def run_poll_loop(config: AppConfig, poll_interval: int = 10) -> None:
 
 
 def run_once(config: AppConfig) -> None:
-    """Run one cycle: process pending + failed + threshold check + monthly. For testing."""
-    with connect(config) as conn:
-        sent, failed = sender.process_pending(conn)
-        logger.info("Pending: %s sent, %s failed", sent, failed)
-
-        recovered, still_failed = sender.process_failed(conn)
-        logger.info("Failed retry: %s recovered, %s still failed", recovered, still_failed)
-
+    """Run one cycle: threshold check first, then send pending entries so
+    newly queued reminders go out in the same cycle."""
+    # 1. Check thresholds / schedules / monthly — queues new entries
     with connect(config) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             date_count, amount_count = thresholds.check_all_active_pos(conn)
-            logger.info("Thresholds: %s date, %s amount", date_count, amount_count)
+            if date_count or amount_count:
+                logger.info("Thresholds: %s date, %s amount", date_count, amount_count)
 
             schedule_count = schedules.check_custom_schedules(conn)
             if schedule_count:
@@ -97,6 +93,16 @@ def run_once(config: AppConfig) -> None:
         except Exception:
             conn.rollback()
             raise
+
+    # 2. Send all pending entries (including those just queued)
+    with connect(config) as conn:
+        sent, failed = sender.process_pending(conn)
+        if sent or failed:
+            logger.info("Pending: %s sent, %s failed", sent, failed)
+
+        recovered, still_failed = sender.process_failed(conn)
+        if recovered or still_failed:
+            logger.info("Failed retry: %s recovered, %s still failed", recovered, still_failed)
 
 
 def run_thresholds_only(config: AppConfig) -> None:

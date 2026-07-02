@@ -1,7 +1,7 @@
 import { reactive, readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
 
-export function useGr(pageSize = 20) {
+export function useGr(pageSize = 10) {
   const state = reactive({
     rows: [],
     total: 0,
@@ -40,7 +40,8 @@ export function useGr(pageSize = 20) {
   async function createGr(data) { return await callApi('create_gr', { data }) }
   async function updateGr(grId, data) { return await callApi('update_gr', { gr_id: grId, data }) }
   async function approveGr(grId, conValue) { await callApi('approve_gr', { gr_id: grId, con_value: conValue }) }
-  async function cancelGr(grId) { await callApi('cancel_gr', { gr_id: grId }) }
+  async function denyGr(grId) { await callApi('deny_gr', { gr_id: grId }) }
+  async function finishGr(grId) { await callApi('finish_gr', { gr_id: grId }) }
   async function submitGr(grId) { await callApi('submit_gr', { gr_id: grId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
@@ -51,7 +52,7 @@ export function useGr(pageSize = 20) {
 
   return {
     state: readonly(state),
-    searchGrs, createGr, updateGr, approveGr, cancelGr, submitGr,
+    searchGrs, createGr, updateGr, approveGr, denyGr, finishGr, submitGr,
     setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange
   }
 }

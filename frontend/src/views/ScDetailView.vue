@@ -9,15 +9,18 @@
         </p>
       </div>
       <div class="header-actions">
-        <el-button v-if="permissions.can_edit_sc" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="permissions.can_submit_sc" type="primary" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="permissions.can_confirm_sc" type="primary" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
-        <el-button v-if="permissions.can_approve_sc" type="success" @click="handleApprove">{{ $t('common.approve') }}</el-button>
-        <el-button v-if="permissions.can_deny_sc" type="warning" @click="handleDeny">{{ $t('common.deny') }}</el-button>
-        <el-button v-if="permissions.can_revoke_sc" type="warning" @click="handleRevoke">{{ $t('sc.revoke') }}</el-button>
-        <el-button v-if="permissions.can_delete_sc" type="danger" @click="handleDelete">{{ $t('common.delete') }}</el-button>
-        <el-button v-if="permissions.can_close_sc" type="danger" @click="handleClose">{{ $t('common.close') }}</el-button>
-        <el-button v-if="permissions.can_transfer_sc" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
+        <el-button v-if="permissions.can_edit_sc" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="permissions.can_submit_sc" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="permissions.can_confirm_sc" ref="confirmBtn" type="primary" :disabled="loadingState.count > 0" @click="handleConfirm">{{ $t('sc.confirm') }}</el-button>
+        <el-button v-if="permissions.can_approve_sc" type="success" :disabled="loadingState.count > 0" @click="handleApprove">{{ $t('common.approve') }}</el-button>
+        <el-button v-if="permissions.can_deny_sc" type="warning" :disabled="loadingState.count > 0" @click="handleDeny">{{ $t('common.deny') }}</el-button>
+        <el-button v-if="permissions.can_recall_sc" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('sc.recall') }}</el-button>
+        <el-button v-if="permissions.can_delete_sc" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="permissions.can_finish_sc" type="danger" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="permissions.can_transfer_sc" :disabled="loadingState.count > 0" @click="openTransferDialog">{{ $t('sc.transferOwner') }}</el-button>
+        <el-button v-if="detail.sc" :disabled="loadingState.count > 0" @click="handleSendEmail('sc', detail.sc.sc_id)">
+          <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
+        </el-button>
       </div>
     </div>
 
@@ -32,8 +35,9 @@
         <div class="section-header">
           <h3>{{ $t('sc.scInformation') }}</h3>
           <el-button
-            v-if="permissions.can_manage_po && (detail.sc?.status === 'approved' || detail.sc?.status === 'closed')"
+            v-if="permissions.can_manage_po && detail.sc?.status === 'approved'"
             type="primary" size="small"
+            :disabled="loadingState.count > 0"
             @click="poDialogVisible = true; poDialogMode = 'create'; poDialogRecord = null"
           >
             <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
@@ -52,7 +56,7 @@
         />
       </div>
 
-      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'closed') && detail.pos && detail.pos.length > 0" class="section-card">
+      <div v-if="detail.sc && (detail.sc.status === 'approved' || detail.sc.status === 'finished') && detail.pos && detail.pos.length > 0" class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poRecords') }}</h3>
           <el-button size="small" @click="handleExportPos">
@@ -91,7 +95,7 @@
         </div>
         <el-table :data="detail.operation_records || []" stripe border size="small">
           <el-table-column prop="created_at" :label="$t('record.created')" width="160">
-            <template #default="{ row }">{{ row.created_at?.slice(0,19) }}</template>
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
           </el-table-column>
           <el-table-column prop="action_type" :label="$t('record.action')" width="140" />
           <el-table-column prop="object_type" :label="$t('record.object')" width="100" />
@@ -120,6 +124,7 @@
       :vendors="scVendors"
       :sc-record="detail.sc"
       @save="handlePoSave"
+      @save-draft="handlePoSaveDraft"
     />
 
     <el-dialog v-model="transferDialogVisible" :title="$t('sc.transferOwner')" width="480px">
@@ -147,12 +152,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Message } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { usePo } from '@/composables/usePo.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
-import { callApi } from '@/api/bridge.js'
+import { formatDateTime } from '@/utils/format.js'
+import { callApi, loadingState } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
@@ -165,7 +171,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
-const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, closeSc } = useSc()
+const { state, fetchDetail, updateSc, submitSc, approveSc, denySc, finishSc } = useSc()
 const { createPo, updatePo, finishPo, submitPo } = usePo()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
@@ -176,6 +182,7 @@ const permissions = computed(() => detail.value.permissions || {})
 const vendors = computed(() => vendorState.rows)
 const scVendors = computed(() => detail.value?.vendors || [])
 const activeUsers = ref([])
+const confirmBtn = ref(null)
 
 const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
@@ -201,10 +208,6 @@ async function handleEditSave(data) {
 
 async function handleSubmit() {
   try {
-    if (!detail.value.vendors || detail.value.vendors.length === 0) {
-      ElMessage.warning(t('sc.vendorRequiredForSubmit'))
-      return
-    }
     await ElMessageBox.confirm(t('sc.submitConfirm'), t('common.confirm'), { type: 'warning' })
     await submitSc(scId.value, {})
     ElMessage.success(t('sc.scSubmitted'))
@@ -227,6 +230,24 @@ async function handleConfirm() {
 
 async function handleApprove() {
   try {
+    let scNo = detail.value.sc?.sc_no || ''
+
+    if (!scNo) {
+      const { value } = await ElMessageBox.prompt(
+        t('sc.enterScNo'),
+        t('sc.scNoRequired'),
+        {
+          confirmButtonText: t('common.confirm'),
+          type: 'warning',
+          inputPattern: /.+/,
+          inputErrorMessage: t('sc.scNoRequired'),
+        }
+      )
+      scNo = value
+      if (!scNo) throw 'cancel'
+      await updateSc(scId.value, { sc_no: scNo })
+    }
+
     await ElMessageBox.confirm(t('sc.approveConfirm'), t('common.confirm'), { type: 'warning' })
 
     // Check for draft POs — offer cascade
@@ -262,28 +283,28 @@ async function handleDeny() {
   }
 }
 
-async function handleClose() {
+async function handleFinish() {
   try {
-    await ElMessageBox.prompt(t('sc.closePrompt'), t('sc.closeTitle'), {
-      confirmButtonText: t('common.close'),
+    await ElMessageBox.prompt(t('sc.finishPrompt'), t('sc.finishTitle'), {
+      confirmButtonText: t('common.finish'),
       type: 'warning',
-      inputPattern: /^I CONFIRM CLOSE THIS SC$/,
-      inputErrorMessage: t('sc.closeInputError'),
-      inputPlaceholder: 'I CONFIRM CLOSE THIS SC'
+      inputPattern: /^I CONFIRM FINISH THIS SC$/,
+      inputErrorMessage: t('sc.finishInputError'),
+      inputPlaceholder: 'I CONFIRM FINISH THIS SC'
     })
-    await closeSc(scId.value)
-    ElMessage.success(t('sc.scClosed'))
+    await finishSc(scId.value)
+    ElMessage.success(t('sc.scFinished'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
 }
 
-async function handleRevoke() {
+async function handleRecall() {
   try {
-    await ElMessageBox.confirm(t('sc.confirmRevokeToDraft'), t('common.confirm'), { type: 'warning' })
-    await callApi('revoke_sc', { sc_id: scId.value })
-    ElMessage.success(t('sc.revoked'))
+    await ElMessageBox.confirm(t('sc.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
+    await callApi('recall_sc', { sc_id: scId.value })
+    ElMessage.success(t('sc.recalled'))
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -337,6 +358,20 @@ async function handlePoSave(data) {
       attachRefreshKey.value++
     }
     ElMessage.success(t('common.saved'))
+    await fetchDetail(scId.value)
+    poDialogVisible.value = false
+  } catch (e) { ElMessage.error(e.message); throw e }
+}
+
+async function handlePoSaveDraft(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const created = await createPo({ ...formData, sc_id: scId.value, status: 'draft' })
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'po', entity_id: created.po_id, file_paths: _attachments, parent_sc_id: scId.value })
+      attachRefreshKey.value++
+    }
+    ElMessage.success(t('po.draftSaved'))
     await fetchDetail(scId.value)
     poDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
@@ -409,7 +444,7 @@ async function handleExportPos() {
 
 async function handleExportAudit() {
   const columns = [
-    { key: 'created_at', label: t('record.created'), getValue: r => (r.created_at || '').slice(0, 19) },
+    { key: 'created_at', label: t('record.created'), getValue: r => formatDateTime(r.created_at) },
     { key: 'action_type', label: t('record.action') },
     { key: 'object_type', label: t('record.objectType') },
     { key: 'object_id', label: t('record.objectId') },
@@ -421,9 +456,26 @@ async function handleExportAudit() {
   ElMessage.success(t('common.exportedSuccessfully'))
 }
 
+async function handleSendEmail(entityType, entityId) {
+  try {
+    await callApi('open_entity_email', { entity_type: entityType, entity_id: entityId })
+  } catch (e) {
+    ElMessage.error(e.message || String(e))
+  }
+}
+
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
   await Promise.all([fetchDetail(scId.value), searchVendors()])
+
+  if (window.__pendingConfirmAction?.type === 'sc' && window.__pendingConfirmAction?.id === scId.value) {
+    window.__pendingConfirmAction = null
+    setTimeout(() => {
+      confirmBtn.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      confirmBtn.value?.$el?.classList.add('confirm-pulse')
+      setTimeout(() => confirmBtn.value?.$el?.classList.remove('confirm-pulse'), 3000)
+    }, 500)
+  }
 })
 
 watch(() => route.params.id, async (newId) => {
@@ -445,5 +497,15 @@ watch(() => route.params.id, async (newId) => {
 .header-actions {
   display: flex;
   gap: 6px;
+}
+
+.confirm-pulse {
+  animation: pulse 0.6s ease-in-out 3;
+  box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6);
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(52, 168, 83, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 168, 83, 0); }
 }
 </style>
