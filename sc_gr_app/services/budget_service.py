@@ -102,8 +102,29 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
             "select request_type from sc_records where sc_id = ?",
             (po["sc_id"],),
         ).fetchone()
-        if sc is None or sc["request_type"] != "FC":
-            raise ValidationError("PO is not an FC PO")
+        if sc is None:
+            raise NotFound(f"PO references non-existent SC: {po['sc_id']}")
+        if sc["request_type"] != "FC":
+            raise ValidationError("PO is not under an FC-type SC")
+
+        null_con_value_gr = conn.execute(
+            """
+            select gr.gr_id
+            from gr_requests gr
+            join pos p on p.po_id = gr.po_id
+            join sc_records child_sc on child_sc.sc_id = p.sc_id
+            where child_sc.calloff_po_id = ?
+              and gr.status = 'approved'
+              and gr.con_value is null
+            limit 1
+            """,
+            (po_id,),
+        ).fetchone()
+        if null_con_value_gr is not None:
+            raise ConflictError(
+                f"Approved downstream GR has NULL con_value for FC PO {po_id}: "
+                f"{null_con_value_gr['gr_id']}"
+            )
 
         calloff_totals = conn.execute(
             """
@@ -165,6 +186,26 @@ def compute_sc_fc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Dec
             raise NotFound(f"SC not found: {sc_id}")
         if sc["request_type"] != "FC":
             raise ValidationError("SC is not an FC-type SC")
+
+        null_con_value_gr = conn.execute(
+            """
+            select gr.gr_id
+            from gr_requests gr
+            join pos p on p.po_id = gr.po_id
+            join sc_records child_sc on child_sc.sc_id = p.sc_id
+            join pos fc_po on fc_po.po_id = child_sc.calloff_po_id
+            where fc_po.sc_id = ?
+              and gr.status = 'approved'
+              and gr.con_value is null
+            limit 1
+            """,
+            (sc_id,),
+        ).fetchone()
+        if null_con_value_gr is not None:
+            raise ConflictError(
+                f"Approved downstream GR has NULL con_value for FC SC {sc_id}: "
+                f"{null_con_value_gr['gr_id']}"
+            )
 
         po_totals = conn.execute(
             """
