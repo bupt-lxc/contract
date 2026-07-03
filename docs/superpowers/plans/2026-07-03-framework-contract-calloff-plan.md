@@ -393,6 +393,8 @@ In `submit_sc`, after the existing permission check, add:
 
 - [ ] **Step 5: Modify `update_sc` for call-off specific checks**
 
+`calloff_po_id` is intentionally excluded from `OPTIONAL_UPDATE_FIELDS` — it is immutable after creation. Transfer to a different PO(FC) requires delete + recreate.
+
 In `update_sc`, the existing `_validate_sc_amount_not_below_usage` call handles the PO/GR usage check. For call-off SCs, also validate against PO(FC) remaining. After the `_validate_sc_amount_not_below_usage` call, add:
 
 ```python
@@ -846,9 +848,9 @@ git commit -m "feat: add calloff_po_id to SC import/export"
 - Modify: `sc_gr_app/notification/thresholds.py`
 - Modify: `sc_gr_app/notification/monthly.py`
 
-- [ ] **Step 1: Fix `thresholds.py` for FC POs**
+- [ ] **Step 1: Fix `check_all_active_pos` in `thresholds.py` for FC POs**
 
-Find the `check_all_active_pos` or equivalent function. The current query computes `remaining_pct` using `SUM(approved GR con_value)`. Modify to branch on SC type:
+The function at `sc_gr_app/notification/thresholds.py:17` computes `remaining_pct` using `SUM(approved GR con_value)`. Modify the query to branch on SC type:
 
 ```python
 rows = conn.execute(
@@ -918,15 +920,26 @@ headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
 
 And add a hint row entry: `"Optional (FC PO ID for call-off SCs)"`.
 
-- [ ] **Step 2: Handle FC PO export cascade**
+- [ ] **Step 2: Add `get_po_fc_budget` bridge method**
+
+In the `PompBridge` class, add a new method:
+
+```python
+def get_po_fc_budget(self, payload: dict) -> dict:
+    """Return FC budget for a given PO(FC)."""
+    from sc_gr_app.services.budget_service import compute_po_fc_budget
+    return compute_po_fc_budget(self.config, payload["po_id"])
+```
+
+- [ ] **Step 3: Handle FC PO export cascade in `export_pos_cascade`**
 
 In the export cascade methods (`export_pos_cascade` or equivalent), when a PO is an FC PO (parent SC request_type = 'FC'), skip the GR sheet and produce a "Call-off SCs" sheet instead with columns: `sc_id, sc_no, request_type, sc_amount, status, created_at`.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add sc_gr_app/api/bridge.py
-git commit -m "feat: add calloff_po_id to SC import template, FC PO export cascade"
+git commit -m "feat: add calloff_po_id to SC import template, FC PO export cascade, get_po_fc_budget endpoint"
 ```
 
 ---
@@ -1103,7 +1116,9 @@ git commit -m "feat: add call-off badge, filter, and create dropdown to SC list"
 
 <script setup>
 import { ref, watch } from 'vue'
-import { searchPos } from '@/composables/usePo'
+import { usePo } from '@/composables/usePo'
+
+const { searchPos } = usePo()
 
 const visible = defineModel('visible', { type: Boolean, default: false })
 const emit = defineEmits(['select'])
@@ -1215,13 +1230,13 @@ git commit -m "feat: add call-off PO context to SC creation form"
     </template>
 
     <el-descriptions-item label="Consumed">
-      <AmountDisplay :value="budget.sc_con_value_total" />
+      <AmountDisplay :value="isFC ? budget.downstream_consumed : budget.sc_con_value_total" />
     </el-descriptions-item>
     <el-descriptions-item label="Pending GR (excl)">
-      <AmountDisplay :value="budget.sc_pending_total" />
+      <AmountDisplay :value="isFC ? budget.downstream_pending_gr : budget.sc_pending_total" />
     </el-descriptions-item>
     <el-descriptions-item label="Pending GR (incl)">
-      <AmountDisplay :value="budget.sc_pending_total_incl_tax" />
+      <AmountDisplay :value="isFC ? budget.downstream_pending_gr_tax : budget.sc_pending_total_incl_tax" />
     </el-descriptions-item>
   </el-descriptions>
 </template>
