@@ -16,6 +16,18 @@
 
 **Fix:** Change the PO query to include `sc.request_type as sc_request_type`.
 
+## Bug: GR List "Add GR" allows selecting FC POs
+
+**Root cause:** `GrListView.vue` has two gaps:
+- `loadEligibleScs()` loads all approved SCs without excluding FC types (`request_type === 'FC'`)
+- `onGrScChange()` loads all non-finished POs without filtering out FC POs (`is_fc_po: '0'`)
+
+The backend `create_gr` does reject FC POs with a `ConflictError`, but users shouldn't see them as options at all.
+
+**Fix:**
+- In `loadEligibleScs()`: client-side filter `rows.filter(sc => sc.request_type !== 'FC')`
+- In `onGrScChange()`: add `is_fc_po: '0'` to the `search_pos` filters
+
 ## Backend: Missing columns
 
 ### PO `finished_at`
@@ -141,26 +153,20 @@ Existing timestamp labels (Confirmed At, Created At, etc.) remain in the locale 
 ### Task 7: Backend — fix `sc_request_type` in PO objects
 
 **Files:**
-- Modify: `sc_gr_app/services/sc_service.py` line 1211
+- Modify: `sc_gr_app/services/sc_service.py`
 
-Change:
-```python
-"""select po.*, v.vendor_name, v.ksrm_vendor_code
-   from pos po ..."""
-```
-To:
-```python
-"""select po.*, sc.request_type as sc_request_type, v.vendor_name, v.ksrm_vendor_code
-   from pos po
-   join sc_records sc on sc.sc_id = po.sc_id
-   ..."""
-```
+Since all POs in `get_sc_detail` belong to the same SC (`WHERE po.sc_id = ?`), set `po["sc_request_type"] = sc["request_type"]` in the Python loop after the PO query. No SQL change needed.
 
-Wait — the query already references `pos po` joined with `vendors v`, but not with `sc_records`. Since the query already has `WHERE po.sc_id = ?` and we're in the context of a specific SC, we can just add `sc.request_type as sc_request_type` from a `join sc_records sc on sc.sc_id = po.sc_id`. Actually simpler: since all POs in this query belong to the same SC (`WHERE po.sc_id = ?`), we can just return `sc["request_type"]` once and use it on all POs — but the frontend expects `po.sc_request_type` per PO. The cleanest approach: add the join.
+### Task 8: GR List — exclude FC SCs and POs from "Add GR"
 
-Actually, the simplest correct approach: since all POs belong to this SC which we already have as `sc`, we can set `po["sc_request_type"] = sc["request_type"]` in the Python loop. No SQL change needed.
+**Files:**
+- Modify: `frontend/src/views/GrListView.vue`
 
-### Task 8: Backend — add `finished_at` to PO
+In `loadEligibleScs()`: filter out FC-type SCs client-side: `rows.filter(sc => sc.request_type !== 'FC')`.
+
+In `onGrScChange()`: add `is_fc_po: '0'` to the `search_pos` filters.
+
+### Task 9: Backend — add `finished_at` to PO
 
 **Files:**
 - Modify: `sc_gr_app/db/migrations.py` (new migration v31)
@@ -169,7 +175,7 @@ Actually, the simplest correct approach: since all POs belong to this SC which w
 Migration: `ALTER TABLE pos ADD COLUMN finished_at TEXT`.
 `finish_po`: set `finished_at = utc_now()` in the UPDATE.
 
-### Task 9: Backend — add `updated_at` to GR
+### Task 10: Backend — add `updated_at` to GR
 
 **Files:**
 - Modify: `sc_gr_app/db/migrations.py` (new migration v31)
@@ -178,7 +184,7 @@ Migration: `ALTER TABLE pos ADD COLUMN finished_at TEXT`.
 Migration: `ALTER TABLE gr_requests ADD COLUMN updated_at TEXT`.
 Update `updated_at` to `utc_now()` in relevant GR service functions: on any status change or field update.
 
-### Task 10: Verify all tests pass
+### Task 11: Verify all tests pass
 
 Run full test suite. Add any needed test adjustments for the `finished_at` / `updated_at` column changes.
 
