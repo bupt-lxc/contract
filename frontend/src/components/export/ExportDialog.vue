@@ -127,6 +127,7 @@ const CASCADE_COLUMNS = [
   { key: 'request_type', label: t('export.type') },
   { key: 'sc_amount', label: t('export.scAmount') },
   { key: 'currency', label: t('sc.currency') },
+  { key: 'calloff_po_id', label: t('exportCol.calloffPoId') },
   { key: 'service_period_start', label: t('sc.startDate'), getValue: r => (r.service_period_start || '').slice(0, 10) },
   { key: 'service_period_end', label: t('sc.endDate'), getValue: r => (r.service_period_end || '').slice(0, 10) },
   { key: 'asset_nums', label: t('exportCol.assetNums') },

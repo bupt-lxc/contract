@@ -90,6 +90,15 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "requester_id", "message": f"User {row['requester_id']} not found"})
+        calloff_po_id = row.get("calloff_po_id")
+        if calloff_po_id:
+            po_exists = conn.execute(
+                "select 1 from pos po join sc_records sc on sc.sc_id = po.sc_id "
+                "where po.po_id = ? and sc.request_type = 'FC'",
+                (calloff_po_id,),
+            ).fetchone()
+            if not po_exists:
+                errors.append({"row": i, "field": "calloff_po_id", "message": f"calloff_po_id {calloff_po_id} is not a valid FC PO"})
     return errors
 
 
@@ -131,8 +140,9 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           sc_id, sc_no, requester_id, request_type, cost_center,
                           sc_amount, service_period_start, service_period_end,
                           status, description, currency, internal_system_number,
+                          calloff_po_id,
                           created_by, created_at, updated_at, asset
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
                         (
                             sc_id,
                             row.get("sc_no"),
@@ -146,6 +156,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("description"),
                             row.get("currency", "CNY"),
                             row.get("internal_system_number"),
+                            row.get("calloff_po_id"),
                             current_user["user_id"],
                             timestamp,
                             timestamp,

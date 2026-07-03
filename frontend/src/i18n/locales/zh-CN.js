@@ -797,6 +797,7 @@ home: {
     contractPos: '合同项',
     contractType: '合同类型',
     costCenter: '成本中心',
+    calloffPoId: 'Call-off PO ID',
     purchaser: '采购员'
   }
 }

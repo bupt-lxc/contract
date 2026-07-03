@@ -797,6 +797,7 @@ home: {
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
+    calloffPoId: 'Call-off PO ID',
     purchaser: 'Purchaser'
   }
 }
