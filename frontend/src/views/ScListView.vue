@@ -6,9 +6,18 @@
       @reset="handleReset"
     >
       <template #actions>
-        <el-button type="primary" :disabled="loadingState.count > 0" @click="scDialogVisible = true; scDialogMode = 'create'">
-          <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
-        </el-button>
+        <el-dropdown @command="handleCreateScCommand">
+          <el-button type="primary" :disabled="loadingState.count > 0">
+            <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="new">{{ $t('sc.newSc') }}</el-dropdown-item>
+              <el-dropdown-item command="calloff">{{ $t('sc.newCalloffSc') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button :disabled="loadingState.count > 0" @click="importVisible = true">
           <el-icon><Upload /></el-icon> Import
         </el-button>
@@ -54,8 +63,15 @@
       :record="scDialogRecord"
       :users="activeUsers"
       :vendors="vendors"
+      :calloff-po-id="calloffPoId"
+      :calloff-po-info="calloffPoInfo"
       @save-draft="handleSaveDraft"
       @save-submit="handleSaveSubmit"
+    />
+
+    <PoFcSelectorDialog
+      v-model:visible="poFcSelectorVisible"
+      @select="onPoFcSelect"
     />
 
     <BatchProgressModal
@@ -90,7 +106,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, ArrowDown } from '@element-plus/icons-vue'
+import PoFcSelectorDialog from '@/components/sc/PoFcSelectorDialog.vue'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
@@ -203,6 +220,7 @@ function computeDeadlineEnd(value) {
 const scFilterConfig = [
   { name: 'status', label: t('filter.status'), type: 'select', options: scStatuses },
   { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'is_calloff', label: t('filter.isCalloff'), type: 'select', options: [{ label: t('sc.topLevel'), value: '0' }, { label: t('sc.calloffBadge'), value: '1' }] },
   { name: 'asset', label: t('filter.asset'), type: 'select', options: [{label:'Y',value:'Y'},{label:'N',value:'N'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
@@ -221,6 +239,29 @@ const scFilterConfig = [
 const scDialogVisible = ref(false)
 const scDialogMode = ref('create')
 const scDialogRecord = ref(null)
+const calloffPoId = ref(null)
+const calloffPoInfo = ref(null)
+const poFcSelectorVisible = ref(false)
+
+function handleCreateScCommand(command) {
+  if (command === 'new') {
+    calloffPoId.value = null
+    calloffPoInfo.value = null
+    scDialogMode.value = 'create'
+    scDialogRecord.value = null
+    scDialogVisible.value = true
+  } else if (command === 'calloff') {
+    poFcSelectorVisible.value = true
+  }
+}
+
+function onPoFcSelect(po) {
+  calloffPoId.value = po.po_id
+  calloffPoInfo.value = po
+  scDialogMode.value = 'create'
+  scDialogRecord.value = null
+  scDialogVisible.value = true
+}
 
 function handleFilter({ text, filters }) {
   const transformed = { ...filters }

@@ -246,6 +246,7 @@ home: {
     ownerTransferred: 'Owner transferred',
     currency: 'Currency',
     importRules: 'Only SC records with status "Approved" or "Finished" can be imported. Required fields: SC NO, SC Amount, Status. Leave SC ID empty to auto-generate.',
+    topLevel: 'Top Level',
     calloffBadge: 'Call-off',
     newCalloffSc: 'New Call-off SC',
     calloffPoId: 'Call-off Source PO',

@@ -27,7 +27,14 @@
       </template>
     </el-table-column>
     <el-table-column prop="requester_name" :label="$t('sc.requester')" sortable="custom" width="130" />
-    <el-table-column prop="request_type" :label="$t('sc.type')" sortable="custom" width="110" />
+    <el-table-column :label="$t('sc.type')" sortable="custom" width="110">
+      <template #default="{ row }">
+        <el-tag v-if="row.calloff_po_id" type="warning" size="small">
+          {{ $t('sc.calloffBadge') }}
+        </el-tag>
+        <span v-else>{{ row.request_type }}</span>
+      </template>
+    </el-table-column>
     <el-table-column prop="cost_center" :label="$t('sc.costCenter')" sortable="custom" width="110" />
     <el-table-column prop="asset" :label="$t('sc.asset')" sortable="custom" width="70" />
     <el-table-column prop="sc_amount" :label="$t('sc.scAmount')" sortable="custom" width="130">

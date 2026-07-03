@@ -246,6 +246,7 @@ home: {
     ownerTransferred: '所有者已转移',
     currency: '货币',
     importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的SC记录。必填字段：SC NO（SC编号）、SC Amount（SC金额）、Status（状态）。SC ID留空将自动生成。',
+    topLevel: '顶层',
     calloffBadge: '外委',
     newCalloffSc: '新建外委 SC',
     calloffPoId: '外委来源 PO',
