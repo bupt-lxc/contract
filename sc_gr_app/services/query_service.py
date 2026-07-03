@@ -197,6 +197,13 @@ def search_scs(
         include_own_drafts=True,
     )
 
+    if filters and "is_calloff" in filters:
+        if filters["is_calloff"] == "1":
+            base_clauses.append("sc.calloff_po_id IS NOT NULL")
+        elif filters["is_calloff"] == "0":
+            base_clauses.append("sc.calloff_po_id IS NULL")
+        filters = {k: v for k, v in filters.items() if k != "is_calloff"}
+
     return _search(
         config,
         select_sql="""
@@ -271,6 +278,7 @@ def search_scs(
             "deadline": "sc.service_period_end",
             "deadline_from": "sc.service_period_end",
             "deadline_to": "sc.service_period_end",
+            "calloff_po_id": "sc.calloff_po_id",
         },
         sort=sort,
         allowed_sorts={
@@ -288,6 +296,7 @@ def search_scs(
             "pending_date": "sc.pending_date",
             "approved_date": "sc.approved_date",
             "confirmed_at": "sc.confirmed_at",
+            "calloff_po_id": "sc.calloff_po_id",
         },
         direction=direction,
         limit=limit,
@@ -369,17 +378,28 @@ def search_pos(
 ) -> list[dict]:
     base_clauses, base_params = _sc_visibility_clauses(current_user)
 
+    if filters and "is_fc_po" in filters:
+        if filters["is_fc_po"] == "1":
+            base_clauses.append("sc.request_type = 'FC'")
+        elif filters["is_fc_po"] == "0":
+            base_clauses.append("sc.request_type != 'FC'")
+        filters = {k: v for k, v in filters.items() if k != "is_fc_po"}
+
     return _search(
         config,
         select_sql="""
         select
           po.*,
           sc.sc_no,
+          sc.request_type as sc_request_type,
           u.user_name as requester_name,
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
-          po.po_amount - coalesce(gr_totals.pending_total, 0)
-            - coalesce(gr_totals.con_value_total, 0) as open_po_amount,
+          case when sc.request_type = 'FC'
+            then po.po_amount - coalesce(calloff_totals.allocated, 0)
+            else po.po_amount - coalesce(gr_totals.pending_total, 0)
+                 - coalesce(gr_totals.con_value_total, 0)
+          end as open_po_amount,
           coalesce(gr_totals.con_value_total, 0) as consumed_amount,
           coalesce(gr_totals.pending_total, 0) as po_pending_total,
           coalesce(gr_totals.pending_total_incl_tax, 0) as po_pending_total_incl_tax
@@ -400,6 +420,12 @@ def search_pos(
           from gr_requests
           group by po_id
         ) gr_totals on gr_totals.po_id = po.po_id
+        left join (
+          select calloff_po_id, coalesce(sum(sc_amount), 0) as allocated
+          from sc_records
+          where calloff_po_id is not null
+          group by calloff_po_id
+        ) calloff_totals on calloff_totals.calloff_po_id = po.po_id
         """,
         text=text,
         text_columns=(
@@ -682,8 +708,10 @@ def workbench_data(
                 f"po.created_at, po.contract_from, po.contract_to, "
                 f"sc.sc_no, "
                 f"u.user_name AS requester_name, "
-                f"po.po_amount - COALESCE(gr_sums.pending_total, 0) "
-                f"- COALESCE(gr_sums.con_value_total, 0) AS open_po_amount "
+                f"CASE WHEN sc.request_type = 'FC' "
+                f"THEN po.po_amount - COALESCE(calloff_sums.allocated, 0) "
+                f"ELSE po.po_amount - COALESCE(gr_sums.pending_total, 0) "
+                f"- COALESCE(gr_sums.con_value_total, 0) END AS open_po_amount "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
                 f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
@@ -695,6 +723,11 @@ def workbench_data(
                 f"THEN con_value ELSE 0 END) AS con_value_total"
                 f"  FROM gr_requests GROUP BY po_id"
                 f") gr_sums ON gr_sums.po_id = po.po_id "
+                f"LEFT JOIN ("
+                f"  SELECT calloff_po_id, SUM(sc_amount) AS allocated "
+                f"  FROM sc_records WHERE calloff_po_id IS NOT NULL "
+                f"  GROUP BY calloff_po_id"
+                f") calloff_sums ON calloff_sums.calloff_po_id = po.po_id "
                 f"{where} ORDER BY po.contract_to ASC LIMIT 6",
                 params,
             ).fetchall()
