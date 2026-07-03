@@ -202,15 +202,110 @@ New functions:
 - `compute_sc_budget(sc_id)`: extend to include PO-allocated/unallocated breakdown (already has `allocated_po_amount`, `unallocated_sc_amount`)
 - `compute_po_budget(po_id)`: unchanged for regular POs
 
+### `query_service.py`
+
+**`search_scs`** — new filters and output:
+- New filter `calloff_po_id`: exact match filter for finding call-off SCs under a specific PO(FC)
+- New filter `is_calloff`: boolean — `"1"` filters `calloff_po_id IS NOT NULL`, `"0"` filters `calloff_po_id IS NULL`
+- Result rows include `calloff_po_id` so the frontend can render a "Call-off" badge
+
+**`search_pos`** — fix open amount for FC POs:
+- The existing query computes `open_po_amount` via a `gr_totals` LEFT JOIN (GR pending + consumed). For FC POs with no GRs, `open_po_amount = po_amount` which is wrong — it should be `po_amount - allocated_calloff_amount`.
+- Fix: the SELECT should branch on parent SC's `request_type`. When `sc.request_type = 'FC'`, compute open as `po.po_amount - COALESCE(calloff_totals.allocated, 0)` instead of the GR-based formula.
+- Alternatively: compute both GR totals and call-off totals in subqueries, pick based on SC type.
+- New filter: `is_fc_po` — filter POs by whether parent SC is FC type
+- Result rows include `sc_request_type` so frontend can distinguish FC vs regular POs
+
+**`search_grs`** — unchanged.
+  - The existing query joins `sc_records sc`. FC-type SCs have no GRs (creation is blocked), so no FC POs appear here. No accidental leakage.
+
+**`workbench_data`** — fix FC PO section:
+- Same GR-based `open_po_amount` issue. PO queries in the workbench must handle FC POs correctly.
+- FC POs with no GRs would compute `open_po_amount = po_amount` (since GR subquery returns NULL), which is misleading. Fix to use call-off allocated amount instead.
+
+### `import_service.py`
+
+- SC import: support `calloff_po_id` column. Validate that referenced PO exists, is active or draft, and its parent SC is FC type.
+- PO import: no changes needed (PO type derived from parent SC).
+
+### `export_service.py`
+
+- SC export: include `calloff_po_id` column.
+- PO export: may include parent SC's `request_type` for context.
+
+### `notification_service.py`
+
+- Call-off SCs reuse existing SC notification rules (`notify.transitions.sc`). No new transition types.
+- PO(FC) reuses existing PO notification rules (`notify.transitions.po`).
+- Custom schedules (`notification_custom_schedule`): on PO(FC), the schedule applies normally (no GR-specific dependency).
+
+---
+
+## i18n Keys
+
+New translation keys needed (Chinese primary, English secondary):
+
+| Key | zh | en |
+|---|---|---|
+| `sc.calloffBadge` | 外委 | Call-off |
+| `sc.newCalloffSc` | 新建外委 SC | New Call-off SC |
+| `sc.calloffPoId` | 外委来源 PO | Call-off Source PO |
+| `po.openPoAmountFc` | PO 可用金额 | Open PO Amount |
+| `po.allocatedCalloff` | 已分配外委总额 | Allocated (Call-off SCs) |
+| `po.pendingCalloff` | 进行中外委 | Pending Call-off SCs |
+| `po.downstreamConsumed` | 下游已验收 | Downstream Consumed |
+| `po.downstreamPendingGr` | 下游待验收 GR | Downstream Pending GR |
+| `sc.allocatedPo` | 已分配 PO 总额 | Allocated (POs) |
+| `sc.unallocated` | 未分配金额 | Unallocated |
+| `sc.downstreamCalloff` | 下游外委 SC | Downstream Call-off SCs |
+| `sc.pendingCalloff` | 进行中外委 SC | Pending Call-off SCs |
+| `filter.isCalloff` | 外委 SC | Call-off SC |
+| `filter.isFcPo` | FC 类型 PO | FC PO |
+
+---
+
+## Delete & Recall Rules
+
+### Delete cascading:
+
+| Action | Blocked if |
+|---|---|
+| Delete PO(FC) | same as regular PO: must be `draft`, and no call-off SCs exist (draft PO(FC) can't have call-off SCs since creation requires PO(FC) active, so naturally safe — add explicit guard as defense) |
+| Delete call-off SC | same as regular SC: must be `draft`, cascades to children (existing logic) |
+| Delete SC(FC) | same as regular SC: must be `draft`, cascades to PO(FC)s → call-off SCs (existing delete_sc cascade already handles SC→PO→GR tree) |
+
+### Additional recall constraints:
+
+| Action | Blocked if |
+|---|---|
+| Recall SC(FC) | any non-draft PO(FC) exists (existing rule covers all POs) |
+| Recall PO(FC) (active → draft) | any non-draft call-off SC exists under it |
+| Recall call-off SC | any non-draft POs exist under it (existing rule) |
+
+### Permissions:
+
+- Creating call-off SC: requester who is the owner of the parent SC(FC), or admin. Same rule as creating PO under an SC.
+- Transfer call-off SC: allowed (same as regular SC). `calloff_po_id` does not change — only `requester_id` changes.
+- All other SC/PO/GR permissions: unchanged. The existing `_sc_permissions` logic covers FC entities since permissions are based on status and ownership, not type.
+
 ---
 
 ## Frontend Changes
 
-### PO type determines what's shown:
+### PO List view
+
+- FC POs should be visually distinct (e.g., "FC" badge or tag)
+- New column: PO type indicator (derive from `sc_request_type` in the row)
+- Filter dropdown: add "FC PO" / "Regular PO" option (maps to `is_fc_po` filter)
+- Budget columns (`open_po_amount`) compute correctly for both FC and regular POs (backend fix)
+
+### PO detail — conditional rendering:
 
 | Section | Regular PO | FC PO |
 |---|---|---|
 | PO info/header | ✓ | ✓ |
+| PO Budget (regular) | ✓ | — |
+| PO Budget (FC — allocated, pending call-off, downstream) | — | ✓ |
 | GR Records list | ✓ | — |
 | Create GR button | ✓ | — |
 | Call-off SC list | — | ✓ |
@@ -219,8 +314,9 @@ New functions:
 ### SC List view
 
 - "Create SC" button shows dropdown: **New SC** (top-level) / **New Call-off SC**
-- Call-off SCs display a visual indicator (e.g., "Call-off" badge)
-- "New Call-off SC" opens a PO(FC) selector showing available FC POs with their open amounts
+- Call-off SCs display a "Call-off" badge (check `calloff_po_id != null`)
+- Filter: "Top-level SC" vs "Call-off SC" (maps to `is_calloff` filter)
+- "New Call-off SC" opens a PO(FC) selector dialog showing active FC POs with their open amounts
 
 ### SC creation form
 
@@ -230,14 +326,15 @@ New functions:
 
 ### SC detail view
 
-- Call-off SC: show parent PO(FC) link
+- Call-off SC: show parent PO(FC) link with context (PO Amount, Open PO Amount)
 - SC(FC): for each FC PO row, show call-off SC count and remaining open amount
+- Budget Summary section below `ScDetailCard` showing SC-appropriate fields (see Budget Display section)
 
 ### PO detail view (FC PO)
 
 - Call-off SC list replaces GR list
 - "Create Call-off SC" button opens SC creation form pre-filled with `calloff_po_id`
-- Display remaining open amount
+- FC PO budget section with allocated call-off, downstream GR figures
 
 ---
 
@@ -247,8 +344,10 @@ New functions:
 
 2. **Vendor constraints**: existing `sc_vendors` junction + PO vendor validation covers FC POs as well — no special handling needed.
 
-3. **Import/export**: `calloff_po_id` should be an exportable and importable field.
+3. **Existing data**: treated as no existing FC data in production. Migration only adds the nullable `calloff_po_id` column.
 
-4. **Existing data**: treated as no existing FC data in production. Migration only adds the nullable column.
+4. **SC(FC) approval cascade**: the existing `cascade_pos` on SC approve is unnecessary since draft POs can't be created under a non-approved SC. No action needed, but noted for potential cleanup.
 
-5. **SC(FC) approval cascade**: the existing `cascade_pos` on SC approve is unnecessary since draft POs can't be created under a non-approved SC. No action needed, but noted for potential cleanup.
+5. **Two-level nesting limit**: enforced by (a) call-off SCs cannot be FC type, and (b) only FC-type SCs can spawn PO(FC)s. This prevents further nesting.
+
+6. **PO(FC) budget when no call-off SCs exist yet**: open amount = full PO amount. Downstream GR figures are all zero.
