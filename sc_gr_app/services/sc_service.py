@@ -65,7 +65,7 @@ REQUIRED_BUSINESS_FIELDS = (
 )
 
 
-def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | None, sc_amount) -> None:
+def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | None, sc_amount, exclude_sc_id: str | None = None) -> None:
     """Validate call-off PO reference for call-off SC creation/submit."""
     if calloff_po_id is None:
         if request_type == "FC":
@@ -89,10 +89,16 @@ def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | No
     if po_row["status"] != "active":
         raise ConflictError("Call-off PO must be active to create call-off SCs")
 
-    calloff_total = conn.execute(
-        "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ?",
-        (calloff_po_id,),
-    ).fetchone()[0]
+    if exclude_sc_id is not None:
+        calloff_total = conn.execute(
+            "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ? and sc_id != ?",
+            (calloff_po_id, exclude_sc_id),
+        ).fetchone()[0]
+    else:
+        calloff_total = conn.execute(
+            "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ?",
+            (calloff_po_id,),
+        ).fetchone()[0]
     new_amount = Decimal(str(sc_amount)) if sc_amount is not None else Decimal("0")
     if Decimal(str(calloff_total)) + new_amount > Decimal(str(po_row["po_amount"])):
         raise ConflictError("Call-off SC total would exceed PO(FC) amount")
@@ -669,7 +675,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
 
                 calloff_po_id = before.get("calloff_po_id")
                 if calloff_po_id is not None:
-                    _validate_calloff_po(conn, calloff_po_id, merged.get("request_type"), merged["sc_amount"])
+                    _validate_calloff_po(conn, calloff_po_id, merged.get("request_type"), merged["sc_amount"], exclude_sc_id=sc_id)
 
                 timestamp = utc_now()
                 conn.execute(
@@ -1234,6 +1240,24 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             )
         ]
 
+        # For call-off SCs, include parent PO(FC) info
+        parent_po = None
+        if sc.get("calloff_po_id"):
+            parent_po_row = conn.execute(
+                """select po.*, sc_parent.request_type as parent_sc_type
+                   from pos po
+                   join sc_records sc_parent on sc_parent.sc_id = po.sc_id
+                   where po.po_id = ?""",
+                (sc["calloff_po_id"],),
+            ).fetchone()
+            if parent_po_row:
+                parent_po = _row_to_dict(parent_po_row)
+
+        vendors = _fetch_sc_vendors(conn, sc_id)
+
+    if parent_po is not None:
+        parent_po["fc_budget"] = compute_po_fc_budget(config, sc["calloff_po_id"])
+
     for po in pos:
         if sc["request_type"] == "FC":
             po_budget = compute_po_fc_budget(config, po["po_id"])
@@ -1255,20 +1279,6 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     else:
         sc_budget = compute_sc_budget(config, sc_id)
 
-    # For call-off SCs, include parent PO(FC) info
-    parent_po = None
-    if sc.get("calloff_po_id"):
-        parent_po_row = conn.execute(
-            """select po.*, sc.request_type as parent_sc_type
-               from pos po
-               join sc_records sc on sc.sc_id = po.sc_id
-               where po.po_id = ?""",
-            (sc["calloff_po_id"],),
-        ).fetchone()
-        if parent_po_row:
-            parent_po = _row_to_dict(parent_po_row)
-            parent_po["fc_budget"] = compute_po_fc_budget(config, sc["calloff_po_id"])
-
     return {
         "sc": sc,
         "budget": sc_budget,
@@ -1276,7 +1286,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         "grs": grs,
         "operation_records": records,
         "permissions": _sc_permissions(current_user, sc),
-        "vendors": _fetch_sc_vendors(conn, sc_id),
+        "vendors": vendors,
         "parent_po": parent_po,
     }
 
