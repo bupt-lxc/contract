@@ -400,6 +400,14 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                 if sibling_total + po_amount > Decimal(str(sc["sc_amount"])):
                     raise ConflictError("PO total would exceed SC amount")
 
+                if sc["request_type"] == "FC" and "po_amount" in updates:
+                    calloff_total = conn.execute(
+                        "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ?",
+                        (po_id,),
+                    ).fetchone()[0]
+                    if po_amount < Decimal(str(calloff_total)):
+                        raise ConflictError("PO amount cannot be below allocated call-off SC amounts")
+
                 timestamp = utc_now()
                 conn.execute(
                     """
@@ -477,19 +485,38 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "active":
                     raise ConflictError("PO must be active")
 
-                # Block if any GR is not in a final state
-                non_final_grs = conn.execute(
-                    """
-                    SELECT gr_id, status FROM gr_requests
-                    WHERE po_id = ? AND status NOT IN ('denied', 'finished')
-                    """,
-                    (po_id,),
-                ).fetchall()
-                if non_final_grs:
-                    raise ConflictError(
-                        f"Cannot finish PO: {len(non_final_grs)} GR(s) not in final state. "
-                        "Approve, deny or finish all GRs first."
-                    )
+                parent_sc = conn.execute(
+                    "select request_type from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+
+                if parent_sc and parent_sc["request_type"] == "FC":
+                    non_final_calloffs = conn.execute(
+                        """
+                        SELECT sc_id, status FROM sc_records
+                        WHERE calloff_po_id = ? AND status NOT IN ('finished', 'denied')
+                        """,
+                        (po_id,),
+                    ).fetchall()
+                    if non_final_calloffs:
+                        raise ConflictError(
+                            f"Cannot finish PO: {len(non_final_calloffs)} call-off SC(s) not in final state. "
+                            "Finish or deny all call-off SCs first."
+                        )
+                else:
+                    # Block if any GR is not in a final state
+                    non_final_grs = conn.execute(
+                        """
+                        SELECT gr_id, status FROM gr_requests
+                        WHERE po_id = ? AND status NOT IN ('denied', 'finished')
+                        """,
+                        (po_id,),
+                    ).fetchall()
+                    if non_final_grs:
+                        raise ConflictError(
+                            f"Cannot finish PO: {len(non_final_grs)} GR(s) not in final state. "
+                            "Approve, deny or finish all GRs first."
+                        )
 
                 timestamp = utc_now()
                 conn.execute(
@@ -557,12 +584,24 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "active":
                     raise ConflictError("Only active PO can be recalled back to draft")
 
-                non_draft_gr_count = conn.execute(
-                    "select count(*) from gr_requests where po_id = ? and status != 'draft'",
-                    (po_id,),
-                ).fetchone()[0]
-                if non_draft_gr_count > 0:
-                    raise ConflictError("Cannot recall PO with existing non-draft GRs")
+                parent_sc = conn.execute(
+                    "select request_type from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if parent_sc and parent_sc["request_type"] == "FC":
+                    non_draft_calloffs = conn.execute(
+                        "select count(*) from sc_records where calloff_po_id = ? and status != 'draft'",
+                        (po_id,),
+                    ).fetchone()[0]
+                    if non_draft_calloffs > 0:
+                        raise ConflictError("Cannot recall PO(FC): non-draft call-off SCs exist")
+                else:
+                    non_draft_gr_count = conn.execute(
+                        "select count(*) from gr_requests where po_id = ? and status != 'draft'",
+                        (po_id,),
+                    ).fetchone()[0]
+                    if non_draft_gr_count > 0:
+                        raise ConflictError("Cannot recall PO with existing non-draft GRs")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -612,6 +651,17 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 before = _get_po_or_raise(conn, po_id)
                 if before["status"] != "draft":
                     raise ConflictError("Only draft PO can be deleted")
+                parent_sc = conn.execute(
+                    "select request_type from sc_records where sc_id = ?",
+                    (before["sc_id"],),
+                ).fetchone()
+                if parent_sc and parent_sc["request_type"] == "FC":
+                    calloff_exists = conn.execute(
+                        "select 1 from sc_records where calloff_po_id = ? limit 1",
+                        (po_id,),
+                    ).fetchone()
+                    if calloff_exists:
+                        raise ConflictError("Cannot delete PO(FC) with existing call-off SCs")
                 sc = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
                     (before["sc_id"],),
