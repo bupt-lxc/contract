@@ -250,6 +250,7 @@ home: {
     calloffBadge: 'Call-off',
     newCalloffSc: 'New Call-off SC',
     calloffPoId: 'Call-off Source PO',
+    scAmountExceedsOpenPoAmount: 'SC amount exceeds the open PO amount of the selected FC PO.',
     allocatedPo: 'Allocated (POs)',
     unallocated: 'Unallocated',
     downstreamCalloff: 'Downstream Call-off SCs',

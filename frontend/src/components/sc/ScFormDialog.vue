@@ -5,6 +5,12 @@
     width="640px"
     @update:model-value="$emit('update:visible', $event)"
   >
+    <el-alert v-if="calloffPoId" type="info" :closable="false" style="margin-bottom: 16px">
+      <template #title>
+        {{ $t('sc.calloffPoId') }}: {{ calloffPoInfo?.po_id || calloffPoId }}
+        ({{ $t('po.openPoAmountFc') }}: {{ calloffPoInfo?.open_po_amount }})
+      </template>
+    </el-alert>
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
@@ -157,12 +163,18 @@ const props = defineProps({
   mode: { type: String, default: 'create' },
   record: { type: Object, default: null },
   users: { type: Array, default: () => [] },
-  vendors: { type: Array, default: () => [] }
+  vendors: { type: Array, default: () => [] },
+  calloffPoId: { type: String, default: null },
+  calloffPoInfo: { type: Object, default: null }
 })
 
 const emit = defineEmits(['update:visible', 'save-draft', 'save-submit'])
 
-const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
+const requestTypes = computed(() => {
+  const types = ['material', 'service', 'fixed_asset', 'FC']
+  if (props.calloffPoId) return types.filter(t => t !== 'FC')
+  return types
+})
 const formRef = ref()
 const submitting = ref(false)
 const pickedFiles = ref([])
@@ -235,7 +247,23 @@ async function handlePickFiles() {
 }
 
 function _savePayload() {
-  return { ...form, vendor_ids: form.vendor_ids || [], _attachments: pickedFiles.value.map(f => f.path) }
+  const data = { ...form, vendor_ids: form.vendor_ids || [], _attachments: pickedFiles.value.map(f => f.path) }
+  if (props.calloffPoId) {
+    data.calloff_po_id = props.calloffPoId
+  }
+  return data
+}
+
+function _validateCalloffAmount() {
+  if (props.calloffPoId && props.calloffPoInfo?.open_po_amount != null) {
+    const openAmount = Number(props.calloffPoInfo.open_po_amount)
+    const scAmount = Number(form.sc_amount)
+    if (!isNaN(openAmount) && !isNaN(scAmount) && scAmount > openAmount) {
+      ElMessage.error(t('sc.scAmountExceedsOpenPoAmount'))
+      return false
+    }
+  }
+  return true
 }
 
 async function saveDraft() {
@@ -248,6 +276,7 @@ async function saveDraft() {
     console.log('saveDraft validation failed:', err)
     return
   }
+  if (!_validateCalloffAmount()) return
   submitting.value = true
   try {
     emit('save-draft', _savePayload())
@@ -270,6 +299,7 @@ async function saveSubmit() {
       return
     }
   }
+  if (!_validateCalloffAmount()) return
   submitting.value = true
   try {
     emit('save-submit', _savePayload())

@@ -250,6 +250,7 @@ home: {
     calloffBadge: '外委',
     newCalloffSc: '新建外委 SC',
     calloffPoId: '外委来源 PO',
+    scAmountExceedsOpenPoAmount: 'SC 金额超过所选 FC PO 的可用金额。',
     allocatedPo: '已分配 PO 总额',
     unallocated: '未分配金额',
     downstreamCalloff: '下游外委 SC',
