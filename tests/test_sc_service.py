@@ -254,3 +254,167 @@ class TestScSubmit:
                 "service_period_start": "2026-01-01",
                 "service_period_end": "2026-12-31",
             })
+
+
+class TestScConfirm:
+    def test_confirm_manager_confirm_to_pending(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-CONF",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = confirm_sc(seeded_config, admin, sc["sc_id"])
+        assert result["status"] == "pending"
+
+    def test_confirm_rejects_non_manager_confirm(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ConflictError, match="SC must be in manager_confirm status"):
+            confirm_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_confirm_requires_admin(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-NOAD",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(PermissionDenied):
+            confirm_sc(seeded_config, requester, sc["sc_id"])
+
+
+class TestScApprove:
+    def test_approve_pending_to_approved(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-APPR",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = approve_sc(seeded_config, admin, sc["sc_id"])
+        assert result["status"] == "approved"
+
+    def test_approve_rejects_draft_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ConflictError, match="SC must be pending"):
+            approve_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_approve_rejects_manager_confirm_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-MC",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(ConflictError, match="SC must be pending"):
+            approve_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_approve_requires_admin(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-NOAD2",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(PermissionDenied):
+            approve_sc(seeded_config, requester, sc["sc_id"])
+
+
+class TestScUpdate:
+    def test_update_sc_field(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        result = update_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-UPDATED",
+            "description": "updated description",
+        })
+        assert result["sc_no"] == "SC-UPDATED"
+        assert result["description"] == "updated description"
+
+    def test_update_rejects_no_fields(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ValidationError, match="No SC fields to update"):
+            update_sc(seeded_config, admin, sc["sc_id"], {})
+
+    def test_update_rejects_finished_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-FIN",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        sc = finish_sc(seeded_config, admin, sc["sc_id"])
+        with pytest.raises(ConflictError, match="Finished SC cannot be edited"):
+            update_sc(seeded_config, admin, sc["sc_id"], {"sc_no": "SC-BAD"})
+
+    def test_update_amount_cannot_go_below_po_allocation(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-PO-AMT",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        from sc_gr_app.services.po_service import create_po
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Test Vendor",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        create_po(seeded_config, admin, {
+            "sc_id": sc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 40000,
+        })
+        with pytest.raises(ConflictError, match="SC amount cannot be below allocated PO amount"):
+            update_sc(seeded_config, admin, sc["sc_id"], {"sc_amount": 30000})
