@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1327,6 +1327,15 @@ def _migrate_v30(conn) -> None:
     _record(conn, 30)
 
 
+def _migrate_v31(conn) -> None:
+    """Add calloff_po_id column to sc_records for framework-contract call-off SCs."""
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "calloff_po_id" not in existing:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
+    _record(conn, 31)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1489,6 +1498,10 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v30(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 31 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v31(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
