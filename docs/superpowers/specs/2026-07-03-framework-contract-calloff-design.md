@@ -141,7 +141,7 @@ For call-off SCs: also show parent PO(FC) info with its Open PO Amount as contex
 
 ```
 SC(FC) finish → requires all PO(FC)s finished
-PO(FC) finish → requires all call-off SCs finished or denied
+PO(FC) finish → requires all call-off SCs in final state (finished or denied; draft blocks — consistent with regular PO finish where draft GRs also block)
 call-off SC finish → requires all regular POs finished (existing)
 regular PO finish → requires all GRs in final state (existing)
 ```
@@ -150,8 +150,8 @@ regular PO finish → requires all GRs in final state (existing)
 
 | To create | Parent constraint |
 |---|---|
-| PO(FC) | SC(FC) approved |
-| call-off SC | PO(FC) active |
+| PO(FC) | SC(FC) draft or approved (existing rule: draft SC → draft PO, approved SC → active PO) |
+| call-off SC | PO(FC) active. Note: this is intentionally stricter than the normal "draft first" pattern — call-off SCs cannot be created as draft until the PO(FC) is active. This prevents budget reservation (gaming) against an unapproved framework. |
 | Regular PO under call-off SC | call-off SC draft or approved (existing rule) |
 | GR | Parent PO's parent SC is non-FC |
 
@@ -181,7 +181,7 @@ regular PO finish → requires all GRs in final state (existing)
 
 - `create_po`: when parent SC is FC type:
   - PO is automatically an FC PO (no GR creation)
-  - PO status is `active` only if parent SC is approved
+  - Follows existing rule: SC draft → PO draft, SC approved → PO active
 - `finish_po`: for FC PO:
   - Block if any call-off SC is not in final state (`finished` or `denied`)
   - Skip the GR final-state check (FC POs have no GRs)
@@ -233,11 +233,22 @@ New functions:
 - SC export: include `calloff_po_id` column.
 - PO export: may include parent SC's `request_type` for context.
 
-### `notification_service.py`
+### `notification_service.py` / `notification/`
 
 - Call-off SCs reuse existing SC notification rules (`notify.transitions.sc`). No new transition types.
 - PO(FC) reuses existing PO notification rules (`notify.transitions.po`).
-- Custom schedules (`notification_custom_schedule`): on PO(FC), the schedule applies normally (no GR-specific dependency).
+
+**`notification/thresholds.py`** — amount threshold fix:
+- Currently computes `remaining_pct = (po_amount - SUM(approved GR con_value)) / po_amount`. For FC POs (no GRs), this is always 100%, meaning amount thresholds never fire even after call-off SCs consume budget.
+- Fix: for FC POs, compute `consumed = SUM(call-off SC amounts)` instead of GR con_value. For regular POs, keep GR-based math.
+
+**`notification/monthly.py`** — same GR-based math fix:
+- Monthly summary queries compute `open_po_amount` using GR totals. For FC POs, use call-off allocated amounts instead. Same fix pattern as `search_pos` and `workbench_data`.
+
+### `api/bridge.py`
+
+- SC import template (`download_sc_template`): add `calloff_po_id` to the headers list.
+- Export cascade: when `export_pos_cascade` with `gr=true` runs on an FC PO (no GRs), produce call-off SC tree instead, or skip GR sheet. For `export_scs_cascade` on an SC(FC), the PO sheet should include FC PO budget columns.
 
 ---
 
@@ -351,3 +362,5 @@ New translation keys needed (Chinese primary, English secondary):
 5. **Two-level nesting limit**: enforced by (a) call-off SCs cannot be FC type, and (b) only FC-type SCs can spawn PO(FC)s. This prevents further nesting.
 
 6. **PO(FC) budget when no call-off SCs exist yet**: open amount = full PO amount. Downstream GR figures are all zero.
+
+7. **Vendor consistency between PO(FC) and call-off SCs**: the PO(FC) has a vendor (`pos.vendor_id`). A call-off SC has its own vendors via `sc_vendors`. The spec does NOT enforce that call-off SC vendors must match the PO(FC) vendor — they can differ. If this is a business requirement, it can be added as a validation later.
