@@ -167,7 +167,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_submit_sc": (is_admin or is_owner) and (is_draft or is_denied),
         "can_confirm_sc": is_admin and is_manager_confirm,
         "can_approve_sc": is_admin and is_pending,
-        "can_deny_sc": is_admin and is_pending,
+        "can_deny_sc": is_admin and (is_pending or is_manager_confirm),
         "can_finish_sc": (is_admin or is_owner) and is_approved,
         "can_recall_sc": is_owner and (is_pending or is_manager_confirm or is_approved or is_denied),
         "can_delete_sc": (is_admin or is_owner) and is_draft,
@@ -330,18 +330,6 @@ def remove_sc_vendor(config: AppConfig, current_user: dict, sc_id: str, vendor_i
                 if sc is None:
                     raise NotFound(f"SC {sc_id} not found")
                 _assert_can_edit_sc(current_user, sc)
-
-                # Prevent removing the last vendor
-                count_row = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
-                ).fetchone()
-                if count_row["cnt"] <= 1:
-                    raise ConflictError(
-                        "供应商信息不允许为空，更新信息请在供应商界面更改（更改后不同步，需重新添加）\n"
-                        "The supplier information cannot be left blank. To update the information, "
-                        "please make the changes in the supplier interface "
-                        "(the changes will not be synchronized and you need to re-add them)."
-                    )
 
                 cursor = conn.execute(
                     "DELETE FROM sc_vendors WHERE sc_id = ? AND vendor_id = ?",
@@ -845,8 +833,8 @@ def deny_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_sc(conn, sc_id)
-                if before["status"] != "pending":
-                    raise ConflictError("SC must be pending")
+                if before["status"] not in ("pending", "manager_confirm"):
+                    raise ConflictError("SC must be pending or manager_confirm")
 
                 timestamp = utc_now()
                 conn.execute(

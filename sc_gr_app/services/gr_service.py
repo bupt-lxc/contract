@@ -858,8 +858,8 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
-                if before["status"] != "pending":
-                    raise ConflictError("GR must be pending")
+                if before["status"] not in ("pending", "manager_confirm"):
+                    raise ConflictError("GR must be pending or manager_confirm")
 
                 timestamp = utc_now()
                 conn.execute(

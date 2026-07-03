@@ -123,30 +123,13 @@
       @save-draft="handleGrSaveDraft"
     />
 
-    <el-dialog v-model="importVisible" title="Import GR" width="500px">
-      <el-upload
-        :auto-upload="false"
-        :on-change="handleFileSelect"
-        :limit="1"
-        accept=".xlsx,.xls"
-        drag
-      >
-        <el-icon :size="40"><UploadFilled /></el-icon>
-        <div>Drop file here or click to upload</div>
-        <template #tip>
-          <div>Only .xlsx/.xls files</div>
-        </template>
-      </el-upload>
-      <div v-if="importResult" style="margin-top:12px">
-        <el-alert v-if="importResult.ok" type="success" :title="`Imported ${importResult.count} records`" closable @close="importResult = null" />
-        <el-alert v-else type="error" closable @close="importResult = null">
-          <div v-for="e in importResult.errors" :key="e.row">Row {{ e.row }}: {{ e.field }} - {{ e.message }}</div>
-        </el-alert>
-      </div>
-      <template #footer>
-        <el-button @click="importVisible = false">Cancel</el-button>
-      </template>
-    </el-dialog>
+    <ImportPreviewDialog
+      v-model:visible="importVisible"
+      entity-type="GR"
+      :columns="grImportColumns"
+      :rules-text="$t('gr.importRules')"
+      @imported="searchGrs"
+    />
 
     <BatchProgressModal
       :visible="batchState.active"
@@ -160,8 +143,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { callApi } from '@/api/bridge.js'
 import { useGr } from '@/composables/useGr.js'
@@ -170,6 +152,7 @@ import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
+import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 import { useBatchAction } from '@/composables/useBatchAction.js'
 import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -430,25 +413,24 @@ async function handleExport() {
 
 // GR import
 const importVisible = ref(false)
-const importResult = ref(null)
 
-async function handleFileSelect(uploadFile) {
-  importResult.value = null
-  const file = uploadFile.raw
-  try {
-    const data = await file.arrayBuffer()
-    const wb = XLSX.read(data, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-    importResult.value = await callApi('import_grs', { rows })
-    if (importResult.value.ok) {
-      importVisible.value = false
-      searchGrs()
-    }
-  } catch (e) {
-    importResult.value = { ok: false, errors: [{ row: '-', field: '', message: e.message }] }
-  }
-}
+const grImportColumns = [
+  { prop: 'gr_id', label: 'GR ID', width: '160' },
+  { prop: 'po_id', label: 'PO ID', width: '160' },
+  { prop: 'gr_no', label: t('gr.grNo'), width: '120' },
+  { prop: 'requester_id', label: t('gr.requester'), width: '100' },
+  { prop: 'estimated_amount', label: t('gr.estimatedAmount'), width: '110' },
+  { prop: 'con_value', label: t('gr.conValue'), width: '110' },
+  { prop: 'status', label: t('common.status'), width: '90' },
+  { prop: 'remark', label: t('gr.remark'), width: '120' },
+  { prop: 'tax_rate', label: t('gr.taxRate'), width: '70' },
+  { prop: 'gross_cost', label: t('gr.grossCost'), width: '100' },
+  { prop: 'goods_service_description', label: t('gr.goodsServiceDescription'), minWidth: '140' },
+  { prop: 'confirmation_name', label: t('gr.confirmationName'), width: '120' },
+  { prop: 'delivery_from', label: t('gr.deliveryFrom'), width: '110' },
+  { prop: 'delivery_to', label: t('gr.deliveryTo'), width: '110' },
+  { prop: 'last_delivery', label: t('gr.lastDelivery'), width: '110' },
+]
 
 async function downloadTemplate() {
   try {

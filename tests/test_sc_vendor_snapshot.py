@@ -155,3 +155,30 @@ def test_vendor_snapshot_on_submit(app_config):
     assert row is not None
     snapshot = json.loads(row["vendor_snapshot"])
     assert snapshot["vendor_name"] == "Submit Vendor"
+
+
+def test_remove_last_vendor_allowed(app_config):
+    """Removing the last vendor from an SC should succeed."""
+    migrate(app_config)
+    seed_users(app_config)
+
+    from sc_gr_app.db.connection import connect
+    from sc_gr_app.services.sc_service import add_sc_vendor, remove_sc_vendor
+
+    sc_id = create_sc_draft(app_config, USER, {"requester_id": "U1"})["sc_id"]
+    vendor = create_vendor(app_config, ADMIN, {
+        "vendor_name": "Test Vendor",
+        "vendor_id": "V-TEST-001",
+        "service_scope": "General Service",
+    })
+
+    add_sc_vendor(app_config, USER, sc_id, vendor["vendor_id"])
+    with connect(app_config) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM sc_vendors WHERE sc_id = ?", (sc_id,)
+        ).fetchone()
+        assert count["cnt"] == 1
+
+    # Should not raise -- removing last vendor is now allowed
+    result = remove_sc_vendor(app_config, USER, sc_id, vendor["vendor_id"])
+    assert len(result) == 0

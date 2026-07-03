@@ -14,6 +14,11 @@
         <StatusBadge :status="row.status" />
       </template>
     </el-table-column>
+    <el-table-column prop="sc_no" :label="$t('sc.scNo')" sortable="custom" width="130">
+      <template #default="{ row }">
+        <span style="font-family:monospace;font-size:12px">{{ row.sc_no || '-' }}</span>
+      </template>
+    </el-table-column>
     <el-table-column prop="sc_id" :label="$t('sc.scId')" sortable="custom" width="135">
       <template #default="{ row }">
         <el-tooltip :content="row.sc_id" placement="top" :disabled="!row.sc_id">

@@ -65,30 +65,13 @@
       @abort="abort"
     />
 
-    <el-dialog v-model="importVisible" title="Import SC" width="500px">
-      <el-upload
-        :auto-upload="false"
-        :on-change="handleFileSelect"
-        :limit="1"
-        accept=".xlsx,.xls"
-        drag
-      >
-        <el-icon :size="40"><UploadFilled /></el-icon>
-        <div>Drop file here or click to upload</div>
-        <template #tip>
-          <div>Only .xlsx/.xls files</div>
-        </template>
-      </el-upload>
-      <div v-if="importResult" style="margin-top:12px">
-        <el-alert v-if="importResult.ok" type="success" :title="`Imported ${importResult.count} records`" closable @close="importResult = null" />
-        <el-alert v-else type="error" closable @close="importResult = null">
-          <div v-for="e in importResult.errors" :key="e.row">Row {{ e.row }}: {{ e.field }} - {{ e.message }}</div>
-        </el-alert>
-      </div>
-      <template #footer>
-        <el-button @click="importVisible = false">Cancel</el-button>
-      </template>
-    </el-dialog>
+    <ImportPreviewDialog
+      v-model:visible="importVisible"
+      entity-type="SC"
+      :columns="scImportColumns"
+      :rules-text="$t('sc.importRules')"
+      @imported="searchScs"
+    />
   </div>
 </template>
 
@@ -96,8 +79,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload, UploadFilled } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
@@ -108,6 +90,7 @@ import ScTable from '@/components/sc/ScTable.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import { useBatchAction } from '@/composables/useBatchAction.js'
 import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
+import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -317,25 +300,21 @@ async function handleExport() {
 
 // SC import
 const importVisible = ref(false)
-const importResult = ref(null)
 
-async function handleFileSelect(uploadFile) {
-  importResult.value = null
-  const file = uploadFile.raw
-  try {
-    const data = await file.arrayBuffer()
-    const wb = XLSX.read(data, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-    importResult.value = await callApi('import_scs', { rows })
-    if (importResult.value.ok) {
-      importVisible.value = false
-      searchScs()
-    }
-  } catch (e) {
-    importResult.value = { ok: false, errors: [{ row: '-', field: '', message: e.message }] }
-  }
-}
+const scImportColumns = [
+  { prop: 'sc_id', label: 'SC ID', width: '160' },
+  { prop: 'sc_no', label: t('sc.scNo'), width: '120' },
+  { prop: 'requester_id', label: t('sc.requester'), width: '100' },
+  { prop: 'request_type', label: t('sc.requestType'), width: '100' },
+  { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },
+  { prop: 'sc_amount', label: t('sc.scAmount'), width: '100' },
+  { prop: 'service_period_start', label: t('sc.servicePeriodStart'), width: '110' },
+  { prop: 'service_period_end', label: t('sc.servicePeriodEnd'), width: '110' },
+  { prop: 'status', label: t('common.status'), width: '90' },
+  { prop: 'description', label: t('common.description'), minWidth: '140' },
+  { prop: 'currency', label: t('sc.currency'), width: '70' },
+  { prop: 'internal_system_number', label: t('sc.internalSystemNumber'), width: '100' },
+]
 
 async function downloadTemplate() {
   try {

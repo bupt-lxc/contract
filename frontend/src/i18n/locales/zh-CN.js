@@ -76,7 +76,19 @@ export default {
     browse: '浏览',
     vendor: '供应商',
     yes: '是',
-    no: '否'
+    no: '否',
+    importValid: '有效: {n}',
+    importInvalid: '无效: {n}',
+    importSelected: '已选: {n}',
+    importReSelect: '重新选择',
+    importConfirm: '确认导入 ({n})',
+    importFile: '文件',
+    importSelectFile: '选择文件',
+    importDropHint: '将文件拖到此处或点击上传',
+    importFormatHint: '仅支持 .xlsx/.xls 文件',
+    importRecords: '导入 {entity}',
+    importValidation: '校验结果',
+    template: '模板'
   },
 
   status: {
@@ -130,6 +142,7 @@ home: {
     loadError: '加载失败',
     colScNo: 'SC编号',
     colRequester: '申请人',
+    colRequestType: '申请类型',
     colPoNo: 'PO编号',
     colGrId: 'GR ID',
     colDeadline: 'End Day',
@@ -232,6 +245,7 @@ home: {
     selectNewOwner: '选择新所有者',
     ownerTransferred: '所有者已转移',
     currency: '货币',
+    importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的SC记录。必填字段：SC NO（SC编号）、SC Amount（SC金额）、Status（状态）。SC ID留空将自动生成。',
   },
 
   po: {
@@ -292,7 +306,8 @@ home: {
     purchaser: '采购员',
     activeDate: '生效日期',
     poNotFound: '未找到PO记录。',
-    draftSaved: '草稿已保存'
+    draftSaved: '草稿已保存',
+    importRules: '仅允许导入状态为"Active（进行中）"或"Finished（已完成）"的PO记录。必填字段：SC ID（关联SC编号）、PO NO（PO编号）、PO Amount（PO金额）、Status（状态）。PO ID留空将自动生成。',
   },
 
   gr: {
@@ -371,7 +386,8 @@ home: {
     deliveryTo: '交付至',
     lastDelivery: '最后交付',
     confirmSubmit: '确认提交此验收申请？',
-    grSubmitted: '验收申请已提交'
+    grSubmitted: '验收申请已提交',
+    importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的GR记录。必填字段：PO ID（关联PO编号）、GR NO（GR编号）、Estimated Amount（预估金额）、Con Value（合同金额）、Delivery From（交付开始日期）、Delivery To（交付结束日期）、Status（状态）。GR ID留空将自动生成。',
   },
 
   vendor: {
