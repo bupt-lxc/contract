@@ -76,6 +76,57 @@ class TestSomething:
 - `notification/__main__.py` — CLI entry point
 - All existing test files remain unchanged
 
+## Existing Test Gaps (Quick Scan)
+
+Quick scan of the 3 most critical existing test files revealed blind spots:
+
+### `test_po_service.py` (10 tests → ~15-20 missing)
+
+`po_service.py` has 6 public functions. Current tests only cover FC guard paths:
+
+| Function | Currently tested? | What's missing |
+|---|---|---|
+| `create_po` | Not directly | Required fields, non-positive amount, non-existent SC, SC status→PO status derivation |
+| `submit_po` | No unit test | Draft→active transition, permission check, cascade submit |
+| `update_po` | 3 tests (vendor, amount floor) | Status guards (can't update finished/recalled), field updates (po_no, contract), non-FC amount floor |
+| `finish_po` | FC guard only (3 tests) | Regular PO finish: permission, status guard, cascade |
+| `recall_po` | FC guard only (2 tests) | Regular PO recall: finished→active, non-admin guard |
+| `delete_po` | FC guard only (1 test) | Regular PO delete: draft-only, admin-only, GR existence check |
+
+### `test_budget_service.py` (25 tests → ~3-4 missing)
+
+| Gap | Detail |
+|---|---|
+| `manager_confirm` GRs | Only pending + approved GRs tested; manager_confirm should also count toward pending totals |
+| Draft/finished GR exclusion | No explicit test confirming draft/finished GRs don't affect budget |
+| Empty DB for decimal variants | `compute_sc_budget_decimal` and `compute_po_budget_decimal` not tested with empty database |
+
+### `test_fc_calloff_flow.py` (5 tests → ~2-3 missing)
+
+| Gap | Detail |
+|---|---|
+| Mixed call-off statuses | Multiple call-off SCs with one denied, one approved — denied should not consume budget |
+| Denied call-off budget exclusion | No test confirming denied call-off SC releases budget back |
+
+## Files to Modify
+
+- **`conftest.py`** — add `seeded_config` fixture (migrate + seed_users) to reduce boilerplate
+- **`test_po_service.py`** — add `TestPoCreate`, `TestPoSubmit`, extend `TestPoFcGuards` with regular PO paths
+- **`test_budget_service.py`** — add manager_confirm GR test, draft/finished exclusion test, empty DB decimal test
+- **`test_fc_calloff_flow.py`** — add mixed-status call-off budget test, denied call-off exclusion test
+- **`test_sc_service_calloff.py`** — delete, tests absorbed into `test_sc_service.py`
+
+## Revised Estimate
+
+| Category | Tests |
+|---|---|
+| New: `test_sc_service.py` | ~40-50 |
+| New: `test_gr_service.py` | ~35-45 |
+| Patch: `test_po_service.py` | ~15-20 |
+| Patch: `test_budget_service.py` | ~3-4 |
+| Patch: `test_fc_calloff_flow.py` | ~2-3 |
+| **Total** | **~95-122** |
+
 ## Constraints
 
 - No mocking — real SQLite database via `tmp_path`
