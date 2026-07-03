@@ -619,3 +619,225 @@ class TestScDelete:
         })
         result = delete_sc(seeded_config, requester, sc["sc_id"])
         assert result["deleted"] is True
+
+
+class TestScTransfer:
+    def test_transfer_sc_ownership(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-XFER",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = transfer_sc(seeded_config, admin, sc["sc_id"], admin["user_id"])
+        assert result["requester_id"] == admin["user_id"]
+
+    def test_transfer_to_same_owner_is_noop(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-SAME",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = transfer_sc(seeded_config, admin, sc["sc_id"], requester["user_id"])
+        assert result == sc
+
+    def test_transfer_rejects_nonexistent_target(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-NOEX",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(ValidationError, match="目标用户不存在"):
+            transfer_sc(seeded_config, admin, sc["sc_id"], "NONEXISTENT")
+
+
+class TestScVendors:
+    def test_add_vendor_to_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Vendor A",
+            "service_scope": "General Service",
+        })
+        vendors = add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        assert len(vendors) == 1
+        assert vendors[0]["vendor_id"] == v["vendor_id"]
+
+    def test_add_duplicate_vendor_rejected(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Vendor B",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        with pytest.raises(ConflictError, match="already associated"):
+            add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+
+    def test_remove_vendor_from_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Vendor C",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        vendors = remove_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        assert len(vendors) == 0
+
+    def test_remove_unlinked_vendor_rejected(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Vendor D",
+            "service_scope": "General Service",
+        })
+        with pytest.raises(NotFound, match="is not associated"):
+            remove_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+
+
+class TestScDetail:
+    def test_get_sc_detail(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-DETAIL",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        detail = get_sc_detail(seeded_config, admin, sc["sc_id"])
+        assert detail["sc"]["sc_id"] == sc["sc_id"]
+        assert "vendors" in detail
+
+    def test_detail_includes_calloff_parent_context(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        from sc_gr_app.services.po_service import create_po
+        sc_fc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-FC",
+            "requester_id": requester["user_id"],
+            "request_type": "FC",
+            "cost_center": 1000,
+            "sc_amount": 100000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_fc = approve_sc(seeded_config, admin, sc_fc["sc_id"])
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "FC Vendor",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc_fc["sc_id"], v["vendor_id"])
+        po_fc = create_po(seeded_config, admin, {
+            "sc_id": sc_fc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 50000,
+        })
+        co = create_sc(seeded_config, admin, {
+            "sc_no": "SC-CO",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 30000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-06-30",
+            "calloff_po_id": po_fc["po_id"],
+        })
+        detail = get_sc_detail(seeded_config, admin, co["sc_id"])
+        assert detail["sc"]["calloff_po_id"] == po_fc["po_id"]
+
+
+class TestScCallOff:
+    def test_calloff_validated_in_create_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc_fc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-FC-001",
+            "requester_id": requester["user_id"],
+            "request_type": "FC",
+            "cost_center": 1000,
+            "sc_amount": 100000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_fc = approve_sc(seeded_config, admin, sc_fc["sc_id"])
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "V FC",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc_fc["sc_id"], v["vendor_id"])
+        from sc_gr_app.services.po_service import create_po
+        po_fc = create_po(seeded_config, admin, {
+            "sc_id": sc_fc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 50000,
+        })
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-CO-001",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 30000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+            "calloff_po_id": po_fc["po_id"],
+        })
+        assert sc["calloff_po_id"] == po_fc["po_id"]
+
+    def test_calloff_exceeding_po_fc_budget_rejected(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc_fc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-FC-002",
+            "requester_id": requester["user_id"],
+            "request_type": "FC",
+            "cost_center": 1000,
+            "sc_amount": 100000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_fc = approve_sc(seeded_config, admin, sc_fc["sc_id"])
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "V FC2",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc_fc["sc_id"], v["vendor_id"])
+        from sc_gr_app.services.po_service import create_po
+        po_fc = create_po(seeded_config, admin, {
+            "sc_id": sc_fc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 50000,
+        })
+        with pytest.raises(ConflictError, match="Call-off SC total would exceed"):
+            create_sc(seeded_config, admin, {
+                "sc_no": "SC-CO-BIG",
+                "requester_id": requester["user_id"],
+                "request_type": "material",
+                "cost_center": 1000,
+                "sc_amount": 60000,
+                "service_period_start": "2026-01-01",
+                "service_period_end": "2026-12-31",
+                "calloff_po_id": po_fc["po_id"],
+            })
