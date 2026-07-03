@@ -25,7 +25,7 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poInformation') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+          <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
         </div>
@@ -41,9 +41,18 @@
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.openPoAmount')"><AmountDisplay :value="po.open_po_amount" /></el-descriptions-item>
-          <el-descriptions-item :label="$t('po.consumedAmount')"><AmountDisplay :value="po.consumed_amount || po.budget?.po_con_value_total" /></el-descriptions-item>
-          <el-descriptions-item :label="$t('po.pendingExclTax')"><AmountDisplay :value="po.pending_total || po.budget?.po_pending_total" /></el-descriptions-item>
-          <el-descriptions-item :label="$t('po.pendingInclTax')"><AmountDisplay :value="po.pending_total_incl_tax || po.budget?.po_pending_total_incl_tax" /></el-descriptions-item>
+          <template v-if="!isFcPo">
+            <el-descriptions-item :label="$t('po.consumedAmount')"><AmountDisplay :value="po.consumed_amount || po.budget?.po_con_value_total" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.pendingExclTax')"><AmountDisplay :value="po.pending_total || po.budget?.po_pending_total" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.pendingInclTax')"><AmountDisplay :value="po.pending_total_incl_tax || po.budget?.po_pending_total_incl_tax" /></el-descriptions-item>
+          </template>
+          <template v-else>
+            <el-descriptions-item :label="$t('po.allocatedCalloff')"><AmountDisplay :value="po.allocated_calloff_amount" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.pendingCalloff')"><AmountDisplay :value="po.pending_calloff_amount" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.downstreamConsumed')"><AmountDisplay :value="po.downstream_consumed" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.downstreamPendingGr') + ' (excl)'"><AmountDisplay :value="po.downstream_pending_gr" /></el-descriptions-item>
+            <el-descriptions-item :label="$t('po.downstreamPendingGr') + ' (incl)'"><AmountDisplay :value="po.downstream_pending_gr_tax" /></el-descriptions-item>
+          </template>
           <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>
@@ -56,7 +65,7 @@
         </el-descriptions>
       </div>
 
-      <div class="section-card">
+      <div v-if="!isFcPo" class="section-card">
         <div class="section-header">
           <h3>{{ $t('gr.grRecords') }}</h3>
           <el-button size="small" @click="handleExportGrs">
@@ -74,6 +83,20 @@
           @submit="row => handleGrSubmit(row)"
           @attachments="row => { grAttachRecord = row; grAttachVisible = true }"
         />
+      </div>
+
+      <div v-if="isFcPo" class="section-card">
+        <div class="section-header">
+          <h3>{{ $t('sc.calloffBadge') }}</h3>
+        </div>
+        <el-table :data="calloffScs" stripe border size="small">
+          <el-table-column prop="sc_id" :label="$t('sc.scId')" />
+          <el-table-column prop="sc_no" :label="$t('sc.scNo')" />
+          <el-table-column prop="request_type" :label="$t('sc.requestType')" />
+          <el-table-column prop="sc_amount" :label="$t('sc.scAmount')" />
+          <el-table-column prop="status" :label="$t('sc.status')" />
+          <template #empty><el-empty :description="$t('sc.noRecords')" /></template>
+        </el-table>
       </div>
 
       <div class="section-card">
@@ -191,6 +214,7 @@ const po = computed(() => {
   const pos = scDetail.value?.pos || []
   return pos.find(p => String(p.po_id) === String(poId.value)) || {}
 })
+const isFcPo = computed(() => po.value?.sc_request_type === 'FC')
 const grs = computed(() => {
   const allGrs = scDetail.value?.grs || []
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
@@ -212,6 +236,15 @@ const grAttachVisible = ref(false)
 const grAttachRecord = ref(null)
 const attachRefreshKey = ref(0)
 const activeUsers = ref([])
+const calloffScs = ref([])
+
+async function loadCalloffData() {
+  if (!isFcPo.value) return
+  try {
+    const result = await callApi('search_scs', { filters: { calloff_po_id: po.value.po_id } })
+    calloffScs.value = result.rows || []
+  } catch { calloffScs.value = [] }
+}
 
 function openEditDialog() { editDialogVisible.value = true }
 
@@ -426,6 +459,7 @@ async function handleCustomSchedulesSave(schedules) {
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
   await fetchDetail(scId.value)
+  await loadCalloffData()
   // Fetch PO notification config once PO ID is available
   if (poId.value) {
     try { await fetchPoConfig(poId.value) } catch {}
