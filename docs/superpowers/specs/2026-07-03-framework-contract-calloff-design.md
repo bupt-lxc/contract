@@ -67,6 +67,74 @@ Validation points:
 
 ---
 
+## Budget Display (all entity types)
+
+SC and PO detail pages should show budget breakdown fields, parallel to what the PO detail already displays. The backend `budget_service` already computes most values; FC-type entities need new queries.
+
+### Regular PO (unchanged from current)
+
+| Field | Formula |
+|---|---|
+| PO Amount | `po_amount` |
+| Open PO Amount | `po_amount - consumed - pending(excl)` |
+| Consumed | `SUM(approved GR con_value)` |
+| Pending (excl) | `SUM(pending/manager_confirm GR estimated_amount)` |
+| Pending (incl) | `SUM(pending/manager_confirm GR gross_cost)` |
+
+### PO(FC)
+
+| Field | Formula |
+|---|---|
+| PO Amount | `po_amount` |
+| Allocated Call-off SCs | `SUM(sc_amount) WHERE calloff_po_id = ?` (all statuses incl. draft) |
+| 　Pending Call-off SCs | subset: `status IN ('manager_confirm', 'pending', 'approved')` |
+| Open PO Amount | `po_amount - allocated_calloff` |
+| Downstream Consumed | `SUM(approved GR con_value)` via call-off SCs → POs → GRs |
+| Downstream Pending GR (excl) | `SUM(pending/manager_confirm GR estimated_amount)` same trace |
+| Downstream Pending GR (incl) | `SUM(pending/manager_confirm GR gross_cost)` same trace |
+
+### Regular SC / Call-off SC
+
+| Field | Formula |
+|---|---|
+| SC Amount | `sc_amount` |
+| Allocated to POs | `SUM(po_amount) WHERE sc_id = ?` |
+| Unallocated | `sc_amount - allocated_po` |
+| Consumed | `SUM(approved GR con_value)` via SC → POs → GRs |
+| Pending GR (excl) | `SUM(pending/manager_confirm GR estimated_amount)` |
+| Pending GR (incl) | `SUM(pending/manager_confirm GR gross_cost)` |
+
+Call-off SCs additionally show parent context: linked PO(FC) ID, PO Amount, Open PO Amount.
+
+### SC(FC)
+
+| Field | Formula |
+|---|---|
+| SC Amount | `sc_amount` |
+| Allocated to PO(FC)s | `SUM(po_amount) WHERE sc_id = ?` |
+| Unallocated | `sc_amount - allocated_po` |
+| Downstream Call-off SCs | `SUM(sc_amount)` traced SC(FC) → PO(FC)s → `sc_records.calloff_po_id` |
+| 　Pending Call-off SCs | subset: `status IN ('manager_confirm', 'pending', 'approved')` |
+| Downstream Consumed | `SUM(approved GR con_value)` full trace SC(FC) → PO(FC) → SC → PO → GR |
+| Downstream Pending GR (excl) | `SUM(pending/manager_confirm GR estimated_amount)` |
+| Downstream Pending GR (incl) | `SUM(pending/manager_confirm GR gross_cost)` |
+
+### Frontend: SC Detail Card
+
+Add a **Budget Summary** section below the existing `ScDetailCard` (or as additional rows within it), mirroring the PO detail budget display. Fields shown depend on entity type:
+
+| Section | SC(FC) | SC/Call-off SC |
+|---|---|---|
+| SC Amount | ✓ | ✓ |
+| Allocated to POs | ✓ | ✓ |
+| Unallocated | ✓ | ✓ |
+| Downstream Call-off SCs (pending) | ✓ | — |
+| Consumed / Pending GR | ✓ | ✓ |
+
+For call-off SCs: also show parent PO(FC) info with its Open PO Amount as context.
+
+---
+
 ## Lifecycle Constraints
 
 ### Finish cascade (children must be final before parent can finish):
@@ -127,8 +195,12 @@ regular PO finish → requires all GRs in final state (existing)
 
 ### `budget_service.py`
 
-- `compute_po_fc_budget(po_id)`: returns `{ po_amount, allocated_calloff_amount, open_po_amount }`
-- Existing `compute_sc_budget` and `compute_po_budget` unchanged
+New functions:
+
+- `compute_po_fc_budget(po_id)`: FC PO budget — `{ po_amount, allocated_calloff_amount, pending_calloff_amount, open_po_amount, downstream_consumed, downstream_pending_gr, downstream_pending_gr_tax }`
+- `compute_sc_fc_budget(sc_id)`: SC(FC) budget — full downstream trace through PO(FC)s → call-off SCs → POs → GRs
+- `compute_sc_budget(sc_id)`: extend to include PO-allocated/unallocated breakdown (already has `allocated_po_amount`, `unallocated_sc_amount`)
+- `compute_po_budget(po_id)`: unchanged for regular POs
 
 ---
 
