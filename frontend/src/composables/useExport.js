@@ -42,7 +42,38 @@ export function useExport() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
 
-    // Write workbook to ArrayBuffer, encode as base64, send to Python for native save dialog
+    const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    const binary = String.fromCharCode(...new Uint8Array(wbArray))
+    const b64 = btoa(binary)
+    await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
+  }
+
+  /**
+   * Build a multi-sheet workbook and save via native dialog.
+   *
+   * @param {Array}    sheets    – [{ name: string, rows: Array, columns: Array }]
+   * @param {string}   filename  – without extension
+   *
+   * columns format per sheet: [{ key, label, getValue? }]
+   */
+  async function exportMultiSheet(sheets, filename) {
+    const wb = XLSX.utils.book_new()
+
+    for (const sheet of sheets) {
+      const sheetData = sheet.rows.map(row => {
+        const obj = {}
+        sheet.columns.forEach(col => {
+          const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
+          obj[col.label] = raw
+        })
+        return obj
+      })
+
+      const ws = XLSX.utils.json_to_sheet(sheetData)
+      ws['!cols'] = sheet.columns.map(c => ({ wch: Math.max(c.label.length, 12) }))
+      XLSX.utils.book_append_sheet(wb, ws, sheet.name)
+    }
+
     const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
     const binary = String.fromCharCode(...new Uint8Array(wbArray))
     const b64 = btoa(binary)
@@ -74,5 +105,5 @@ export function useExport() {
     await exportRows(allRows, columns, filename)
   }
 
-  return { exportRows, exportAll }
+  return { exportRows, exportAll, exportMultiSheet }
 }

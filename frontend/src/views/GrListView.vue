@@ -45,20 +45,45 @@
       <el-table-column prop="po_no" :label="$t('gr.poNo')" width="130" sortable />
       <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="130" sortable />
       <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="150" show-overflow-tooltip sortable />
+      <el-table-column prop="requester_name" :label="$t('gr.requester')" width="120" show-overflow-tooltip sortable />
       <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
       </el-table-column>
       <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center" sortable>
         <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
       </el-table-column>
+      <el-table-column prop="gross_cost" :label="$t('gr.grossCost')" width="130" sortable>
+        <template #default="{ row }"><AmountDisplay :value="row.gross_cost" /></template>
+      </el-table-column>
       <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
+      </el-table-column>
+      <el-table-column prop="goods_service_description" :label="$t('gr.goodsServiceDescription')" min-width="150" show-overflow-tooltip sortable>
+        <template #default="{ row }">{{ row.goods_service_description || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="confirmation_name" :label="$t('gr.confirmationName')" width="130" show-overflow-tooltip sortable>
+        <template #default="{ row }">{{ row.confirmation_name || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="delivery_from" :label="$t('gr.deliveryFrom')" width="110" sortable>
+        <template #default="{ row }">{{ (row.delivery_from || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="delivery_to" :label="$t('gr.deliveryTo')" width="110" sortable>
+        <template #default="{ row }">{{ (row.delivery_to || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="100" sortable>
+        <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="remark" :label="$t('gr.remark')" width="120" show-overflow-tooltip sortable>
+        <template #default="{ row }">{{ row.remark || '-' }}</template>
       </el-table-column>
       <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
       <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="submitted_date" :label="$t('gr.submittedDate')" width="110" sortable>
+        <template #default="{ row }">{{ (row.submitted_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="70" fixed="right">
         <template #default="{ row }">
@@ -137,6 +162,17 @@
       :state="batchState"
       @abort="abort"
     />
+
+    <ExportDialog
+      v-model:visible="exportDialogVisible"
+      entity-type="gr"
+      :filters="state.filters"
+      :sort="state.sort"
+      :direction="state.direction"
+      :selected-ids="selectedRows.map(r => r.gr_id)"
+      :filtered-count="state.total"
+      :total-count="state.total"
+    />
   </div>
 </template>
 
@@ -148,6 +184,7 @@ import { useI18n } from 'vue-i18n'
 import { callApi } from '@/api/bridge.js'
 import { useGr } from '@/composables/useGr.js'
 import { useExport } from '@/composables/useExport.js'
+import ExportDialog from '@/components/export/ExportDialog.vue'
 import AdvancedFilterBar from '@/components/common/AdvancedFilterBar.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
@@ -162,8 +199,9 @@ const router = useRouter()
 const { t } = useI18n()
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
-const { exportAll } = useExport()
+const { exportAll, exportMultiSheet } = useExport()
 const exporting = ref(false)
+const exportDialogVisible = ref(false)
 
 const grStatuses = [
   { label: t('status.manager_confirm'), value: 'manager_confirm' },
@@ -378,37 +416,8 @@ async function handleBatchConfirm() {
   showBatchResult(summary, 'confirm')
 }
 
-async function handleExport() {
-  exporting.value = true
-  try {
-    const columns = [
-      { key: 'status', label: t('common.status') },
-      { key: 'gr_id', label: t('gr.grId') },
-      { key: 'po_no', label: t('gr.poNo') },
-      { key: 'sc_no', label: t('gr.scNo') },
-      { key: 'vendor_name', label: t('gr.vendor') },
-      { key: 'estimated_amount', label: t('gr.estimated') },
-      { key: 'tax_rate', label: t('gr.taxRate') },
-      { key: 'con_value', label: t('gr.conValue') },
-      { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
-      { key: 'confirmation_name', label: t('gr.confirmationName') },
-      { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
-      { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
-      { key: 'last_delivery', label: t('gr.lastDelivery') },
-      { key: 'pending_date', label: t('exportCol.pendingDate'), getValue: r => (r.pending_date || '').slice(0, 10) },
-      { key: 'approved_date', label: t('exportCol.approvedDate'), getValue: r => (r.approved_date || '').slice(0, 10) }
-    ]
-    await exportAll('search_grs', {
-      filters: state.filters,
-      sort: state.sort,
-      direction: state.direction
-    }, columns, `GR_List_${new Date().toISOString().slice(0, 10)}`)
-    ElMessage.success(t('export.success'))
-  } catch (e) {
-    ElMessage.error(e.message || t('export.failed'))
-  } finally {
-    exporting.value = false
-  }
+function handleExport() {
+  exportDialogVisible.value = true
 }
 
 // GR import
