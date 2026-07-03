@@ -44,7 +44,24 @@
           </el-button>
         </div>
         <ScDetailCard :sc="detail.sc" />
+        <ScBudgetCard
+          v-if="detail.budget"
+          :budget="detail.budget"
+          :is-fc="detail.sc.request_type === 'FC'"
+        />
       </div>
+
+      <el-card v-if="detail.parent_po" class="calloff-context-card section-card">
+        <template #header>{{ $t('sc.calloffPoId') }}</template>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('po.poId')">
+            {{ detail.parent_po.po_id }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('po.openPoAmountFc')">
+            <AmountDisplay :value="detail.parent_po.fc_budget?.open_po_amount" />
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-card>
 
       <div class="section-card">
         <ScVendorSection
@@ -160,7 +177,9 @@ import { useExport } from '@/composables/useExport.js'
 import { formatDateTime } from '@/utils/format.js'
 import { callApi, loadingState } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
+import ScBudgetCard from '@/components/sc/ScBudgetCard.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
