@@ -162,6 +162,7 @@ const poFilterConfig = [
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
   { name: 'vendor_id', label: t('filter.vendorId'), type: 'input' },
   { name: 'vendor_name', label: t('filter.vendorName'), type: 'input' },
+  { name: 'is_fc_po', label: t('filter.isFcPo'), type: 'select', options: [{ label: 'FC PO', value: '1' }, { label: 'Regular PO', value: '0' }] },
   { name: 'contract_type', label: t('filter.contractType'), type: 'select', options: [{label:'PO',value:'PO'},{label:'Contract',value:'Contract'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
   { name: 'purchaser', label: t('filter.purchaser'), type: 'input' },

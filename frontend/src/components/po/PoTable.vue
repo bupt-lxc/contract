@@ -29,6 +29,12 @@
     </el-table-column>
     <el-table-column v-if="!hideScInfo" prop="requester_name" :label="$t('filter.requesterName')" width="130" show-overflow-tooltip sortable />
     <el-table-column prop="vendor_name" :label="$t('po.vendor')" width="160" show-overflow-tooltip sortable />
+    <el-table-column :label="$t('sc.type')" width="80">
+      <template #default="{ row }">
+        <el-tag v-if="row.sc_request_type === 'FC'" type="info" size="small">FC</el-tag>
+        <span v-else>—</span>
+      </template>
+    </el-table-column>
     <el-table-column prop="contract_type" :label="$t('po.contractType')" width="100" sortable />
     <el-table-column prop="contract_no" :label="$t('po.contractNo')" width="130" sortable>
       <template #default="{ row }">{{ row.contract_no || '-' }}</template>
