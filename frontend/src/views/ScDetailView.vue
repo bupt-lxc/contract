@@ -269,21 +269,7 @@ async function handleApprove() {
 
     await ElMessageBox.confirm(t('sc.approveConfirm'), t('common.confirm'), { type: 'warning' })
 
-    // Check for draft POs — offer cascade
-    const draftPos = (detail.value.pos || []).filter(p => p.status === 'draft')
-    let cascadePos = false
-    if (draftPos.length > 0) {
-      try {
-        await ElMessageBox.confirm(
-          `${draftPos.length} draft PO(s) exist. Also submit them?`,
-          t('common.confirm'),
-          { confirmButtonText: 'Yes, cascade submit', cancelButtonText: 'No, leave as draft', type: 'warning' }
-        )
-        cascadePos = true
-      } catch { /* user chose No */ }
-    }
-
-    await approveSc(scId.value, cascadePos)
+    await approveSc(scId.value)
     ElMessage.success(t('sc.scApproved'))
     await fetchDetail(scId.value)
   } catch (e) {

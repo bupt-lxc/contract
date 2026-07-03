@@ -237,7 +237,6 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
 def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
     """Submit draft POs in-place on an existing connection (no lock acquisition).
 
-    Used internally by approve_sc for cascade submission.
     Returns list of submitted PO dicts.
     """
     submitted = []

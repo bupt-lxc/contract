@@ -265,8 +265,7 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            cascade_pos = payload.get("cascade_pos", False)
-            result = sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)
+            result = sc_service.approve_sc(self.config, current_user, sc_id)
             self._auto_open_outlook_draft("sc", sc_id, "approve")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:

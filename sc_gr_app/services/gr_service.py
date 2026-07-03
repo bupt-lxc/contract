@@ -303,7 +303,6 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
 def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
     """Submit draft GRs in-place on an existing connection (no lock acquisition).
 
-    Used internally by approve_po for cascade submission.
     Returns list of submitted GR dicts.
     """
     submitted = []
@@ -352,64 +351,6 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
         )
         submitted.append(after)
     return submitted
-
-
-def _cascade_approve_grs(conn, gr_ids: list[str], current_user_id: str, timestamp: str) -> list[dict]:
-    """Approve pending GRs in-place on an existing connection (no lock acquisition).
-
-    Used internally by approve_po for cascade approval.
-    Uses gross_cost as con_value, falling back to estimated_amount.
-    Returns list of approved GR dicts.
-    """
-    approved = []
-    for gr_id in gr_ids:
-        before = _get_gr(conn, gr_id)
-        if before["status"] != "pending":
-            raise ConflictError(f"GR must be pending to approve: {gr_id}")
-
-        con_value = before.get("gross_cost") or before["estimated_amount"]
-        conn.execute(
-            """
-            update gr_requests
-            set status = 'approved',
-                con_value = ?,
-                approved_by = ?,
-                approved_at = ?,
-                approved_date = ?
-            where gr_id = ?
-            """,
-            (con_value, current_user_id, timestamp, timestamp, gr_id),
-        )
-        after = _get_gr(conn, gr_id)
-
-        po_sc = conn.execute(
-            "select sc_id from pos where po_id = ?",
-            (after["po_id"],),
-        ).fetchone()
-        sc_id = po_sc["sc_id"] if po_sc else None
-
-        write_operation_record(
-            conn,
-            action_type="approve_gr",
-            object_type="gr",
-            object_id=gr_id,
-            sc_id=sc_id,
-            operator_id=current_user_id,
-            machine_id="SYSTEM_CASCADE",
-            before=before,
-            after=after,
-        )
-        sc = conn.execute(
-            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
-            (sc_id,),
-        ).fetchone()
-        notification_service.queue_status_change(
-            conn, "gr", gr_id, "approve",
-            {"requester_id": sc["requester_id"]} if sc else {},
-            {"user_id": current_user_id, "machine_id": "SYSTEM_CASCADE"}
-        )
-        approved.append(after)
-    return approved
 
 
 def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:

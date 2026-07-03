@@ -187,7 +187,7 @@ async function handleBatchConfirm() {
 async function handleBatchApprove() {
   batchTitle.value = t('batch.titleApprove')
   const summary = await runBatch(selectedRows.value, 'approve', async (row) => {
-    await callApi('approve_sc', { sc_id: row.sc_id, cascade_pos: false })
+    await callApi('approve_sc', { sc_id: row.sc_id })
   }, t)
   if (summary) await searchScs()
   showBatchResult(summary, 'approve')

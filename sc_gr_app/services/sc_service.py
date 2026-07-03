@@ -1293,14 +1293,8 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     }
 
 
-def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
-               cascade_pos: bool = False) -> dict:
-    """Approve an SC (pending → approved). Admin only.
-
-    If cascade_pos=True, draft POs under this SC are submitted
-    (draft → active) in the same transaction.
-    If cascade_pos=False (default), draft POs are left as-is.
-    """
+def approve_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
+    """Approve an SC (pending → approved). Admin only."""
     require_admin(current_user)
 
     with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
@@ -1341,16 +1335,6 @@ def approve_sc(config: AppConfig, current_user: dict, sc_id: str,
                 notification_service.queue_status_change(
                     conn, "sc", sc_id, "approve", before, current_user
                 )
-
-                # Cascade: submit draft POs
-                if cascade_pos:
-                    from sc_gr_app.services.po_service import _submit_po_drafts
-                    draft_pos = conn.execute(
-                        "SELECT po_id FROM pos WHERE sc_id = ? AND status = 'draft'",
-                        (sc_id,),
-                    ).fetchall()
-                    if draft_pos:
-                        _submit_po_drafts(conn, [r["po_id"] for r in draft_pos], timestamp)
 
                 conn.commit()
             except Exception:

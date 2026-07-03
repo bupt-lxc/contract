@@ -65,8 +65,8 @@ export function useSc(pageSize = 10) {
     return await callApi('update_sc', { sc_id: scId, data })
   }
 
-  async function approveSc(scId, cascadePos = false) {
-    await callApi('approve_sc', { sc_id: scId, cascade_pos: cascadePos })
+  async function approveSc(scId) {
+    await callApi('approve_sc', { sc_id: scId })
   }
 
   async function denySc(scId) {

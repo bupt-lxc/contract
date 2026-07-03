@@ -1807,48 +1807,6 @@ def test_approve_sc_succeeds_with_draft_po(app_config):
         assert po_check["status"] == "draft"
 
 
-def test_approve_sc_with_cascade_pos(app_config):
-    """approve_sc with cascade_pos=True submits draft POs to po_pending."""
-    migrate(app_config)
-    seed_users(app_config)
-
-    sc_draft = create_sc_draft(app_config, USER, {"requester_id": "U1"})
-    create_vendor(
-        app_config, USER,
-        {"vendor_id": "V1", "vendor_name": "Vendor", "service_scope": "General Service"},
-    )
-    add_sc_vendor(app_config, USER, sc_draft["sc_id"], "V1")
-    po1 = create_po(
-        app_config, USER,
-        {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
-    )
-    po2 = create_po(
-        app_config, USER,
-        {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 300},
-    )
-    assert po1["status"] == "draft"
-    assert po2["status"] == "draft"
-
-    # Submit SC (draft→pending)
-    sc_data = {"sc_no": "SC-CAS8", "requester_id": "U1", "request_type": "service",
-               "cost_center": 1001, "sc_amount": 2000,
-               "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
-               "vendor_ids": ["V1"]}
-    submit_sc(app_config, USER, sc_draft["sc_id"], sc_data)
-    confirm_sc(app_config, ADMIN, sc_draft["sc_id"])
-
-    # approve_sc with cascade_pos=True
-    result = approve_sc(app_config, ADMIN, sc_draft["sc_id"], cascade_pos=True)
-    assert result["status"] == "approved"
-
-    # Both draft POs should now be po_pending
-    with connect(app_config) as conn:
-        for po_id in [po1["po_id"], po2["po_id"]]:
-            po_check = conn.execute("SELECT status, active_date FROM pos WHERE po_id = ?", (po_id,)).fetchone()
-            assert po_check["status"] == "active"
-            assert po_check["active_date"] is not None
-
-
 def test_finish_sc_blocked_by_unfinished_pos(app_config):
     """finish_sc is blocked if any PO is not finished."""
     from sc_gr_app.services.po_service import finish_po
