@@ -1276,6 +1276,9 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             po["pending_total"] = po["budget"]["po_pending_total"]
             po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
 
+    for po in pos:
+        po["sc_request_type"] = sc["request_type"]
+
     if sc["request_type"] == "FC":
         sc_budget = compute_sc_fc_budget(config, sc_id)
     else:
