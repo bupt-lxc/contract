@@ -477,6 +477,8 @@ def create_sc(
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                if calloff_po_id is not None:
+                    _validate_calloff_po(conn, calloff_po_id, data["request_type"], sc_amount)
                 conn.execute(
                     """
                     insert into sc_records (
