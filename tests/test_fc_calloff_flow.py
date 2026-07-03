@@ -277,3 +277,132 @@ def test_po_fc_finish_blocked_by_calloff_sc(app_config):
 
     with pytest.raises(ConflictError, match="Cannot finish PO.*call-off"):
         finish_po(app_config, ADMIN, po_fc["po_id"])
+
+
+def test_mixed_calloff_statuses_budget(app_config):
+    """Call-off SCs with mixed statuses (approved + denied): allocated includes
+    all call-offs; pending excludes denied ones."""
+    from sc_gr_app.services.sc_service import deny_sc as deny_sc_fn
+
+    migrate(app_config)
+    seed_users(app_config)
+
+    sc_fc = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-FC-MIX",
+        "requester_id": USER["user_id"],
+        "request_type": "FC",
+        "cost_center": 1000,
+        "sc_amount": 100000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+    })
+    sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+    vendor_id = _create_vendor_and_link(app_config, sc_fc["sc_id"])
+    po_fc = create_po(app_config, ADMIN, {
+        "sc_id": sc_fc["sc_id"],
+        "vendor_id": vendor_id,
+        "po_amount": 80000,
+    })
+
+    # Create approved call-off SC (30000)
+    co_approved = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-CO-APPROVED",
+        "requester_id": USER["user_id"],
+        "request_type": "material",
+        "cost_center": 1000,
+        "sc_amount": 30000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+        "calloff_po_id": po_fc["po_id"],
+    })
+    approve_sc(app_config, ADMIN, co_approved["sc_id"])
+
+    # Create then deny a call-off SC (40000)
+    co_denied = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-CO-DENIED",
+        "requester_id": USER["user_id"],
+        "request_type": "service",
+        "cost_center": 1000,
+        "sc_amount": 40000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+        "calloff_po_id": po_fc["po_id"],
+    })
+    deny_sc_fn(app_config, ADMIN, co_denied["sc_id"])
+
+    # allocated_calloff_amount counts all call-off SCs (denied included)
+    # pending_calloff_amount excludes denied (status not in approved/pending/manager_confirm)
+    fc_budget = compute_po_fc_budget(app_config, po_fc["po_id"])
+    assert fc_budget["allocated_calloff_amount"] == 70000.0  # 30000 + 40000
+    assert fc_budget["pending_calloff_amount"] == 30000.0    # only approved
+    assert fc_budget["open_po_amount"] == 10000.0            # 80000 - 70000
+
+
+def test_denied_calloff_still_blocks_budget(app_config):
+    """Denied call-off SCs still count against PO(FC) budget; new call-offs
+    cannot exceed the remaining amount."""
+    from sc_gr_app.services.sc_service import deny_sc as deny_sc_fn
+
+    migrate(app_config)
+    seed_users(app_config)
+
+    sc_fc = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-FC-REL",
+        "requester_id": USER["user_id"],
+        "request_type": "FC",
+        "cost_center": 1000,
+        "sc_amount": 100000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+    })
+    sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+    vendor_id = _create_vendor_and_link(app_config, sc_fc["sc_id"])
+    po_fc = create_po(app_config, ADMIN, {
+        "sc_id": sc_fc["sc_id"],
+        "vendor_id": vendor_id,
+        "po_amount": 80000,
+    })
+
+    # Create then deny a call-off SC (50000 used of 80000 PO)
+    co = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-CO-REL",
+        "requester_id": USER["user_id"],
+        "request_type": "material",
+        "cost_center": 1000,
+        "sc_amount": 50000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+        "calloff_po_id": po_fc["po_id"],
+    })
+    deny_sc_fn(app_config, ADMIN, co["sc_id"])
+
+    # Denied SC still counts toward allocated total; remaining = 30000
+    fc_budget = compute_po_fc_budget(app_config, po_fc["po_id"])
+    assert fc_budget["allocated_calloff_amount"] == 50000.0
+    assert fc_budget["open_po_amount"] == 30000.0
+
+    # Creating a 40000 call-off would exceed remaining 30000
+    with pytest.raises(ConflictError, match="Call-off SC total would exceed PO\\(FC\\) amount"):
+        create_sc(app_config, ADMIN, {
+            "sc_no": "SC-CO-EXCEED",
+            "requester_id": USER["user_id"],
+            "request_type": "service",
+            "cost_center": 1000,
+            "sc_amount": 40000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+            "calloff_po_id": po_fc["po_id"],
+        })
+
+    # But creating a call-off within the remaining budget should work
+    new_co = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-CO-VALID",
+        "requester_id": USER["user_id"],
+        "request_type": "service",
+        "cost_center": 1000,
+        "sc_amount": 30000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+        "calloff_po_id": po_fc["po_id"],
+    })
+    assert new_co["calloff_po_id"] == po_fc["po_id"]
