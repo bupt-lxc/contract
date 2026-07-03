@@ -91,8 +91,12 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
     with connect(config) as conn:
         for po in all_pos:
             po["_type"] = "PO"
-            sc = conn.execute("SELECT sc_no FROM sc_records WHERE sc_id = ?", (po["sc_id"],)).fetchone()
+            sc = conn.execute(
+                "SELECT sc_no, request_type FROM sc_records WHERE sc_id = ?",
+                (po["sc_id"],),
+            ).fetchone()
             po["sc_no"] = sc["sc_no"] if sc else ""
+            sc_request_type = sc["request_type"] if sc else ""
             po["requester_name"] = _resolve_requester_name(conn, po.get("requester_id"))
             vendor = conn.execute("SELECT vendor_name, ksrm_vendor_code FROM vendors WHERE vendor_id = ?", (po["vendor_id"],)).fetchone()
             po["vendor_name"] = vendor["vendor_name"] if vendor else ""
@@ -102,18 +106,33 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
             if not include_gr:
                 continue
 
-            grs = conn.execute(
-                "SELECT * FROM gr_requests WHERE po_id = ? ORDER BY gr_no",
-                (po["po_id"],),
-            ).fetchall()
-            for gr in grs:
-                gr = dict(gr)
-                gr["_type"] = "GR"
-                gr["sc_id"] = po["sc_id"]
-                gr["sc_no"] = po.get("sc_no")
-                gr["po_no"] = po.get("po_no")
-                gr["requester_name"] = _resolve_requester_name(conn, gr.get("requester_id"))
-                rows.append(gr)
+            # FC POs have call-off SCs instead of GRs
+            if sc_request_type == "FC":
+                calloffs = conn.execute(
+                    "SELECT sc.* FROM sc_records sc WHERE sc.calloff_po_id = ? ORDER BY sc.sc_no",
+                    (po["po_id"],),
+                ).fetchall()
+                for co in calloffs:
+                    co = dict(co)
+                    co["_type"] = "CALL-OFF SC"
+                    co["sc_id"] = co.get("sc_id")
+                    co["sc_no"] = co.get("sc_no")
+                    co["po_no"] = po.get("po_no")
+                    co["requester_name"] = _resolve_requester_name(conn, co.get("requester_id"))
+                    rows.append(co)
+            else:
+                grs = conn.execute(
+                    "SELECT * FROM gr_requests WHERE po_id = ? ORDER BY gr_no",
+                    (po["po_id"],),
+                ).fetchall()
+                for gr in grs:
+                    gr = dict(gr)
+                    gr["_type"] = "GR"
+                    gr["sc_id"] = po["sc_id"]
+                    gr["sc_no"] = po.get("sc_no")
+                    gr["po_no"] = po.get("po_no")
+                    gr["requester_name"] = _resolve_requester_name(conn, gr.get("requester_id"))
+                    rows.append(gr)
 
     return rows
 

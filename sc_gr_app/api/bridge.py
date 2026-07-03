@@ -801,6 +801,17 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_po_fc_budget(self, payload) -> dict:
+        """Return FC budget for a given PO (FC)."""
+        try:
+            payload = self._required_payload(payload)
+            self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            from sc_gr_app.services.budget_service import compute_po_fc_budget
+            return ok(compute_po_fc_budget(self.config, po_id))
+        except Exception as exc:
+            return fail(exc)
+
     def get_notification_defaults(self, payload=None) -> dict:
         try:
             current_user = self._require_current_user()
@@ -1754,16 +1765,17 @@ class ApiBridge:
 
         headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "internal_system_number"]
+                   "description", "currency", "internal_system_number", "calloff_po_id"]
         hints = ["Optional (auto-generated if empty)", "Optional",
                  "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "approved/finished", "Optional",
-                 "CNY/EUR/USD", "Optional (FC only)"]
+                 "CNY/EUR/USD", "Optional (FC only)",
+                 "Optional (FC call-off only)"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
-                  "Sample SC description", "CNY", ""]
+                  "Sample SC description", "CNY", "", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
