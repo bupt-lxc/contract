@@ -299,7 +299,7 @@ async function loadEligibleScs() {
       limit: 500, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
-    eligibleScs.value = result.rows || result || []
+    eligibleScs.value = (result.rows || result || []).filter(sc => sc.request_type !== 'FC')
   } catch { eligibleScs.value = [] }
 }
 
@@ -309,7 +309,7 @@ async function onGrScChange(scId) {
   if (!scId) return
   try {
     const result = await callApi('search_pos', {
-      filters: { sc_id: scId },
+      filters: { sc_id: scId, is_fc_po: '0' },
       limit: 200, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
