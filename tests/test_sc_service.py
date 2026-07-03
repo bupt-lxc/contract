@@ -418,3 +418,196 @@ class TestScUpdate:
         })
         with pytest.raises(ConflictError, match="SC amount cannot be below allocated PO amount"):
             update_sc(seeded_config, admin, sc["sc_id"], {"sc_amount": 30000})
+
+
+class TestScDeny:
+    def test_deny_pending_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-DENY",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = deny_sc(seeded_config, admin, sc["sc_id"])
+        assert result["status"] == "denied"
+
+    def test_deny_manager_confirm_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-DENY2",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        result = deny_sc(seeded_config, admin, sc["sc_id"])
+        assert result["status"] == "denied"
+
+    def test_deny_rejects_draft_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ConflictError, match="SC must be pending or manager_confirm"):
+            deny_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_deny_requires_admin(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-DENY3",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(PermissionDenied):
+            deny_sc(seeded_config, requester, sc["sc_id"])
+
+
+class TestScFinish:
+    def test_finish_approved_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-FINISH",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        result = finish_sc(seeded_config, admin, sc["sc_id"])
+        assert result["status"] == "finished"
+
+    def test_finish_rejects_non_approved(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ConflictError, match="SC must be approved"):
+            finish_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_finish_blocked_by_unfinished_po(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        from sc_gr_app.services.po_service import create_po
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-WPO",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "Vendor X",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        create_po(seeded_config, admin, {
+            "sc_id": sc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 30000,
+        })
+        with pytest.raises(ConflictError, match="PO\\(s\\) not finished"):
+            finish_sc(seeded_config, admin, sc["sc_id"])
+
+
+class TestScRecall:
+    def test_recall_approved_to_draft(self, seeded_config):
+        """recall_sc moves an approved SC back to draft for its requester."""
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-RECALL",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        result = recall_sc(seeded_config, requester, sc["sc_id"])
+        assert result["status"] == "draft"
+
+    def test_recall_rejects_non_recallable(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        with pytest.raises(ConflictError, match="SC cannot be recalled back to draft"):
+            recall_sc(seeded_config, requester, sc["sc_id"])
+
+    def test_recall_non_owner_rejected(self, seeded_config):
+        """Only the SC requester can recall -- not another user."""
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": admin["user_id"],
+        })
+        sc = submit_sc(seeded_config, admin, sc["sc_id"], {
+            "sc_no": "SC-REC2",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc = confirm_sc(seeded_config, admin, sc["sc_id"])
+        sc = approve_sc(seeded_config, admin, sc["sc_id"])
+        with pytest.raises(PermissionDenied):
+            recall_sc(seeded_config, requester, sc["sc_id"])
+
+
+class TestScDelete:
+    def test_delete_draft_sc(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": requester["user_id"],
+        })
+        result = delete_sc(seeded_config, admin, sc["sc_id"])
+        assert result["deleted"] is True
+        assert result["sc_id"] == sc["sc_id"]
+
+    def test_delete_rejects_non_draft(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc(seeded_config, admin, {
+            "sc_no": "SC-DEL",
+            "requester_id": requester["user_id"],
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 50000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        with pytest.raises(ConflictError, match="Only draft SC can be deleted"):
+            delete_sc(seeded_config, admin, sc["sc_id"])
+
+    def test_delete_non_owner_requester_rejected(self, seeded_config):
+        """Non-owner requester cannot delete another user's draft SC."""
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {
+            "requester_id": admin["user_id"],
+        })
+        with pytest.raises(PermissionDenied):
+            delete_sc(seeded_config, requester, sc["sc_id"])
