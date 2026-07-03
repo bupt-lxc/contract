@@ -2,12 +2,14 @@ import pytest
 
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.errors import ConflictError, NotFound
+from sc_gr_app.errors import ConflictError, NotFound, ValidationError
 from sc_gr_app.services.budget_service import (
     compute_po_budget,
     compute_po_budget_decimal,
+    compute_po_fc_budget,
     compute_sc_budget,
     compute_sc_budget_decimal,
+    compute_sc_fc_budget,
 )
 
 
@@ -487,3 +489,140 @@ def test_po_pending_total_incl_tax_applies_tax_rate(app_config):
     assert budget["po_pending_total"] == 300.0              # 100 + 200
     assert budget["po_pending_total_incl_tax"] == 313.0     # 100*1.13 + 200*1.0
     assert budget["po_con_value_total"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Framework Contract (FC) budget tests
+# ---------------------------------------------------------------------------
+
+
+def _seed_fc_chain(app_config):
+    """Create test data: SC(FC) + PO(FC) using direct SQL inserts.
+
+    Bypasses service-layer functions that may not yet support calloff_po_id
+    (Task 3). Inserts directly via SQL.
+
+    Returns (sc_fc_id, po_fc_id).
+    """
+    migrate(app_config)
+    with connect(app_config) as conn:
+        conn.execute(
+            """
+            INSERT INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("U-FC", "M-FC", "FC Tester", "requester", None, "active", TIMESTAMP, TIMESTAMP),
+        )
+        conn.execute(
+            """
+            INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("V-FC", "FC Vendor", "Others", "U-FC", TIMESTAMP, TIMESTAMP),
+        )
+        sc_fc_id = "SC-FC-001"
+        conn.execute(
+            """
+            INSERT INTO sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end, status,
+              created_by, created_at, updated_at, approved_by, approved_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (sc_fc_id, f"{sc_fc_id}-NO", "U-FC", "FC", 1000, 100000.0,
+             "2026-01-01", "2026-12-31", "approved",
+             "U-FC", TIMESTAMP, TIMESTAMP, "U-FC", TIMESTAMP),
+        )
+        po_fc_id = "PO-FC-001"
+        conn.execute(
+            """
+            INSERT INTO pos (
+              po_id, sc_id, vendor_id, po_no, po_amount, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (po_fc_id, sc_fc_id, "V-FC", f"{po_fc_id}-NO", 80000.0, "active",
+             TIMESTAMP, TIMESTAMP),
+        )
+        conn.commit()
+    return sc_fc_id, po_fc_id
+
+
+def test_compute_po_fc_budget_no_calloffs(app_config):
+    """FC PO with no call-off SCs: open = full PO amount."""
+    sc_id, po_id = _seed_fc_chain(app_config)
+
+    budget = compute_po_fc_budget(app_config, po_id)
+    assert budget["po_amount"] == 80000.0
+    assert budget["allocated_calloff_amount"] == 0.0
+    assert budget["pending_calloff_amount"] == 0.0
+    assert budget["open_po_amount"] == 80000.0
+    assert budget["downstream_consumed"] == 0.0
+    assert budget["downstream_pending_gr"] == 0.0
+    assert budget["downstream_pending_gr_tax"] == 0.0
+
+
+def test_compute_po_fc_budget_with_calloffs(app_config):
+    """FC PO with call-off SCs: open reflects allocated call-off amount."""
+    sc_id, po_id = _seed_fc_chain(app_config)
+
+    with connect(app_config) as conn:
+        # Insert 2 call-off SCs with different statuses
+        conn.execute(
+            """
+            INSERT INTO sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end, status, calloff_po_id,
+              created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+             "2026-01-01", "2026-12-31", "approved", po_id,
+             "U-FC", TIMESTAMP, TIMESTAMP),
+        )
+        conn.execute(
+            """
+            INSERT INTO sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center, sc_amount,
+              service_period_start, service_period_end, status, calloff_po_id,
+              created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("SC-CO-002", "SC-CO-002-NO", "U-FC", "service", 3000, 20000.0,
+             "2026-01-01", "2026-12-31", "pending", po_id,
+             "U-FC", TIMESTAMP, TIMESTAMP),
+        )
+        conn.commit()
+
+    budget = compute_po_fc_budget(app_config, po_id)
+    assert budget["allocated_calloff_amount"] == 50000.0   # 30000 + 20000
+    assert budget["pending_calloff_amount"] == 50000.0     # both approved & pending count
+    assert budget["open_po_amount"] == 30000.0             # 80000 - 50000
+
+
+def test_compute_po_fc_budget_rejects_non_fc_po(app_config):
+    """Calling FC budget on a regular (non-FC) PO raises ValidationError."""
+    migrate(app_config)
+    with connect(app_config) as conn:
+        seed_user(conn)
+        seed_sc(conn, sc_id="SC-REG", sc_amount=50000)
+        seed_vendor(conn)
+        seed_po(conn, po_id="PO-REG", sc_id="SC-REG", po_amount=30000)
+        conn.commit()
+
+    with pytest.raises(ValidationError, match="not an FC PO"):
+        compute_po_fc_budget(app_config, "PO-REG")
+
+
+def test_compute_sc_fc_budget(app_config):
+    """SC(FC) budget: full downstream trace with PO allocation."""
+    sc_id, po_id = _seed_fc_chain(app_config)
+
+    budget = compute_sc_fc_budget(app_config, sc_id)
+    assert budget["sc_amount"] == 100000.0
+    assert budget["allocated_po_amount"] == 80000.0
+    assert budget["unallocated_sc_amount"] == 20000.0
+    assert budget["downstream_calloff_amount"] == 0.0
+    assert budget["pending_calloff_amount"] == 0.0
+    assert budget["downstream_consumed"] == 0.0
+    assert budget["downstream_pending_gr"] == 0.0
+    assert budget["downstream_pending_gr_tax"] == 0.0
