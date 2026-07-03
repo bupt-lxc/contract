@@ -304,3 +304,224 @@ class TestGrApprove:
         assert gr["status"] == "manager_confirm"
         with pytest.raises(ConflictError, match="GR must be pending"):
             approve_gr(seeded_config, admin, gr["gr_id"], con_value=10000)
+
+
+class TestGrUpdate:
+    def test_update_gr_remark(self, seeded_config):
+        """update_gr can change remark on a pending GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        result = update_gr(seeded_config, admin, gr["gr_id"], {
+            "remark": "Updated remark",
+        })
+        assert result["remark"] == "Updated remark"
+
+    def test_update_gr_rejects_finished_gr(self, seeded_config):
+        """Cannot update a finished GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        gr = approve_gr(seeded_config, admin, gr["gr_id"], con_value=10000)
+        gr = finish_gr(seeded_config, admin, gr["gr_id"])
+        with pytest.raises(ConflictError, match="GR cannot be edited in its current status"):
+            update_gr(seeded_config, admin, gr["gr_id"], {"remark": "test"})
+
+    def test_update_gr_estimated_amount(self, seeded_config):
+        """update_gr can change estimated_amount."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        result = update_gr(seeded_config, admin, gr["gr_id"], {
+            "estimated_amount": "20000",
+        })
+        assert result["estimated_amount"] == 20000.0
+
+
+class TestGrDeny:
+    def test_deny_pending_gr(self, seeded_config):
+        """Deny a pending GR transitions to denied."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        result = deny_gr(seeded_config, admin, gr["gr_id"])
+        assert result["status"] == "denied"
+
+    def test_deny_rejects_already_denied(self, seeded_config):
+        """Denying an already denied GR raises ConflictError."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        deny_gr(seeded_config, admin, gr["gr_id"])
+        with pytest.raises(ConflictError, match="GR must be pending"):
+            deny_gr(seeded_config, admin, gr["gr_id"])
+
+    def test_deny_requires_admin(self, seeded_config):
+        """Non-admin cannot deny a GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        with pytest.raises(PermissionDenied):
+            deny_gr(seeded_config, requester, gr["gr_id"])
+
+
+class TestGrFinish:
+    def test_finish_approved_gr(self, seeded_config):
+        """Finish an approved GR transitions to finished."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        gr = approve_gr(seeded_config, admin, gr["gr_id"], con_value=10000)
+        result = finish_gr(seeded_config, admin, gr["gr_id"])
+        assert result["status"] == "finished"
+
+    def test_finish_rejects_non_approved(self, seeded_config):
+        """Cannot finish a GR that is not approved."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        with pytest.raises(ConflictError, match="GR must be approved"):
+            finish_gr(seeded_config, admin, gr["gr_id"])
+
+
+class TestGrRecall:
+    def test_recall_pending_gr(self, seeded_config):
+        """SC requester recalling a pending GR returns it to draft."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        result = recall_gr(seeded_config, requester, gr["gr_id"])
+        assert result["status"] == "draft"
+
+    def test_recall_rejects_non_manager_confirm_or_pending(self, seeded_config):
+        """Cannot recall a GR that is not manager_confirm or pending."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        with pytest.raises(ConflictError, match="Only manager_confirm or pending GR can be recalled"):
+            recall_gr(seeded_config, requester, gr["gr_id"])
+
+    def test_recall_requires_sc_requester(self, seeded_config):
+        """Non-requester cannot recall a GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        with pytest.raises(PermissionDenied, match="Only the SC requester can recall"):
+            recall_gr(seeded_config, admin, gr["gr_id"])
+
+
+class TestGrDelete:
+    def test_delete_draft_gr(self, seeded_config):
+        """Deleting a draft GR succeeds and returns the deleted GR record."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        result = delete_gr(seeded_config, admin, gr["gr_id"])
+        assert result["gr_id"] == gr["gr_id"]
+        assert result["status"] == "draft"
+
+    def test_delete_rejects_non_draft(self, seeded_config):
+        """Cannot delete a non-draft GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        with pytest.raises(ConflictError, match="Only draft GR can be deleted"):
+            delete_gr(seeded_config, admin, gr["gr_id"])
+
+    def test_delete_requires_gr_owner_or_admin(self, seeded_config):
+        """Non-owner cannot delete a GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        other = {"user_id": "U2", "role": "requester", "machine_id": "M3"}
+        with pytest.raises(PermissionDenied):
+            delete_gr(seeded_config, other, gr["gr_id"])
+
+
+class TestGrValidation:
+    def test_draft_po_allows_only_draft_gr(self, seeded_config):
+        """GR creation under draft PO fails if status is not draft."""
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {"requester_id": requester["user_id"]})
+        v = create_vendor(seeded_config, admin, {
+            "vendor_name": "V Draft",
+            "service_scope": "General Service",
+        })
+        add_sc_vendor(seeded_config, admin, sc["sc_id"], v["vendor_id"])
+        po = create_po(seeded_config, admin, {
+            "sc_id": sc["sc_id"],
+            "vendor_id": v["vendor_id"],
+            "po_amount": 50000,
+        })
+        with pytest.raises(ConflictError, match="Draft PO only allows draft GR"):
+            create_gr(seeded_config, admin, {
+                "po_id": po["po_id"],
+                "requester_id": requester["user_id"],
+                "estimated_amount": 10000,
+                "status": "pending",
+            })
+
+    def test_gr_creation_fails_when_sc_amount_insufficient(self, seeded_config):
+        """Creating GR with estimated_amount exceeding SC available amount fails."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        with pytest.raises(ConflictError, match="SC available amount is insufficient"):
+            create_gr(seeded_config, admin, {
+                "po_id": po["po_id"],
+                "requester_id": requester["user_id"],
+                "estimated_amount": 999999,
+            })
+
+    def test_gr_creation_fails_when_po_open_amount_insufficient(self, seeded_config):
+        """Creating GR with estimated_amount exceeding PO open amount fails."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        with pytest.raises(ConflictError, match="PO open amount is insufficient"):
+            create_gr(seeded_config, admin, {
+                "po_id": po["po_id"],
+                "requester_id": requester["user_id"],
+                "estimated_amount": 99999,
+            })
