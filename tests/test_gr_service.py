@@ -199,3 +199,108 @@ class TestGrSubmit:
         })
         with pytest.raises(ConflictError, match="PO must be active"):
             submit_gr(seeded_config, admin, gr["gr_id"])
+
+
+class TestGrConfirm:
+    def test_confirm_manager_confirm_to_pending(self, seeded_config):
+        """confirm_gr transitions manager_confirm status to pending."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        gr = submit_gr(seeded_config, admin, gr["gr_id"])
+        assert gr["status"] == "manager_confirm"
+        result = confirm_gr(seeded_config, admin, gr["gr_id"])
+        assert result["status"] == "pending"
+
+    def test_confirm_rejects_non_manager_confirm(self, seeded_config):
+        """confirm_gr raises ConflictError when GR is not in manager_confirm status."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        # GR under active PO auto-creates as "pending", not manager_confirm
+        with pytest.raises(ConflictError, match="GR must be in manager_confirm status"):
+            confirm_gr(seeded_config, admin, gr["gr_id"])
+
+    def test_confirm_requires_admin(self, seeded_config):
+        """confirm_gr raises PermissionDenied when non-admin tries to confirm."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        gr = submit_gr(seeded_config, admin, gr["gr_id"])
+        with pytest.raises(PermissionDenied):
+            confirm_gr(seeded_config, requester, gr["gr_id"])
+
+
+class TestGrApprove:
+    def test_approve_gr_sets_con_value(self, seeded_config):
+        """approve_gr sets con_value and transitions to approved."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        result = approve_gr(seeded_config, admin, gr["gr_id"], con_value=9500)
+        assert result["status"] == "approved"
+        assert result["con_value"] == 9500.0
+
+    def test_approve_gr_null_con_value_auto_fills_from_gross_cost(self, seeded_config):
+        """approve_gr auto-fills con_value from gross_cost when con_value is None."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        # con_value=None triggers auto-fill from gross_cost (which equals estimated_amount when tax_rate is None)
+        result = approve_gr(seeded_config, admin, gr["gr_id"], con_value=None)
+        assert result["status"] == "approved"
+        assert result["con_value"] == 10000.0
+
+    def test_approve_rejects_non_pending_gr(self, seeded_config):
+        """approve_gr raises ConflictError for non-pending GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        with pytest.raises(ConflictError, match="GR must be pending"):
+            approve_gr(seeded_config, admin, gr["gr_id"], con_value=5000)
+
+    def test_approve_requires_admin(self, seeded_config):
+        """approve_gr raises PermissionDenied for non-admin."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+        })
+        with pytest.raises(PermissionDenied):
+            approve_gr(seeded_config, requester, gr["gr_id"], con_value=5000)
+
+    def test_approve_gr_rejects_manager_confirm(self, seeded_config):
+        """approve_gr raises ConflictError when GR is in manager_confirm (not pending)."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = create_gr(seeded_config, admin, {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 10000,
+            "status": "draft",
+        })
+        gr = submit_gr(seeded_config, admin, gr["gr_id"])
+        assert gr["status"] == "manager_confirm"
+        with pytest.raises(ConflictError, match="GR must be pending"):
+            approve_gr(seeded_config, admin, gr["gr_id"], con_value=10000)
