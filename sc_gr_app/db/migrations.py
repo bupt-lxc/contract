@@ -1502,6 +1502,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v31(conn)
                 conn.commit()
+            elif _table_exists(conn, "sc_records"):
+                existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+                if "calloff_po_id" not in existing:
+                    conn.execute("BEGIN")
+                    conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
+                    conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

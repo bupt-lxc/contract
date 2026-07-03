@@ -6,7 +6,7 @@
       {{ $t('home.loadError') }}: {{ error }}
     </div>
 
-    <!-- SC Row -->
+    <!-- SC Row 1: draft + manager_confirm -->
     <div class="wb-row">
       <div class="wb-row__header">
         <span class="wb-row__label">SC</span>
@@ -14,26 +14,65 @@
           {{ $t('common.viewAll') }} <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <div :class="['wb-grid', 'wb-grid--4']">
-        <div v-for="cell in scCells" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
+      <div class="wb-grid wb-grid--2">
+        <div v-for="cell in scRow1" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
           <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
             <span class="wb-cell__status">{{ cell.label }}</span>
             <span class="wb-cell__count">{{ data.sc?.[cell.status]?.count ?? 0 }}</span>
           </div>
           <div class="wb-cell__table">
-            <div class="wb-cell__th">
-              <span class="wb-cell__th-id">{{ $t('sc.scId') }}</span>
-              <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+            <div class="wb-cell__th wb-cell__th--sc5">
+              <span class="wb-cell__th-no">{{ $t('home.colScNo') }}</span>
+              <span class="wb-cell__th-req">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-type">{{ $t('home.colType') }}</span>
+              <span class="wb-cell__th-amt">{{ $t('home.colAmount') }}</span>
               <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
             </div>
             <div
               v-for="row in (data.sc?.[cell.status]?.rows || [])"
               :key="row.sc_id"
-              class="wb-cell__tr"
+              class="wb-cell__tr wb-cell__tr--sc5"
               @click="$router.push(`/sc/${row.sc_id}`)"
             >
-              <span class="wb-cell__td-id" :title="row.sc_id">{{ shortId(row.sc_id) }}</span>
-              <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-no" :title="row.sc_no">{{ row.sc_no || shortId(row.sc_id) }}</span>
+              <span class="wb-cell__td-req">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-type">{{ typeLabel(row.request_type) }}</span>
+              <span class="wb-cell__td-amt">{{ formatCurrency(row.sc_amount, row.currency) }}</span>
+              <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
+            </div>
+            <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
+          </div>
+          <div class="wb-cell__link" @click="$router.push(`/sc?status=${cell.status}`)">{{ $t('home.viewAllOfType') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SC Row 2: pending + approved -->
+    <div class="wb-row">
+      <div class="wb-grid wb-grid--2">
+        <div v-for="cell in scRow2" :key="cell.status" :class="['wb-cell', `wb-cell--${headStatus(cell.status)}`]">
+          <div :class="['wb-cell__head', `wb-cell__head--${headStatus(cell.status)}`]">
+            <span class="wb-cell__status">{{ cell.label }}</span>
+            <span class="wb-cell__count">{{ data.sc?.[cell.status]?.count ?? 0 }}</span>
+          </div>
+          <div class="wb-cell__table">
+            <div class="wb-cell__th wb-cell__th--sc5">
+              <span class="wb-cell__th-no">{{ $t('home.colScNo') }}</span>
+              <span class="wb-cell__th-req">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-type">{{ $t('home.colType') }}</span>
+              <span class="wb-cell__th-amt">{{ $t('home.colAmount') }}</span>
+              <span class="wb-cell__th-date">{{ dateColLabel(cell.status) }}</span>
+            </div>
+            <div
+              v-for="row in (data.sc?.[cell.status]?.rows || [])"
+              :key="row.sc_id"
+              class="wb-cell__tr wb-cell__tr--sc5"
+              @click="$router.push(`/sc/${row.sc_id}`)"
+            >
+              <span class="wb-cell__td-no" :title="row.sc_no">{{ row.sc_no || shortId(row.sc_id) }}</span>
+              <span class="wb-cell__td-req">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-type">{{ typeLabel(row.request_type) }}</span>
+              <span class="wb-cell__td-amt">{{ formatCurrency(row.sc_amount, row.currency) }}</span>
               <span class="wb-cell__td-date">{{ cellDate(cell.status, row) }}</span>
             </div>
             <div v-if="!data.sc?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
@@ -99,7 +138,7 @@
                 <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
                 <span class="wb-cell__td-day">{{ (row.contract_from || '').slice(0, 10) || '-' }}</span>
                 <span class="wb-cell__td-day">{{ (row.contract_to || '').slice(0, 10) || '-' }}</span>
-                <span class="wb-cell__td-amt">{{ formatCurrency(row.open_po_amount) }}</span>
+                <span class="wb-cell__td-amt">{{ formatCurrency(row.open_po_amount, row.currency) }}</span>
               </div>
             </template>
             <div v-if="!data.po?.[cell.status]?.rows?.length" class="wb-cell__empty">—</div>
@@ -159,9 +198,12 @@ const { t } = useI18n()
 const data = ref({ sc: {}, po: {}, gr: {} })
 const error = ref(null)
 
-const scCells = computed(() => [
+const scRow1 = computed(() => [
   { status: 'draft',            label: t('status.draft') },
   { status: 'manager_confirm',  label: t('status.manager_confirm') },
+])
+
+const scRow2 = computed(() => [
   { status: 'pending',          label: t('status.pending') },
   { status: 'approved',         label: t('status.approved') },
 ])
@@ -194,9 +236,17 @@ function shortId(id) {
   return parts.slice(2).join('-')
 }
 
-function formatCurrency(val) {
+function typeLabel(requestType) {
+  if (!requestType) return '-'
+  const map = { material: 'M', service: 'S', fixed_asset: 'FA', FC: 'FC' }
+  return map[requestType] || requestType
+}
+
+function formatCurrency(val, currency) {
   if (val == null || isNaN(val)) return '-'
-  return Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const symbols = { CNY: '¥', EUR: '€', USD: '$' }
+  const prefix = symbols[currency] || ''
+  return prefix + Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function dateColLabel(status) {
@@ -272,6 +322,10 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: clamp(6px, 1%, 12px);
+}
+
+.wb-grid--2 {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .wb-grid--4 {
@@ -381,7 +435,56 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-/* SC NO column */
+/* SC 5-column layout */
+.wb-cell__th--sc5 .wb-cell__th-no,
+.wb-cell__tr--sc5 .wb-cell__td-no {
+  flex: 1 1 24%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-req,
+.wb-cell__tr--sc5 .wb-cell__td-req {
+  flex: 0 0 19%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-type,
+.wb-cell__tr--sc5 .wb-cell__td-type {
+  flex: 0 0 10%;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-amt,
+.wb-cell__tr--sc5 .wb-cell__td-amt {
+  flex: 0 0 20%;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-date,
+.wb-cell__tr--sc5 .wb-cell__td-date {
+  flex: 0 0 18%;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SC NO column (PO) */
 .wb-cell__th-sc,
 .wb-cell__td-sc {
   flex: 0 0 18%;
@@ -460,6 +563,23 @@ onMounted(async () => {
 .wb-cell__td-date {
   font-size: 0.68rem;
   color: #94a3b8;
+}
+
+.wb-cell__td-no {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.wb-cell__td-type {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.wb-cell__td-amt {
+  font-size: 0.72rem;
+  color: #475569;
 }
 
 .wb-cell__empty {

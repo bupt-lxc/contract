@@ -422,8 +422,8 @@ def test_workbench_data_returns_per_status_counts(app_config):
     row = result["sc"]["approved"]["rows"][0]
     assert "sc_no" in row
     assert "requester_name" in row
-    # No amount fields
-    assert "sc_amount" not in row
+    assert "sc_amount" in row
+    assert "request_type" in row
 
 
 def test_workbench_data_scopes_requester_to_own_scs(app_config):
@@ -509,3 +509,184 @@ def test_workbench_data_po_has_requester_name(app_config):
     assert po_row["requester_name"] == "Requester"
     assert "vendor_name" not in po_row
     assert "po_amount" not in po_row
+
+
+class TestQueryServiceFcFilters:
+    """FC-related filter tests for search_scs and search_pos."""
+
+    def _setup_two_scs_one_fc(self, app_config):
+        """Create one regular SC + one FC SC with PO(FC). Returns (regular_sc, fc_sc, po_fc)."""
+        migrate(app_config)
+        seed_users(app_config)
+
+        # Create vendor
+        vendor = create_vendor(app_config, USER, {
+            "vendor_name": "Test Vendor",
+            "service_scope": "General Service",
+        })
+        vendor_id = vendor["vendor_id"]
+
+        # Regular SC
+        sc_regular = create_sc(app_config, USER, {
+            "sc_no": "SC-REG",
+            "requester_id": "U1",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 10000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_regular = approve_sc(app_config, ADMIN, sc_regular["sc_id"])
+
+        # FC SC
+        sc_fc = create_sc(app_config, USER, {
+            "sc_no": "SC-FC",
+            "requester_id": "U1",
+            "request_type": "FC",
+            "cost_center": 2000,
+            "sc_amount": 100000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+
+        # Link vendor to both
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        add_sc_vendor(app_config, ADMIN, sc_fc["sc_id"], vendor_id)
+
+        # PO(FC)
+        po_fc = create_po(app_config, ADMIN, {
+            "sc_id": sc_fc["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 80000,
+        })
+
+        # Call-off SC under PO(FC)
+        create_sc_draft(app_config, USER, {
+            "requester_id": "U1",
+            "calloff_po_id": po_fc["po_id"],
+        })
+
+        return sc_regular, sc_fc, po_fc
+
+    def test_is_calloff_filter_1_returns_only_calloff_scs(self, app_config):
+        """is_calloff='1' returns only SCs with calloff_po_id IS NOT NULL."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(app_config, current_user=ADMIN, filters={"is_calloff": "1"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["calloff_po_id"] is not None
+
+    def test_is_calloff_filter_0_returns_only_top_level_scs(self, app_config):
+        """is_calloff='0' returns only SCs with calloff_po_id IS NULL."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(app_config, current_user=ADMIN, filters={"is_calloff": "0"})
+
+        rows = result["rows"]
+        assert len(rows) >= 2  # regular SC + FC SC
+        for row in rows:
+            assert row["calloff_po_id"] is None
+
+    def test_calloff_po_id_filter_returns_children(self, app_config):
+        """calloff_po_id filter returns only SCs under that specific PO(FC)."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(
+            app_config, current_user=ADMIN,
+            filters={"calloff_po_id": po_fc["po_id"]},
+        )
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["calloff_po_id"] == po_fc["po_id"]
+
+    def test_is_fc_po_filter_1_returns_only_fc_pos(self, app_config):
+        """is_fc_po='1' returns only POs under FC-type SCs."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Create regular PO under regular SC (uses vendor already linked in setup)
+        vendor_id = create_vendor(app_config, USER, {
+            "vendor_name": "Regular PO Vendor",
+            "service_scope": "General Service",
+        })["vendor_id"]
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        create_po(app_config, ADMIN, {
+            "sc_id": sc_regular["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 5000,
+        })
+
+        result = search_pos(app_config, current_user=ADMIN, filters={"is_fc_po": "1"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["sc_request_type"] == "FC"
+
+    def test_is_fc_po_filter_0_returns_only_non_fc_pos(self, app_config):
+        """is_fc_po='0' returns only POs under non-FC SCs."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Create regular PO under regular SC (uses vendor already linked in setup)
+        vendor_id = create_vendor(app_config, USER, {
+            "vendor_name": "Regular PO Vendor",
+            "service_scope": "General Service",
+        })["vendor_id"]
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        create_po(app_config, ADMIN, {
+            "sc_id": sc_regular["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 5000,
+        })
+
+        result = search_pos(app_config, current_user=ADMIN, filters={"is_fc_po": "0"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["sc_request_type"] != "FC"
+
+    def test_fc_po_open_amount_uses_calloff_total(self, app_config):
+        """PO(FC) open_po_amount = po_amount - sum(call-off SC sc_amount)."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Submit the call-off SC created in setup (sc_amount defaults to None in draft)
+        # Find the draft call-off SC
+        calloff_rows = search_scs(
+            app_config, current_user=ADMIN,
+            filters={"calloff_po_id": po_fc["po_id"]},
+        )["rows"]
+        calloff_sc_id = calloff_rows[0]["sc_id"]
+
+        from sc_gr_app.services.sc_service import submit_sc
+        submit_sc(app_config, USER, calloff_sc_id, {
+            "sc_no": "SC-CO-001",
+            "request_type": "material",
+            "cost_center": 1000,
+            "sc_amount": 30000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+
+        rows = search_pos(app_config, current_user=ADMIN, filters={"po_id": po_fc["po_id"]})["rows"]
+        assert len(rows) == 1
+        assert rows[0]["open_po_amount"] == 50000  # 80000 - 30000
+
+    def test_sc_sort_by_calloff_po_id(self, app_config):
+        """search_scs can sort by calloff_po_id."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(
+            app_config, current_user=ADMIN,
+            sort="calloff_po_id", direction="asc",
+        )
+        # Non-calloff SCs have NULL calloff_po_id → sorted first (ASC)
+        rows = result["rows"]
+        assert len(rows) >= 2
+        # First rows should have NULL calloff_po_id
+        assert rows[0]["calloff_po_id"] is None

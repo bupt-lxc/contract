@@ -152,6 +152,8 @@ home: {
     colStartDay: 'Start Day',
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
+    colAmount: '金额',
+    colType: '类型',
     viewAllOfType: '查看此类全部',
   },
 

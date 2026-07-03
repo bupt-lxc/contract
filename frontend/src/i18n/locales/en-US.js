@@ -152,6 +152,8 @@ home: {
     colStartDay: 'Start Day',
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
+    colAmount: 'Amount',
+    colType: 'Type',
     viewAllOfType: 'View all of this type',
   },
 

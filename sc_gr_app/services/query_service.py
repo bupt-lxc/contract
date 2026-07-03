@@ -683,6 +683,7 @@ def workbench_data(
                 f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
                 f"sc.created_at, sc.pending_date, sc.submitted_date, "
                 f"sc.service_period_end AS deadline, "
+                f"sc.sc_amount, sc.request_type, sc.currency, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
                 f"JOIN users u ON u.user_id = sc.requester_id "
@@ -706,7 +707,7 @@ def workbench_data(
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
                 f"po.created_at, po.contract_from, po.contract_to, "
-                f"sc.sc_no, "
+                f"sc.sc_no, sc.currency, "
                 f"u.user_name AS requester_name, "
                 f"CASE WHEN sc.request_type = 'FC' "
                 f"THEN po.po_amount - COALESCE(calloff_sums.allocated, 0) "
