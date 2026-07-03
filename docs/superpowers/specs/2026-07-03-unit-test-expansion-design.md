@@ -49,14 +49,14 @@ class TestSomething:
 | `TestScDetail` | `get_sc_detail` — vendors embedded, call-off parent context, status-based permissions | ~3 |
 | `TestScCallOff` | `_validate_calloff_po` — consolidated from `test_sc_service_calloff.py` | ~3 |
 
-### `tests/test_gr_service.py` (~35-45 tests)
+### `tests/test_gr_service.py` (~33-43 tests)
 
 | Class | Functions covered | Test count |
 |---|---|---|
 | `TestGrCreate` | `create_gr` — required fields, PO context validation, FC PO rejection, permission check, draft-vs-pending status derivation | ~8 |
 | `TestGrSubmit` | `submit_gr` — draft→pending, status guard, cascade draft submit | ~4 |
 | `TestGrConfirm` | `confirm_gr` — manager_confirm flow, status guard | ~3 |
-| `TestGrApprove` | `approve_gr` — pending→approved, tax calculation, null con_value guard, cascade approve, SC/PO budget check on approve | ~8 |
+| `TestGrApprove` | `approve_gr` — pending→approved, tax calculation, null con_value guard, SC/PO budget check on approve | ~6 |
 | `TestGrUpdate` | `update_gr` — estimated_amount, con_value, tax_recalculation, status guards | ~6 |
 | `TestGrDeny` | `deny_gr` — pending→denied, state change | ~3 |
 | `TestGrFinish` | `finish_gr` — approved→finished | ~3 |
@@ -121,11 +121,11 @@ Quick scan of the 3 most critical existing test files revealed blind spots:
 | Category | Tests |
 |---|---|
 | New: `test_sc_service.py` | ~40-50 |
-| New: `test_gr_service.py` | ~35-45 |
+| New: `test_gr_service.py` | ~33-43 |
 | Patch: `test_po_service.py` | ~15-20 |
 | Patch: `test_budget_service.py` | ~3-4 |
 | Patch: `test_fc_calloff_flow.py` | ~2-3 |
-| **Total** | **~95-122** |
+| **Total** | **~93-120** |
 
 ## Constraints
 
