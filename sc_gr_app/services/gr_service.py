@@ -183,13 +183,15 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
 
     with connect(config) as lookup_conn:
         lookup = lookup_conn.execute(
-            "select pos.sc_id, sc.requester_id as sc_requester "
+            "select pos.sc_id, sc.requester_id as sc_requester, sc.request_type "
             "from pos join sc_records sc on sc.sc_id = pos.sc_id "
             "where pos.po_id = ?",
             (po_id,),
         ).fetchone()
         if lookup is None:
             raise NotFound(f"PO not found: {po_id}")
+        if lookup["request_type"] == "FC":
+            raise ConflictError("Cannot create GR under an FC PO. Use call-off SCs instead.")
         sc_id = lookup["sc_id"]
         if current_user["role"] != "admin" and lookup["sc_requester"] != current_user["user_id"]:
             raise PermissionDenied("Only the SC owner or admin can create GRs")
