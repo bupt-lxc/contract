@@ -12,7 +12,9 @@ from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services import notification_service
 from sc_gr_app.services.budget_service import (
     compute_po_budget,
+    compute_po_fc_budget,
     compute_sc_budget,
+    compute_sc_fc_budget,
 )
 from sc_gr_app.services.lock_service import LeaseLock
 
@@ -61,6 +63,39 @@ REQUIRED_BUSINESS_FIELDS = (
     "service_period_start",
     "service_period_end",
 )
+
+
+def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | None, sc_amount) -> None:
+    """Validate call-off PO reference for call-off SC creation/submit."""
+    if calloff_po_id is None:
+        if request_type == "FC":
+            return  # top-level FC SC is fine without calloff_po_id
+        return  # regular SC without calloff_po_id is fine
+
+    if request_type == "FC":
+        raise ValidationError("Call-off SC cannot have request_type 'FC'")
+
+    po_row = conn.execute(
+        """select po.po_id, po.po_amount, po.status, sc.request_type as parent_sc_type
+           from pos po
+           join sc_records sc on sc.sc_id = po.sc_id
+           where po.po_id = ?""",
+        (calloff_po_id,),
+    ).fetchone()
+    if po_row is None:
+        raise NotFound(f"PO not found: {calloff_po_id}")
+    if po_row["parent_sc_type"] != "FC":
+        raise ValidationError("Call-off PO must belong to an FC-type SC")
+    if po_row["status"] != "active":
+        raise ConflictError("Call-off PO must be active to create call-off SCs")
+
+    calloff_total = conn.execute(
+        "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ?",
+        (calloff_po_id,),
+    ).fetchone()[0]
+    new_amount = Decimal(str(sc_amount)) if sc_amount is not None else Decimal("0")
+    if Decimal(str(calloff_total)) + new_amount > Decimal(str(po_row["po_amount"])):
+        raise ConflictError("Call-off SC total would exceed PO(FC) amount")
 
 
 def utc_now() -> str:
@@ -409,6 +444,9 @@ def create_sc(
 ) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
+    calloff_po_id = data.get("calloff_po_id")
+    if calloff_po_id is not None and data["request_type"] == "FC":
+        raise ValidationError("Call-off SC cannot have request_type 'FC'")
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
     currency = data.get("currency", "CNY")
@@ -457,8 +495,9 @@ def create_sc(
                       pending_date,
                       approved_date,
                       internal_system_number,
+                      calloff_po_id,
                       currency
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -482,6 +521,7 @@ def create_sc(
                         timestamp,
                         timestamp if status == "approved" else None,
                         data.get("internal_system_number"),
+                        data.get("calloff_po_id"),
                         data.get("currency", "CNY"),
                     ),
                 )
@@ -522,6 +562,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                calloff_po_id = data.get("calloff_po_id")
+                if calloff_po_id is not None:
+                    _validate_calloff_po(conn, calloff_po_id, data.get("request_type"), data.get("sc_amount"))
                 conn.execute(
                     """
                     insert into sc_records (
@@ -546,8 +589,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       pending_date,
                       approved_date,
                       internal_system_number,
+                      calloff_po_id,
                       currency
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -575,6 +619,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         None,
                         data.get("internal_system_number"),
+                        data.get("calloff_po_id"),
                         data.get("currency", "CNY"),
                     ),
                 )
@@ -621,6 +666,10 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                     raise PermissionDenied("Only the draft owner or admin can submit this SC")
                 merged = {**before, **data}
                 _require_submit_fields(merged)
+
+                calloff_po_id = before.get("calloff_po_id")
+                if calloff_po_id is not None:
+                    _validate_calloff_po(conn, calloff_po_id, merged.get("request_type"), merged["sc_amount"])
 
                 timestamp = utc_now()
                 conn.execute(
@@ -764,6 +813,21 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         sc_id,
                         merged["sc_amount"],
                     )
+
+                calloff_po_id = before.get("calloff_po_id")
+                if calloff_po_id is not None and "sc_amount" in allowed:
+                    po_row = conn.execute(
+                        "select po_amount from pos where po_id = ?",
+                        (calloff_po_id,),
+                    ).fetchone()
+                    if po_row:
+                        sibling_total = conn.execute(
+                            "select coalesce(sum(sc_amount), 0) from sc_records "
+                            "where calloff_po_id = ? and sc_id != ?",
+                            (calloff_po_id, sc_id),
+                        ).fetchone()[0]
+                        if Decimal(str(sibling_total)) + Decimal(str(merged["sc_amount"])) > Decimal(str(po_row["po_amount"])):
+                            raise ConflictError("Call-off SC total would exceed PO(FC) amount")
 
                 timestamp = utc_now()
                 conn.execute(
@@ -1171,20 +1235,49 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         ]
 
     for po in pos:
-        po["budget"] = compute_po_budget(config, po["po_id"])
-        po["open_po_amount"] = po["budget"]["open_po_amount"]
-        po["consumed_amount"] = po["budget"]["po_con_value_total"]
-        po["pending_total"] = po["budget"]["po_pending_total"]
-        po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
+        if sc["request_type"] == "FC":
+            po_budget = compute_po_fc_budget(config, po["po_id"])
+            po["open_po_amount"] = po_budget["open_po_amount"]
+            po["allocated_calloff_amount"] = po_budget["allocated_calloff_amount"]
+            po["pending_calloff_amount"] = po_budget["pending_calloff_amount"]
+            po["downstream_consumed"] = po_budget["downstream_consumed"]
+            po["downstream_pending_gr"] = po_budget["downstream_pending_gr"]
+            po["downstream_pending_gr_tax"] = po_budget["downstream_pending_gr_tax"]
+        else:
+            po["budget"] = compute_po_budget(config, po["po_id"])
+            po["open_po_amount"] = po["budget"]["open_po_amount"]
+            po["consumed_amount"] = po["budget"]["po_con_value_total"]
+            po["pending_total"] = po["budget"]["po_pending_total"]
+            po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
+
+    if sc["request_type"] == "FC":
+        sc_budget = compute_sc_fc_budget(config, sc_id)
+    else:
+        sc_budget = compute_sc_budget(config, sc_id)
+
+    # For call-off SCs, include parent PO(FC) info
+    parent_po = None
+    if sc.get("calloff_po_id"):
+        parent_po_row = conn.execute(
+            """select po.*, sc.request_type as parent_sc_type
+               from pos po
+               join sc_records sc on sc.sc_id = po.sc_id
+               where po.po_id = ?""",
+            (sc["calloff_po_id"],),
+        ).fetchone()
+        if parent_po_row:
+            parent_po = _row_to_dict(parent_po_row)
+            parent_po["fc_budget"] = compute_po_fc_budget(config, sc["calloff_po_id"])
 
     return {
         "sc": sc,
-        "budget": compute_sc_budget(config, sc_id),
+        "budget": sc_budget,
         "pos": pos,
         "grs": grs,
         "operation_records": records,
         "permissions": _sc_permissions(current_user, sc),
         "vendors": _fetch_sc_vendors(conn, sc_id),
+        "parent_po": parent_po,
     }
 
 
