@@ -246,6 +246,13 @@ home: {
     ownerTransferred: '所有者已转移',
     currency: '货币',
     importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的SC记录。必填字段：SC NO（SC编号）、SC Amount（SC金额）、Status（状态）。SC ID留空将自动生成。',
+    calloffBadge: '外委',
+    newCalloffSc: '新建外委 SC',
+    calloffPoId: '外委来源 PO',
+    allocatedPo: '已分配 PO 总额',
+    unallocated: '未分配金额',
+    downstreamCalloff: '下游外委 SC',
+    pendingCalloff: '进行中外委 SC',
   },
 
   po: {
@@ -308,6 +315,11 @@ home: {
     poNotFound: '未找到PO记录。',
     draftSaved: '草稿已保存',
     importRules: '仅允许导入状态为"Active（进行中）"或"Finished（已完成）"的PO记录。必填字段：SC ID（关联SC编号）、PO NO（PO编号）、PO Amount（PO金额）、Status（状态）。PO ID留空将自动生成。',
+    openPoAmountFc: 'PO 可用金额',
+    allocatedCalloff: '已分配外委总额',
+    pendingCalloff: '进行中外委',
+    downstreamConsumed: '下游已验收',
+    downstreamPendingGr: '下游待验收 GR',
   },
 
   gr: {
@@ -692,7 +704,9 @@ home: {
     within4Months: '四个月内',
     within3Months: '三个月内',
     within2Months: '两个月内',
-    within1Month: '一个月内'
+    within1Month: '一个月内',
+    isCalloff: '外委 SC',
+    isFcPo: 'FC 类型 PO',
   },
 
   settings: {

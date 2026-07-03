@@ -246,6 +246,13 @@ home: {
     ownerTransferred: 'Owner transferred',
     currency: 'Currency',
     importRules: 'Only SC records with status "Approved" or "Finished" can be imported. Required fields: SC NO, SC Amount, Status. Leave SC ID empty to auto-generate.',
+    calloffBadge: 'Call-off',
+    newCalloffSc: 'New Call-off SC',
+    calloffPoId: 'Call-off Source PO',
+    allocatedPo: 'Allocated (POs)',
+    unallocated: 'Unallocated',
+    downstreamCalloff: 'Downstream Call-off SCs',
+    pendingCalloff: 'Pending Call-off SCs',
   },
 
   po: {
@@ -308,6 +315,11 @@ home: {
     poNotFound: 'PO not found.',
     draftSaved: 'Draft saved',
     importRules: 'Only PO records with status "Active" or "Finished" can be imported. Required fields: SC ID, PO NO, PO Amount, Status. Leave PO ID empty to auto-generate.',
+    openPoAmountFc: 'Open PO Amount',
+    allocatedCalloff: 'Allocated (Call-off SCs)',
+    pendingCalloff: 'Pending Call-off SCs',
+    downstreamConsumed: 'Downstream Consumed',
+    downstreamPendingGr: 'Downstream Pending GR',
   },
 
   gr: {
@@ -692,7 +704,9 @@ home: {
     within4Months: 'Within 4 Months',
     within3Months: 'Within 3 Months',
     within2Months: 'Within 2 Months',
-    within1Month: 'Within 1 Month'
+    within1Month: 'Within 1 Month',
+    isCalloff: 'Call-off SC',
+    isFcPo: 'FC PO',
   },
 
   settings: {
