@@ -611,3 +611,11 @@ class TestScDelete:
         })
         with pytest.raises(PermissionDenied):
             delete_sc(seeded_config, requester, sc["sc_id"])
+
+    def test_delete_owner_can_delete_own_draft(self, seeded_config):
+        _, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, requester, {
+            "requester_id": requester["user_id"],
+        })
+        result = delete_sc(seeded_config, requester, sc["sc_id"])
+        assert result["deleted"] is True
