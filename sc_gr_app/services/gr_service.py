@@ -137,6 +137,35 @@ def _validate_user_exists(conn, user_id: str) -> None:
         raise NotFound(f"User not found: {user_id}")
 
 
+def _validate_last_delivery_value(value) -> None:
+    """Validate last_delivery is 'Y', 'N', or empty/None."""
+    if value is not None and value != "" and value not in ("Y", "N"):
+        raise ValidationError("last_delivery must be 'Y' or 'N'")
+
+
+def _validate_last_delivery_unique(conn, po_id: str, exclude_gr_id: str = None) -> None:
+    """Raise ConflictError if another active GR under the same PO is marked as Last Delivery."""
+    if exclude_gr_id:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')
+                 AND gr_id != ?""",
+            (po_id, exclude_gr_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')""",
+            (po_id,),
+        ).fetchall()
+    if rows:
+        raise ConflictError(
+            f"GR {rows[0]['gr_id']} under this PO is already marked as Last Delivery"
+        )
+
+
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
@@ -214,6 +243,10 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     raise ValidationError(f"Invalid GR status: {gr_status}")
 
                 _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
+
+                _validate_last_delivery_value(data.get("last_delivery"))
+                if data.get("last_delivery") == "Y":
+                    _validate_last_delivery_unique(conn, po_id)
 
                 is_draft = gr_status == "draft"
                 is_manager_confirm = gr_status == "manager_confirm"
@@ -676,6 +709,10 @@ def update_gr(
                             if po_budget["open_po_amount"] < po_budget_amount:
                                 raise ConflictError("PO open amount is insufficient")
 
+                    _validate_last_delivery_value(allowed.get("last_delivery"))
+                    if "last_delivery" in allowed and allowed["last_delivery"] == "Y":
+                        _validate_last_delivery_unique(conn, merged["po_id"], gr_id)
+
                     conn.execute(
                         """
                         update gr_requests
@@ -725,6 +762,10 @@ def update_gr(
                     }
                     if not allowed:
                         raise ValidationError("No GR fields to update")
+
+                    _validate_last_delivery_value(allowed.get("last_delivery"))
+                    if "last_delivery" in allowed and allowed["last_delivery"] == "Y":
+                        _validate_last_delivery_unique(conn, before["po_id"], gr_id)
 
                     merged = {**before, **allowed}
                     # Recalculate gross_cost when tax_rate changes on approved GR
