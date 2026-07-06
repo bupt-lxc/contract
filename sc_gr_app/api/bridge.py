@@ -1840,13 +1840,13 @@ class ApiBridge:
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
   </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()
@@ -1945,13 +1945,13 @@ class ApiBridge:
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
   </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()
@@ -2051,13 +2051,13 @@ class ApiBridge:
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
   </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()

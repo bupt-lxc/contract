@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1336,6 +1336,19 @@ def _migrate_v31(conn) -> None:
     _record(conn, 31)
 
 
+def _migrate_v32(conn) -> None:
+    """Add finished_at to pos, updated_at to gr_requests."""
+    if _table_exists(conn, "pos"):
+        existing_po = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
+        if "finished_at" not in existing_po:
+            conn.execute("ALTER TABLE pos ADD COLUMN finished_at TEXT")
+    if _table_exists(conn, "gr_requests"):
+        existing_gr = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "updated_at" not in existing_gr:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN updated_at TEXT")
+    _record(conn, 32)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1508,6 +1521,10 @@ def migrate(config: AppConfig) -> None:
                     conn.execute("BEGIN")
                     conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
                     conn.commit()
+            if 32 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v32(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

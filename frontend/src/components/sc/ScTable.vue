@@ -27,12 +27,12 @@
       </template>
     </el-table-column>
     <el-table-column prop="requester_name" :label="$t('sc.requester')" sortable="custom" width="130" />
-    <el-table-column :label="$t('sc.type')" sortable="custom" width="110">
+    <el-table-column :label="$t('sc.type')" sortable="custom" width="140">
       <template #default="{ row }">
-        <el-tag v-if="row.calloff_po_id" type="warning" size="small">
+        <span>{{ row.request_type }}</span>
+        <el-tag v-if="row.calloff_po_id" type="warning" size="small" style="margin-left:4px">
           {{ $t('sc.calloffBadge') }}
         </el-tag>
-        <span v-else>{{ row.request_type }}</span>
       </template>
     </el-table-column>
     <el-table-column prop="cost_center" :label="$t('sc.costCenter')" sortable="custom" width="110" />
@@ -54,11 +54,20 @@
     <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" sortable="custom" width="120">
       <template #default="{ row }">{{ formatDate(row.submitted_date) }}</template>
     </el-table-column>
+    <el-table-column prop="confirmed_at" :label="$t('timestampLabel.confirmed')" sortable="custom" width="120">
+      <template #default="{ row }">{{ formatDate(row.confirmed_at) }}</template>
+    </el-table-column>
     <el-table-column prop="pending_date" :label="$t('sc.pendingDate')" sortable="custom" width="120">
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
     </el-table-column>
     <el-table-column prop="approved_date" :label="$t('sc.approvedDate')" sortable="custom" width="120">
       <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" sortable="custom" width="120">
+      <template #default="{ row }">{{ formatDate(row.finished_at) }}</template>
+    </el-table-column>
+    <el-table-column prop="updated_at" :label="$t('timestampLabel.updated')" sortable="custom" width="120">
+      <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
     </el-table-column>
     <el-table-column prop="description" :label="$t('sc.description')" min-width="150" show-overflow-tooltip />
     <el-table-column :label="$t('common.actions')" width="70" fixed="right">

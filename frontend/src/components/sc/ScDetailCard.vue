@@ -13,12 +13,6 @@
     <el-descriptions-item :label="$t('sc.assetNums')">{{ sc.asset_nums || '-' }}</el-descriptions-item>
     <el-descriptions-item v-if="sc.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">{{ sc.internal_system_number || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.description')" :span="2">{{ sc.description || '-' }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.confirmedAt')">{{ formatDate(sc.confirmed_at) }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.createdAt')">{{ formatDate(sc.created_at) }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.submittedDate')">{{ formatDate(sc.submitted_date) }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.pendingDate')">{{ formatDate(sc.pending_date) }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.approvedDate')">{{ formatDate(sc.approved_date) }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.updatedAt')">{{ formatDate(sc.updated_at) }}</el-descriptions-item>
   </el-descriptions>
 </template>
 

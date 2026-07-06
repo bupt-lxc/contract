@@ -110,6 +110,19 @@ export default {
     Requester: 'Requester'
   },
 
+  processSummary: 'Process Summary',
+
+  timestampLabel: {
+    confirmed: 'Confirmed',
+    created: 'Created',
+    finished: 'Finished',
+    submitted: 'Submitted',
+    pending: 'Pending',
+    approved: 'Approved',
+    updated: 'Updated',
+    active: 'Active'
+  },
+
   login: {
     title: 'PO Management Platform',
     subtitle: 'Purchase Order Management Platform',
@@ -330,6 +343,7 @@ home: {
     pendingCalloff: 'Pending Call-off SCs',
     downstreamConsumed: 'Downstream Consumed',
     downstreamPendingGr: 'Downstream Pending GR',
+    newCalloffSc: 'New Call-off SC',
   },
 
   gr: {

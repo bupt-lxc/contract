@@ -216,6 +216,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                 _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
 
                 is_draft = gr_status == "draft"
+                is_manager_confirm = gr_status == "manager_confirm"
                 gross_cost = _compute_incl_tax(estimated_amount, data.get("tax_rate"))
                 conn.execute(
                     """
@@ -232,10 +233,12 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       remark,
                       created_by,
                       created_at,
+                      updated_at,
                       approved_by,
                       approved_at,
                       denied_by,
                       denied_at,
+                      submitted_date,
                       pending_date,
                       approved_date,
                       goods_service_description,
@@ -243,7 +246,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       delivery_from,
                       delivery_to,
                       last_delivery
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
@@ -258,11 +261,13 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("remark"),
                         current_user["user_id"],
                         timestamp,
+                        timestamp,
                         None,
                         None,
                         None,
                         None,
                         None if is_draft else timestamp,
+                        None if (is_draft or is_manager_confirm) else timestamp,
                         None,
                         data.get("goods_service_description"),
                         data.get("confirmation_name"),
@@ -316,7 +321,7 @@ def _submit_gr_drafts(conn, gr_ids: list[str], timestamp: str) -> list[dict]:
             update gr_requests
             set status = 'manager_confirm',
                 submitted_date = ?,
-                pending_date = ?
+                updated_at = ?
             where gr_id = ?
             """,
             (timestamp, timestamp, gr_id),
@@ -419,10 +424,11 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     update gr_requests
                     set status = 'pending',
                         confirmed_at = ?,
-                        pending_date = ?
+                        pending_date = ?,
+                        updated_at = ?
                     where gr_id = ?
                     """,
-                    (timestamp, timestamp, gr_id),
+                    (timestamp, timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
@@ -525,10 +531,11 @@ def approve_gr(
                         con_value = ?,
                         approved_by = ?,
                         approved_at = ?,
-                        approved_date = ?
+                        approved_date = ?,
+                        updated_at = ?
                     where gr_id = ?
                     """,
-                    (float(con_value_amount), current_user["user_id"], timestamp, timestamp, gr_id),
+                    (float(con_value_amount), current_user["user_id"], timestamp, timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
@@ -594,6 +601,7 @@ def update_gr(
                 if before["status"] not in ("draft", "manager_confirm", "pending", "approved"):
                     raise ConflictError("GR cannot be edited in its current status")
 
+                timestamp = utc_now()
                 updates = dict(data)
                 if before["status"] in ("draft", "pending"):
                     allowed = {
@@ -684,7 +692,8 @@ def update_gr(
                             confirmation_name = ?,
                             delivery_from = ?,
                             delivery_to = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            updated_at = ?
                         where gr_id = ?
                         """,
                         (
@@ -702,6 +711,7 @@ def update_gr(
                             merged.get("delivery_from"),
                             merged.get("delivery_to"),
                             merged.get("last_delivery"),
+                            timestamp,
                             gr_id,
                         ),
                     )
@@ -752,7 +762,8 @@ def update_gr(
                             confirmation_name = ?,
                             delivery_from = ?,
                             delivery_to = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            updated_at = ?
                         where gr_id = ?
                         """,
                         (float(con_value),
@@ -760,6 +771,7 @@ def update_gr(
                          merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
                          merged.get("goods_service_description"), merged.get("confirmation_name"),
                          merged.get("delivery_from"), merged.get("delivery_to"), merged.get("last_delivery"),
+                         timestamp,
                          gr_id),
                     )
 
@@ -810,10 +822,11 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     update gr_requests
                     set status = 'denied',
                         denied_by = ?,
-                        denied_at = ?
+                        denied_at = ?,
+                        updated_at = ?
                     where gr_id = ?
                     """,
-                    (current_user["user_id"], timestamp, gr_id),
+                    (current_user["user_id"], timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
@@ -865,10 +878,11 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     update gr_requests
                     set status = 'finished',
                         finished_by = ?,
-                        finished_at = ?
+                        finished_at = ?,
+                        updated_at = ?
                     where gr_id = ?
                     """,
-                    (current_user["user_id"], timestamp, gr_id),
+                    (current_user["user_id"], timestamp, timestamp, gr_id),
                 )
                 after = _get_gr(conn, gr_id)
                 write_operation_record(
@@ -925,8 +939,8 @@ def recall_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
 
                 timestamp = utc_now()
                 conn.execute(
-                    "update gr_requests set status = 'draft', confirmed_at = NULL, pending_date = NULL where gr_id = ?",
-                    (gr_id,),
+                    "update gr_requests set status = 'draft', confirmed_at = NULL, pending_date = NULL, updated_at = ? where gr_id = ?",
+                    (timestamp, gr_id),
                 )
 
                 after = _get_gr(conn, gr_id)

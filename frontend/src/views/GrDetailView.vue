@@ -49,14 +49,15 @@
           <el-descriptions-item :label="$t('gr.deliveryFrom')">{{ (gr.delivery_from || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.deliveryTo')">{{ (gr.delivery_to || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.confirmedAt')">{{ formatDate(gr.confirmed_at) }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.created')">{{ formatDateTime(gr.created_at) }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.submittedDate')">{{ (gr.submitted_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
+
+      <ProcessSummaryCard
+        v-if="gr.gr_id"
+        :record="gr"
+        :fields="grProcessSummaryFields"
+      />
 
       <div class="section-card">
         <div class="section-header">
@@ -107,12 +108,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSc } from '@/composables/useSc.js'
 import { useGr } from '@/composables/useGr.js'
 import { callApi, loadingState } from '@/api/bridge.js'
-import { formatDateTime, formatDate } from '@/utils/format.js'
+import { formatDateTime } from '@/utils/format.js'
 import { Message } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
+import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -139,6 +141,16 @@ const grOperationRecords = computed(() => {
   return logs.filter(l => l.object_type === 'gr' && l.object_id === grId.value)
 })
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
+
+const grProcessSummaryFields = computed(() => [
+  { key: 'created_at', label: t('timestampLabel.created') },
+  { key: 'submitted_date', label: t('timestampLabel.submitted') },
+  { key: 'confirmed_at', label: t('timestampLabel.confirmed') },
+  { key: 'pending_date', label: t('timestampLabel.pending') },
+  { key: 'approved_date', label: t('timestampLabel.approved') },
+  { key: 'finished_at', label: t('timestampLabel.finished') },
+  { key: 'updated_at', label: t('timestampLabel.updated') }
+])
 
 const confirmBtn = ref(null)
 const editDialogVisible = ref(false)

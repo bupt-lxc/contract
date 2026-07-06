@@ -30,11 +30,23 @@
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
       <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
     </el-table-column>
+    <el-table-column prop="submitted_date" :label="$t('timestampLabel.submitted')" width="110" sortable>
+      <template #default="{ row }">{{ formatDate(row.submitted_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="confirmed_at" :label="$t('timestampLabel.confirmed')" width="110" sortable>
+      <template #default="{ row }">{{ formatDate(row.confirmed_at) }}</template>
+    </el-table-column>
     <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.pending_date) }}</template>
     </el-table-column>
     <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
       <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" width="110" sortable>
+      <template #default="{ row }">{{ formatDate(row.finished_at) }}</template>
+    </el-table-column>
+    <el-table-column prop="updated_at" :label="$t('timestampLabel.updated')" width="110" sortable>
+      <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
     </el-table-column>
     <el-table-column :label="$t('gr.actions')" width="280" fixed="right">
       <template #default="{ row }">

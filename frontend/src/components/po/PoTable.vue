@@ -61,6 +61,9 @@
     <el-table-column prop="consumed_amount" :label="$t('po.consumedAmount')" width="130" sortable>
       <template #default="{ row }"><AmountDisplay :value="row.consumed_amount" /></template>
     </el-table-column>
+    <el-table-column prop="created_at" :label="$t('timestampLabel.created')" width="120" sortable>
+      <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+    </el-table-column>
     <el-table-column prop="contract_from" :label="$t('po.startDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.contract_from) }}</template>
     </el-table-column>
@@ -69,6 +72,12 @@
     </el-table-column>
     <el-table-column prop="active_date" :label="$t('po.activeDate')" width="120" sortable>
       <template #default="{ row }">{{ formatDate(row.active_date) }}</template>
+    </el-table-column>
+    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" width="120" sortable>
+      <template #default="{ row }">{{ formatDate(row.finished_at) }}</template>
+    </el-table-column>
+    <el-table-column prop="updated_at" :label="$t('timestampLabel.updated')" width="120" sortable>
+      <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
     </el-table-column>
     <el-table-column :label="$t('po.actions')" width="200" fixed="right">
       <template #default="{ row }">

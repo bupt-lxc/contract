@@ -110,6 +110,19 @@ export default {
     Requester: '申请人'
   },
 
+  processSummary: '流程摘要',
+
+  timestampLabel: {
+    confirmed: '确认',
+    created: '创建',
+    finished: '完成',
+    submitted: '提交',
+    pending: '待处理',
+    approved: '批准',
+    updated: '更新',
+    active: '生效'
+  },
+
   login: {
     title: 'PO 管理平台',
     subtitle: '采购订单管理平台',
@@ -276,11 +289,6 @@ home: {
     poAmount: '采购订单金额',
     openPoAmount: '可用采购订单金额',
     budgetSummary: '预算概览',
-    allocatedCalloff: '已分配调用',
-    pendingCalloff: '待批准调用',
-    downstreamConsumed: '下游已消费',
-    downstreamPendingGr: '下游待批准收货（不含税）',
-    downstreamPendingGrIncl: '下游待批准收货（含税）',
     startDate: '开始日期',
     contractEndDate: '合同结束日期',
     consumedAmount: '已消费金额',
@@ -330,6 +338,8 @@ home: {
     pendingCalloff: '进行中外委',
     downstreamConsumed: '下游已验收',
     downstreamPendingGr: '下游待验收 GR',
+    downstreamPendingGrIncl: '下游待批准收货（含税）',
+    newCalloffSc: '新建外委 SC',
   },
 
   gr: {

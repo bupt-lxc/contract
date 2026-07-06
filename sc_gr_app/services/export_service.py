@@ -138,6 +138,7 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
 
 
 def _build_gr_rows(config, filters, sort, direction, current_user, selected_ids):
+    rows = []
     all_grs = _fetch_all_search("gr", config, filters, sort, direction, current_user, selected_ids)
     with connect(config) as conn:
         for gr in all_grs:

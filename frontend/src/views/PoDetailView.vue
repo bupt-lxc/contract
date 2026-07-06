@@ -28,6 +28,9 @@
           <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
+          <el-button v-if="scDetail?.permissions?.can_manage_po && isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
+            <el-icon><Plus /></el-icon> {{ $t('po.newCalloffSc') }}
+          </el-button>
         </div>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item :label="$t('sc.scId')">
@@ -41,18 +44,6 @@
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poAmount')"><AmountDisplay :value="po.po_amount" /></el-descriptions-item>
           <el-descriptions-item :label="$t('po.openPoAmount')"><AmountDisplay :value="po.open_po_amount" /></el-descriptions-item>
-          <template v-if="!isFcPo">
-            <el-descriptions-item :label="$t('po.consumedAmount')"><AmountDisplay :value="po.consumed_amount || po.budget?.po_con_value_total" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.pendingExclTax')"><AmountDisplay :value="po.pending_total || po.budget?.po_pending_total" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.pendingInclTax')"><AmountDisplay :value="po.pending_total_incl_tax || po.budget?.po_pending_total_incl_tax" /></el-descriptions-item>
-          </template>
-          <template v-else>
-            <el-descriptions-item :label="$t('po.allocatedCalloff')"><AmountDisplay :value="po.allocated_calloff_amount" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.pendingCalloff')"><AmountDisplay :value="po.pending_calloff_amount" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.downstreamConsumed')"><AmountDisplay :value="po.downstream_consumed" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.downstreamPendingGr') + ' (excl)'"><AmountDisplay :value="po.downstream_pending_gr" /></el-descriptions-item>
-            <el-descriptions-item :label="$t('po.downstreamPendingGr') + ' (incl)'"><AmountDisplay :value="po.downstream_pending_gr_tax" /></el-descriptions-item>
-          </template>
           <el-descriptions-item :label="$t('po.contractFrom')">{{ po.contract_from?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractTo')">{{ po.contract_to?.slice(0,10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.contractNo')">{{ po.contract_no || '-' }}</el-descriptions-item>
@@ -61,9 +52,20 @@
           <el-descriptions-item :label="$t('po.contractType')">{{ po.contract_type || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.costCenter')">{{ po.cost_center || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.purchaser')">{{ po.purchaser || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('po.activeDate')">{{ (po.active_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
+
+      <PoBudgetCard
+        v-if="po.po_id"
+        :budget="poBudget"
+        :is-fc-po="isFcPo"
+      />
+
+      <ProcessSummaryCard
+        v-if="po.po_id"
+        :record="po"
+        :fields="poProcessSummaryFields"
+      />
 
       <div v-if="!isFcPo" class="section-card">
         <div class="section-header">
@@ -88,13 +90,20 @@
       <div v-if="isFcPo" class="section-card">
         <div class="section-header">
           <h3>{{ $t('sc.calloffBadge') }}</h3>
+          <el-button v-if="scDetail?.permissions?.can_manage_po" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
+            <el-icon><Plus /></el-icon> {{ $t('po.newCalloffSc') }}
+          </el-button>
         </div>
-        <el-table :data="calloffScs" stripe border size="small">
+        <el-table :data="calloffScs" stripe border size="small" @row-click="row => $router.push(`/sc/${row.sc_id}`)">
           <el-table-column prop="sc_id" :label="$t('sc.scId')" />
           <el-table-column prop="sc_no" :label="$t('sc.scNo')" />
           <el-table-column prop="request_type" :label="$t('sc.requestType')" />
-          <el-table-column prop="sc_amount" :label="$t('sc.scAmount')" />
-          <el-table-column prop="status" :label="$t('sc.status')" />
+          <el-table-column :label="$t('sc.scAmount')">
+            <template #default="{ row }"><AmountDisplay :value="row.sc_amount" /></template>
+          </el-table-column>
+          <el-table-column prop="status" :label="$t('sc.status')">
+            <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+          </el-table-column>
           <template #empty><el-empty :description="$t('sc.noRecords')" /></template>
         </el-table>
       </div>
@@ -170,6 +179,17 @@
       @save="handleGrSave"
       @save-draft="handleGrSaveDraft"
     />
+
+    <ScFormDialog
+      v-model:visible="scDialogVisible"
+      mode="create"
+      :record="scDialogRecord"
+      :users="activeUsers"
+      :vendors="vendors"
+      :calloff-po-id="po.po_id"
+      :calloff-po-info="{ po_id: po.po_id, open_po_amount: po.open_po_amount }"
+      @save-submit="handleCalloffScSave"
+    />
   </div>
 </template>
 
@@ -187,13 +207,17 @@ import { useGr } from '@/composables/useGr.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
+import PoBudgetCard from '@/components/po/PoBudgetCard.vue'
+import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import GrTable from '@/components/po/GrTable.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import AttachmentDialog from '@/components/common/AttachmentDialog.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
+import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoNotificationCard from '@/components/notification/PoNotificationCard.vue'
 import PoCustomScheduleCard from '@/components/notification/PoCustomScheduleCard.vue'
 import { useNotification } from '@/composables/useNotification.js'
+import { useVendor } from '@/composables/useVendor.js'
 import { formatDateTime } from '@/utils/format.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -205,6 +229,7 @@ const { updatePo, finishPo, submitPo } = usePo()
 const { createGr, updateGr, approveGr, denyGr, submitGr, finishGr } = useGr()
 
 const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
+const { state: vendorState, searchVendors } = useVendor()
 const { exportRows } = useExport()
 
 const scId = computed(() => route.params.scId)
@@ -220,6 +245,7 @@ const grs = computed(() => {
   return allGrs.filter(g => String(g.po_id) === String(poId.value))
 })
 const scVendors = computed(() => scDetail.value?.vendors || [])
+const vendors = computed(() => vendorState.rows)
 const poOperationRecords = computed(() => {
   const logs = scDetail.value?.operation_records || []
   return logs.filter(l => l.object_type === 'po' && l.object_id === poId.value)
@@ -228,7 +254,32 @@ const isRequester = computed(() => window.__currentUser?.user_id === scDetail.va
 const notificationConfig = computed(() => notifState.poConfig)
 const customSchedules = computed(() => notifState.customSchedules || [])
 
+const poBudget = computed(() => ({
+  po_amount: po.value.po_amount,
+  open_po_amount: po.value.open_po_amount,
+  allocated_calloff_amount: po.value.allocated_calloff_amount,
+  pending_calloff_amount: po.value.pending_calloff_amount,
+  downstream_consumed: po.value.downstream_consumed,
+  downstream_pending_gr: po.value.downstream_pending_gr,
+  downstream_pending_gr_tax: po.value.downstream_pending_gr_tax,
+  consumed_amount: po.value.consumed_amount,
+  pending_total: po.value.pending_total,
+  pending_total_incl_tax: po.value.pending_total_incl_tax,
+  po_con_value_total: po.value.budget?.po_con_value_total,
+  po_pending_total: po.value.budget?.po_pending_total,
+  po_pending_total_incl_tax: po.value.budget?.po_pending_total_incl_tax
+}))
+
+const poProcessSummaryFields = computed(() => [
+  { key: 'created_at', label: t('timestampLabel.created') },
+  { key: 'active_date', label: t('timestampLabel.active') },
+  { key: 'finished_at', label: t('timestampLabel.finished') },
+  { key: 'updated_at', label: t('timestampLabel.updated') }
+])
+
 const editDialogVisible = ref(false)
+const scDialogVisible = ref(false)
+const scDialogRecord = ref(null)
 const grDialogVisible = ref(false)
 const grDialogMode = ref('create')
 const grDialogRecord = ref(null)
@@ -303,6 +354,27 @@ async function handleSubmit() {
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await fetchDetail(scId.value)
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+}
+
+function openCalloffScDialog() {
+  scDialogRecord.value = { sc_id: null }
+  scDialogVisible.value = true
+}
+
+async function handleCalloffScSave(data) {
+  try {
+    const { _attachments, ...formData } = data
+    const result = await callApi('create_sc_draft', formData)
+    if (_attachments?.length) {
+      await callApi('add_attachments', { entity_type: 'sc', entity_id: result.sc_id, file_paths: _attachments })
+    }
+    ElMessage.success(t('common.saved'))
+    scDialogVisible.value = false
+    await fetchDetail(scId.value)
+    await loadCalloffData()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || String(e))
+  }
 }
 
 async function handleGrApprove(row) {
@@ -458,7 +530,7 @@ async function handleCustomSchedulesSave(schedules) {
 
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  await fetchDetail(scId.value)
+  await Promise.all([fetchDetail(scId.value), searchVendors()])
   await loadCalloffData()
   // Fetch PO notification config once PO ID is available
   if (poId.value) {

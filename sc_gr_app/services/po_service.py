@@ -522,10 +522,11 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     """
                     update pos
                     set status = 'finished',
-                        updated_at = ?
+                        updated_at = ?,
+                        finished_at = ?
                     where po_id = ?
                     """,
-                    (timestamp, po_id),
+                    (timestamp, timestamp, po_id),
                 )
                 after = _get_po_or_raise(conn, po_id)
                 write_operation_record(

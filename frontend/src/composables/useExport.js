@@ -20,6 +20,20 @@ export function useExport() {
   }
 
   /**
+   * Convert a Uint8Array to a binary string in chunks to avoid
+   * "Maximum call stack size exceeded" when spreading large arrays
+   * into String.fromCharCode arguments.
+   */
+  function _uint8ToString(uint8Array) {
+    let result = ''
+    const chunkSize = 0x8000
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      result += String.fromCharCode(...uint8Array.subarray(i, i + chunkSize))
+    }
+    return result
+  }
+
+  /**
    * Export an in-memory array of rows directly to an .xlsx file.
    *
    * @param {Array}    rows     – array of row objects
@@ -43,7 +57,7 @@ export function useExport() {
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
 
     const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
-    const binary = String.fromCharCode(...new Uint8Array(wbArray))
+    const binary = _uint8ToString(new Uint8Array(wbArray))
     const b64 = btoa(binary)
     await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
   }
@@ -75,7 +89,7 @@ export function useExport() {
     }
 
     const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
-    const binary = String.fromCharCode(...new Uint8Array(wbArray))
+    const binary = _uint8ToString(new Uint8Array(wbArray))
     const b64 = btoa(binary)
     await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
   }

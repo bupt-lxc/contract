@@ -49,6 +49,11 @@
           :budget="detail.budget"
           :is-fc="detail.sc.request_type === 'FC'"
         />
+        <ProcessSummaryCard
+          v-if="detail.sc"
+          :record="detail.sc"
+          :fields="scProcessSummaryFields"
+        />
       </div>
 
       <el-card v-if="detail.parent_po" class="calloff-context-card section-card">
@@ -185,6 +190,7 @@ import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import ScVendorSection from '@/components/sc/ScVendorSection.vue'
+import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
@@ -202,6 +208,16 @@ const vendors = computed(() => vendorState.rows)
 const scVendors = computed(() => detail.value?.vendors || [])
 const activeUsers = ref([])
 const confirmBtn = ref(null)
+
+const scProcessSummaryFields = computed(() => [
+  { key: 'created_at', label: t('timestampLabel.created') },
+  { key: 'submitted_date', label: t('timestampLabel.submitted') },
+  { key: 'confirmed_at', label: t('timestampLabel.confirmed') },
+  { key: 'pending_date', label: t('timestampLabel.pending') },
+  { key: 'approved_date', label: t('timestampLabel.approved') },
+  { key: 'finished_at', label: t('timestampLabel.finished') },
+  { key: 'updated_at', label: t('timestampLabel.updated') }
+])
 
 const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
