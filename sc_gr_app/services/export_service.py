@@ -91,12 +91,14 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
     with connect(config) as conn:
         for po in all_pos:
             po["_type"] = "PO"
-            sc = conn.execute(
-                "SELECT sc_no, request_type FROM sc_records WHERE sc_id = ?",
-                (po["sc_id"],),
-            ).fetchone()
+            sc = None
+            if po.get("sc_id"):
+                sc = conn.execute(
+                    "SELECT sc_no, request_type FROM sc_records WHERE sc_id = ?",
+                    (po["sc_id"],),
+                ).fetchone()
             po["sc_no"] = sc["sc_no"] if sc else ""
-            sc_request_type = sc["request_type"] if sc else ""
+            effective_type = po.get("request_type") or (sc["request_type"] if sc else "")
             po["requester_name"] = _resolve_requester_name(conn, po.get("requester_id"))
             vendor = conn.execute("SELECT vendor_name, ksrm_vendor_code FROM vendors WHERE vendor_id = ?", (po["vendor_id"],)).fetchone()
             po["vendor_name"] = vendor["vendor_name"] if vendor else ""
@@ -107,7 +109,7 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
                 continue
 
             # FC POs have call-off SCs instead of GRs
-            if sc_request_type == "FC":
+            if effective_type == "FC":
                 calloffs = conn.execute(
                     "SELECT sc.* FROM sc_records sc WHERE sc.calloff_po_id = ? ORDER BY sc.sc_no",
                     (po["po_id"],),
