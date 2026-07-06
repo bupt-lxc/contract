@@ -1,6 +1,8 @@
 """Tests for import_service -- status restrictions, required fields, preview functions."""
+import pytest
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
+from sc_gr_app.errors import ValidationError
 from sc_gr_app.services import import_service
 from datetime import datetime, timezone
 
@@ -91,7 +93,7 @@ class TestPoImportStatusRestrictions:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "draft"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "draft"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is False
 
@@ -101,7 +103,7 @@ class TestPoImportStatusRestrictions:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "active"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-002", "po_amount": "50000", "status": "active"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -111,7 +113,7 @@ class TestPoImportStatusRestrictions:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "finished"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-003", "po_amount": "50000", "status": "finished"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -127,7 +129,7 @@ class TestGrImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "draft"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -136,7 +138,7 @@ class TestGrImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "pending"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -145,7 +147,7 @@ class TestGrImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "manager_confirm"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -154,7 +156,7 @@ class TestGrImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is True
@@ -163,7 +165,7 @@ class TestGrImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "finished"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is True
@@ -188,16 +190,16 @@ class TestRequiredFields:
         assert preview[0]["_valid"] is False
         assert any("sc_amount is required" in e for e in preview[0]["_errors"])
 
-    def test_po_fails_without_po_no(self, app_config):
+    def test_po_fails_without_sc_no(self, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_amount": "50000", "status": "active"}]
+        rows = [{"po_no": "PO-010", "po_amount": "50000", "status": "active"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is False
-        assert any("po_no is required" in e for e in preview[0]["_errors"])
+        assert any("sc_no is required" in e for e in preview[0]["_errors"])
 
     def test_gr_fails_without_gr_no(self, app_config):
         migrate(app_config)
@@ -206,7 +208,7 @@ class TestRequiredFields:
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "estimated_amount": "10000", "con_value": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "estimated_amount": "10000", "con_value": "10000",
                   "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -219,7 +221,7 @@ class TestRequiredFields:
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -232,7 +234,7 @@ class TestRequiredFields:
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_to": "2026-12-31", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -245,7 +247,7 @@ class TestRequiredFields:
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
@@ -281,7 +283,7 @@ class TestPreviewAnnotations:
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn)
-        rows = [{"sc_id": "[EXAMPLE]", "sc_no": "", "sc_amount": "50000", "status": "draft"}]
+        rows = [{"sc_no": "[EXAMPLE]", "sc_amount": "50000", "status": "draft"}]
         preview = import_service.preview_sc_import(app_config, rows)
         assert len(preview) == 0
 
@@ -291,7 +293,7 @@ class TestPreviewAnnotations:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_id": "SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "active"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-001", "po_amount": "50000", "status": "active"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert len(preview) == 1
         assert "_errors" in preview[0]
@@ -304,7 +306,7 @@ class TestPreviewAnnotations:
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert len(preview) == 1
@@ -318,7 +320,7 @@ class TestConfirmImport:
         with connect(app_config) as conn:
             _seed_user(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
-        rows = [{"sc_no": "SC-CONFIRM", "sc_amount": "50000", "status": "approved",
+        rows = [{"sc_no": "SC-CONFIRM-NEW", "sc_amount": "50000", "status": "approved",
                   "request_type": "service", "cost_center": "1000",
                   "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}]
         result = import_service.import_scs(app_config, current_user, rows)
@@ -332,7 +334,8 @@ class TestConfirmImport:
             _seed_sc(conn)
             _seed_vendor(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
-        rows = [{"sc_id": "SC-0000001-20260701-001", "vendor_id": "V000001", "po_no": "PO-CONFIRM", "po_amount": "50000", "status": "active"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001", "po_no": "PO-CONFIRM-NEW",
+                  "po_amount": "50000", "status": "active"}]
         result = import_service.import_pos(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
@@ -345,8 +348,59 @@ class TestConfirmImport:
             _seed_vendor(conn)
             _seed_po(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-CONFIRM", "estimated_amount": "10000",
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-CONFIRM-NEW", "estimated_amount": "10000",
                   "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
         result = import_service.import_grs(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
+
+
+class TestParseDate:
+    def test_parses_iso_format(self):
+        assert import_service.parse_date("2026-01-15") == "2026-01-15"
+
+    def test_parses_slash_format(self):
+        assert import_service.parse_date("2026/01/15") == "2026-01-15"
+
+    def test_parses_us_format(self):
+        assert import_service.parse_date("01/15/2026") == "2026-01-15"
+
+    def test_parses_us_dash_format(self):
+        assert import_service.parse_date("01-15-2026") == "2026-01-15"
+
+    def test_parses_eu_format(self):
+        assert import_service.parse_date("15/01/2026") == "2026-01-15"
+
+    def test_parses_compact_format(self):
+        assert import_service.parse_date("20260115") == "2026-01-15"
+
+    def test_returns_none_for_invalid(self):
+        assert import_service.parse_date("not-a-date") is None
+
+    def test_returns_none_for_empty(self):
+        assert import_service.parse_date("") is None
+        assert import_service.parse_date(None) is None
+
+
+class TestScNoUniqueness:
+    def test_rejects_duplicate_sc_no_in_db(self, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn)
+            conn.execute(
+                """INSERT INTO sc_records (
+                    sc_id, sc_no, requester_id, request_type, cost_center,
+                    sc_amount, service_period_start, service_period_end,
+                    status, asset, created_by, created_at, updated_at
+                ) VALUES
+                ('SC-DUP-1', 'DUP-NO', 'U000001', 'service', 1000, 50000,
+                 '2026-01-01', '2026-12-31', 'approved', 'N', 'U000001', ?, ?),
+                ('SC-DUP-2', 'DUP-NO', 'U000001', 'service', 1000, 50000,
+                 '2026-01-01', '2026-12-31', 'approved', 'N', 'U000001', ?, ?)""",
+                (_utc_now(), _utc_now(), _utc_now(), _utc_now()),
+            )
+            conn.commit()
+        current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+        rows = [{"sc_no": "DUP-NO", "sc_amount": "50000", "status": "approved"}]
+        with pytest.raises(ValidationError, match="Duplicate SC NO"):
+            import_service.import_scs(app_config, current_user, rows)
