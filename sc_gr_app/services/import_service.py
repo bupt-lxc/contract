@@ -632,7 +632,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("confirmation_name"),
                             parse_date(row.get("delivery_from")),
                             parse_date(row.get("delivery_to")),
-                            parse_date(row.get("last_delivery")),
+                            row.get("last_delivery"),
                             current_user["user_id"],
                             timestamp,
                         ),

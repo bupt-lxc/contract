@@ -41,7 +41,9 @@ export function useGr(pageSize = 10) {
   async function updateGr(grId, data) { return await callApi('update_gr', { gr_id: grId, data }) }
   async function approveGr(grId, conValue) { await callApi('approve_gr', { gr_id: grId, con_value: conValue }) }
   async function denyGr(grId) { await callApi('deny_gr', { gr_id: grId }) }
-  async function finishGr(grId) { await callApi('finish_gr', { gr_id: grId }) }
+  async function finishGr(grId, confirmCascade = false) {
+    return await callApi('finish_gr', { gr_id: grId, confirm_cascade: confirmCascade })
+  }
   async function submitGr(grId) { await callApi('submit_gr', { gr_id: grId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
