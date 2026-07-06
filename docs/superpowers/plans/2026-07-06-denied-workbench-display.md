@@ -78,6 +78,8 @@ git add sc_gr_app/services/query_service.py
 git commit -m "feat: add denied status to workbench_data for SC and GR"
 ```
 
+> **Note on SC vs GR data asymmetry:** `sc_records` has no `denied_by`/`denied_at` columns, and `deny_sc` does not persist them. `gr_requests` has both columns and `deny_gr` populates them. This is a pre-existing condition — the SC cell template uses `deadline` for the date column (not `denied_at`), and the GR cell template uses `created_at`. No runtime issue.
+
 ---
 
 ### Task 2: i18n — Add `home.denied` translations
@@ -142,7 +144,6 @@ Insert the new denied section block between `</div>` (line 7, `wb-error` end) an
         <div
           v-if="deniedScCount > 0"
           class="wb-cell wb-cell--denied"
-          @click="$router.push('/sc?status=denied')"
         >
           <div class="wb-cell__head wb-cell__head--denied">
             <span class="wb-cell__status">{{ $t('status.denied') }}</span>
@@ -175,7 +176,6 @@ Insert the new denied section block between `</div>` (line 7, `wb-error` end) an
         <div
           v-if="deniedGrCount > 0"
           class="wb-cell wb-cell--denied"
-          @click="$router.push('/gr?status=denied')"
         >
           <div class="wb-cell__head wb-cell__head--denied">
             <span class="wb-cell__status">{{ $t('status.denied') }}</span>
