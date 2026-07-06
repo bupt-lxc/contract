@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1358,6 +1358,102 @@ def _migrate_v33(conn) -> None:
     _record(conn, 33)
 
 
+def _migrate_v34(conn) -> None:
+    """Rebuild pos with nullable sc_id and add request_type column (FC)."""
+    # Rebuild pos table
+    if _table_exists(conn, "pos"):
+        conn.execute("ALTER TABLE pos RENAME TO pos_old")
+        conn.execute("""
+            CREATE TABLE pos (
+              po_id TEXT PRIMARY KEY,
+              sc_id TEXT REFERENCES sc_records(sc_id),
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+              po_no TEXT,
+              requester_id TEXT,
+              po_amount REAL NOT NULL CHECK (po_amount > 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','active','finished')),
+              contract_from TEXT,
+              contract_to TEXT,
+              contract_no TEXT,
+              payment_frequency TEXT,
+              contract_pos TEXT,
+              contract_type TEXT,
+              cost_center TEXT,
+              purchaser TEXT,
+              active_date TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              finished_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('FC'))
+            )
+        """)
+        conn.execute("""
+            INSERT INTO pos (
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              request_type
+            )
+            SELECT
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              NULL
+            FROM pos_old
+        """)
+        conn.execute("DROP TABLE pos_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+
+    # Rebuild gr_requests to fix FK references (they point to pos_old after rename)
+    if _table_exists(conn, "gr_requests"):
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              gr_no TEXT,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              gross_cost REAL,
+              tax_rate REAL,
+              status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              denied_by TEXT REFERENCES users(user_id),
+              denied_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              finished_at TEXT,
+              confirmed_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              submitted_date TEXT,
+              goods_service_description TEXT,
+              confirmation_name TEXT,
+              delivery_from TEXT,
+              delivery_to TEXT,
+              last_delivery TEXT,
+              updated_at TEXT
+            )
+        """)
+        conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+        conn.execute("DROP TABLE gr_requests_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+
+    _record(conn, 34)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1538,6 +1634,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("BEGIN")
                 _migrate_v33(conn)
                 conn.commit()
+            if 34 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v34(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
