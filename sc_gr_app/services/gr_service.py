@@ -1185,3 +1185,39 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return before
+
+
+def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> list[dict]:
+    """Return GRs with status approved/finished in the given year, enriched with
+    po_no, sc_no, cost_center, vendor_name, requester_name."""
+    import re
+    if not re.match(r'^\d{4}$', year):
+        raise ValidationError("year must be a 4-digit string")
+
+    with connect(config) as conn:
+        rows = conn.execute(
+            """
+            select
+              gr.*,
+              po.po_no,
+              po.sc_id,
+              sc.sc_no,
+              sc.cost_center,
+              vendor.vendor_name,
+              u.user_name as requester_name
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            join sc_records sc on sc.sc_id = po.sc_id
+            join vendors vendor on vendor.vendor_id = po.vendor_id
+            left join users u on u.user_id = gr.requester_id
+            where gr.status in ('approved', 'finished')
+              and (
+                (gr.status = 'finished' and strftime('%Y', gr.finished_at) = ?)
+                or
+                (gr.status = 'approved' and strftime('%Y', gr.approved_date) = ?)
+              )
+            order by gr.finished_at desc, gr.approved_date desc
+            """,
+            (year, year),
+        ).fetchall()
+    return [_row_to_dict(r) for r in rows]
