@@ -100,12 +100,13 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all SC rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        if _is_template_meta_row(row, "sc_id"):
+        if _is_template_meta_row(row, "sc_no"):
             continue
         for field in ["sc_no", "sc_amount", "status"]:
-            if not row.get(field):
+            val = row.get(field)
+            if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
-        status = row.get("status", "")
+        status = str(row.get("status", "")).strip()
         if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
         if row.get("requester_id"):
@@ -114,6 +115,38 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "requester_id", "message": f"User {row['requester_id']} not found"})
+        calloff_po_id = row.get("calloff_po_id")
+        if calloff_po_id:
+            po_exists = conn.execute(
+                "select 1 from pos po join sc_records sc on sc.sc_id = po.sc_id "
+                "where po.po_id = ? and sc.request_type = 'FC'",
+                (calloff_po_id,),
+            ).fetchone()
+            if not po_exists:
+                errors.append({"row": i, "field": "calloff_po_id", "message": f"calloff_po_id {calloff_po_id} is not a valid FC PO"})
+        # Validate vendor_ids if provided
+        vendor_ids = str(row.get("vendor_id", "")).strip()
+        if vendor_ids:
+            for vid in vendor_ids.split(","):
+                vid = vid.strip()
+                if vid:
+                    v = conn.execute("SELECT 1 FROM vendors WHERE vendor_id = ?", (vid,)).fetchone()
+                    if not v:
+                        errors.append({"row": i, "field": "vendor_id", "message": f"Vendor {vid} not found"})
+
+    # DB-level SC NO uniqueness check
+    sc_nos_in_file = [r["sc_no"].strip() for r in rows if r.get("sc_no") and not _is_template_meta_row(r, "sc_no")]
+    if sc_nos_in_file:
+        placeholders = ",".join(["?"] * len(sc_nos_in_file))
+        dupes = conn.execute(
+            f"SELECT sc_no, COUNT(*) as cnt FROM sc_records WHERE sc_no IN ({placeholders}) GROUP BY sc_no HAVING COUNT(*) > 1",
+            sc_nos_in_file,
+        ).fetchall()
+        if dupes:
+            raise ValidationError(
+                f"Duplicate SC NO found in database: {', '.join(d['sc_no'] for d in dupes)}. "
+                f"Please resolve duplicates before importing."
+            )
     return errors
 
 
@@ -138,28 +171,29 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 imported = 0
                 skipped_duplicate = 0
                 for row in rows:
-                    if _is_template_meta_row(row, "sc_id"):
+                    if _is_template_meta_row(row, "sc_no"):
+                        continue
+                    sc_no = str(row.get("sc_no", "")).strip()
+                    # Check if sc_no already exists in DB
+                    exists = conn.execute(
+                        "SELECT 1 FROM sc_records WHERE sc_no = ?", (sc_no,)
+                    ).fetchone()
+                    if exists:
+                        skipped_duplicate += 1
                         continue
                     sc_id = (row.get("sc_id") or "").strip()
-                    if sc_id:
-                        exists = conn.execute(
-                            "SELECT 1 FROM sc_records WHERE sc_id = ?", (sc_id,)
-                        ).fetchone()
-                        if exists:
-                            skipped_duplicate += 1
-                            continue
-                    else:
+                    if not sc_id:
                         sc_id = _generate_sc_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO sc_records (
                           sc_id, sc_no, requester_id, request_type, cost_center,
                           sc_amount, service_period_start, service_period_end,
                           status, description, currency, internal_system_number,
-                          created_by, created_at, updated_at, asset
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
+                          created_by, created_at, updated_at, asset, asset_nums
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             sc_id,
-                            row.get("sc_no"),
+                            sc_no,
                             row.get("requester_id") or current_user["user_id"],
                             row.get("request_type"),
                             row.get("cost_center"),
@@ -173,8 +207,20 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             current_user["user_id"],
                             timestamp,
                             timestamp,
+                            row.get("asset", "N"),
+                            row.get("asset_nums"),
                         ),
                     )
+                    # Insert sc_vendors if vendor_id provided (comma-separated)
+                    vendor_ids = str(row.get("vendor_id", "")).strip()
+                    if vendor_ids:
+                        for vid in vendor_ids.split(","):
+                            vid = vid.strip()
+                            if vid:
+                                conn.execute(
+                                    "INSERT OR IGNORE INTO sc_vendors (sc_id, vendor_id) VALUES (?, ?)",
+                                    (sc_id, vid),
+                                )
                     write_operation_record(
                         conn,
                         action_type="import_sc",
@@ -335,7 +381,7 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     with connect(config) as conn:
         preview = []
         for row in rows:
-            if _is_template_meta_row(row, "sc_id"):
+            if _is_template_meta_row(row, "sc_no"):
                 continue
             errors_list = []
             for field in ["sc_no", "sc_amount", "status"]:
@@ -350,10 +396,33 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
                 ).fetchone()
                 if not exists:
                     errors_list.append(f"User {row['requester_id']} not found")
+            # Validate vendor_ids if provided
+            vendor_ids = str(row.get("vendor_id", "")).strip()
+            if vendor_ids:
+                for vid in vendor_ids.split(","):
+                    vid = vid.strip()
+                    if vid:
+                        v = conn.execute("SELECT 1 FROM vendors WHERE vendor_id = ?", (vid,)).fetchone()
+                        if not v:
+                            errors_list.append(f"Vendor {vid} not found")
+
             annotated = dict(row)
             annotated["_errors"] = errors_list
             annotated["_valid"] = len(errors_list) == 0
             preview.append(annotated)
+
+        # File-level SC NO duplicate detection
+        sc_no_counts = {}
+        for r in preview:
+            sc_no = (r.get("sc_no") or "").strip()
+            if sc_no:
+                sc_no_counts[sc_no] = sc_no_counts.get(sc_no, 0) + 1
+        for r in preview:
+            sc_no = (r.get("sc_no") or "").strip()
+            if sc_no and sc_no_counts.get(sc_no, 0) > 1:
+                r["_errors"].append(f"SC NO '{sc_no}' appears {sc_no_counts[sc_no]} times in this file")
+                r["_valid"] = False
+
     return preview
 
 
