@@ -166,6 +166,24 @@ def _validate_last_delivery_unique(conn, po_id: str, exclude_gr_id: str = None) 
         )
 
 
+def _check_not_fc_po(conn, po_id: str) -> None:
+    """Raise ConflictError if the PO is an FC PO (either independent or SC-derived)."""
+    po = conn.execute(
+        "select sc_id, request_type from pos where po_id = ?", (po_id,)
+    ).fetchone()
+    if po is None:
+        raise NotFound(f"PO not found: {po_id}")
+    is_fc = (po["request_type"] == "FC")
+    if not is_fc and po["sc_id"]:
+        sc = conn.execute(
+            "select request_type from sc_records where sc_id = ?", (po["sc_id"],)
+        ).fetchone()
+        if sc and sc["request_type"] == "FC":
+            is_fc = True
+    if is_fc:
+        raise ConflictError("Cannot perform GR operations under an FC PO.")
+
+
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
@@ -211,18 +229,38 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
     requester_id = data["requester_id"]
 
     with connect(config) as lookup_conn:
-        lookup = lookup_conn.execute(
-            "select pos.sc_id, sc.requester_id as sc_requester, sc.request_type "
-            "from pos join sc_records sc on sc.sc_id = pos.sc_id "
-            "where pos.po_id = ?",
+        # Step 1: Look up PO
+        po = lookup_conn.execute(
+            "select sc_id, request_type, requester_id from pos where po_id = ?",
             (po_id,),
         ).fetchone()
-        if lookup is None:
+        if po is None:
             raise NotFound(f"PO not found: {po_id}")
-        if lookup["request_type"] == "FC":
+
+        # Step 2: Check if FC (PO-level or SC-derived)
+        is_fc = (po["request_type"] == "FC")
+        if not is_fc and po["sc_id"]:
+            sc = lookup_conn.execute(
+                "select request_type from sc_records where sc_id = ?", (po["sc_id"],)
+            ).fetchone()
+            if sc and sc["request_type"] == "FC":
+                is_fc = True
+        if is_fc:
             raise ConflictError("Cannot create GR under an FC PO. Use call-off SCs instead.")
-        sc_id = lookup["sc_id"]
-        if current_user["role"] != "admin" and lookup["sc_requester"] != current_user["user_id"]:
+
+        if po["sc_id"] is None:
+            raise ConflictError("Cannot create GR under an independent PO")
+
+        sc_id = po["sc_id"]
+
+        # Step 3: Look up SC requester for permission check
+        sc_info = lookup_conn.execute(
+            "select requester_id from sc_records where sc_id = ?",
+            (sc_id,),
+        ).fetchone()
+        if sc_info is None:
+            raise NotFound(f"SC not found: {sc_id}")
+        if current_user["role"] != "admin" and sc_info["requester_id"] != current_user["user_id"]:
             raise PermissionDenied("Only the SC owner or admin can create GRs")
 
     timestamp = utc_now()
@@ -403,6 +441,7 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] != "draft":
                     raise ConflictError("GR must be draft to submit")
 
@@ -448,6 +487,7 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] != "manager_confirm":
                     raise ConflictError("GR must be in manager_confirm status")
 
@@ -530,6 +570,7 @@ def approve_gr(
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
 
@@ -629,6 +670,7 @@ def update_gr(
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] == "denied":
                     raise ConflictError("Denied GR cannot be edited")
                 if before["status"] not in ("draft", "manager_confirm", "pending", "approved"):
@@ -854,6 +896,7 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] not in ("pending", "manager_confirm"):
                     raise ConflictError("GR must be pending or manager_confirm")
 
@@ -911,6 +954,7 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str,
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] != "approved":
                     raise ConflictError("GR must be approved")
 
@@ -1095,6 +1139,7 @@ def recall_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 conn.execute("BEGIN IMMEDIATE")
                 _require_editable_parent_sc(conn, sc_id)
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
 
                 if before["status"] not in ("manager_confirm", "pending"):
                     raise ConflictError("Only manager_confirm or pending GR can be recalled back to draft")
@@ -1145,6 +1190,7 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_gr(conn, gr_id)
+                _check_not_fc_po(conn, before["po_id"])
                 if before["status"] != "draft":
                     raise ConflictError("Only draft GR can be deleted")
                 if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
