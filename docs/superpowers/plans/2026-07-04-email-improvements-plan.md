@@ -18,26 +18,26 @@
 
 - [ ] **Step 1: Add greeting line in `build_body()`**
 
-In `sc_gr_app/notification/templates.py`, inside `build_body()`, insert a greeting paragraph after the variable declarations and before the "Table 1: Notification Info" comment (around line 380).
+In `sc_gr_app/notification/templates.py`, inside `build_body()`, find the existing block (around line 380):
 
-Find this block:
 ```python
     # Table 1: Notification Info
     lines = []
     lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-bottom:20px">')
 ```
 
-Insert before it:
+Replace it with:
+
 ```python
     # Greeting
     short_id = _short_entity_id(entity_id)
-    operator = actor_name if actor_name else "System"
+    operator = _abbreviate_name(actor_name) if actor_name else "System"
     action = _describe_event(event_type, event_key)
     greeting = f"<p style=\"margin:0 0 16px 0;font-family:Arial,sans-serif;font-size:14px;color:#333\">{operator} performed {action} on {type_label} {short_id}. Details below:</p>"
 
     # Table 1: Notification Info
-    lines = []
-    lines.append(greeting)
+    lines = [greeting]
+    lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-bottom:20px">')
 ```
 
 - [ ] **Step 2: Add greeting assertions to existing tests**
@@ -60,8 +60,8 @@ In `tests/test_notification_templates.py`, in `TestBuildBody`, update `test_sc_b
             "status": "approved",
         }
         body = templates.build_body(entry, entity_info, {})
-        # Greeting
-        assert "performed Approved on SC 0629-002" in body
+        # Greeting (no actor_name passed → defaults to "System")
+        assert "System performed Approved on SC 0629-002" in body
         assert "Details below:" in body
         # Existing assertions
         assert "SC-2026-001" in body
