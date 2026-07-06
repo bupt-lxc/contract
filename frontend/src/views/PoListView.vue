@@ -288,17 +288,26 @@ async function handlePoSave(data) {
   try {
     const { _attachments, ...formData } = data
     const isFcPo = !selectedScRecord.value
-    const payload = { ...formData }
-    if (isFcPo) {
-      payload.request_type = 'FC'
+    let poId, scId
+    if (poDialogMode.value === 'create') {
+      const payload = { ...formData }
+      if (isFcPo) {
+        payload.request_type = 'FC'
+      } else {
+        payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
+      }
+      const created = await createPo(payload)
+      poId = created.po_id
+      scId = created.sc_id || payload.sc_id
     } else {
-      payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
+      poId = poDialogRecord.value?.po_id
+      scId = poDialogRecord.value?.sc_id
+      await updatePo(poId, formData)
     }
-    const created = await createPo(payload)
     if (_attachments?.length) {
       await callApi('add_attachments', {
-        entity_type: 'po', entity_id: created.po_id,
-        file_paths: _attachments, parent_sc_id: created.sc_id || null
+        entity_type: 'po', entity_id: poId,
+        file_paths: _attachments, parent_sc_id: scId || null
       })
     }
     ElMessage.success(t('common.saved'))
