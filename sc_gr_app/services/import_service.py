@@ -9,6 +9,30 @@ from sc_gr_app.services.record_service import write_operation_record
 
 SC_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
 
+_DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%Y%m%d",
+]
+
+
+def parse_date(value: str) -> str | None:
+    """Parse a date string into YYYY-MM-DD format. Returns None if unparseable."""
+    if not value or not str(value).strip():
+        return None
+    value = str(value).strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            dt = datetime.strptime(value, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -140,8 +164,8 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("request_type"),
                             row.get("cost_center"),
                             float(row["sc_amount"]) if row.get("sc_amount") else None,
-                            row.get("service_period_start"),
-                            row.get("service_period_end"),
+                            parse_date(row.get("service_period_start")),
+                            parse_date(row.get("service_period_end")),
                             row["status"],
                             row.get("description"),
                             row.get("currency", "CNY"),
@@ -249,8 +273,8 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("requester_id") or current_user["user_id"],
                             float(row["po_amount"]) if row.get("po_amount") else None,
                             row.get("status", "draft"),
-                            row.get("contract_from"),
-                            row.get("contract_to"),
+                            parse_date(row.get("contract_from")),
+                            parse_date(row.get("contract_to")),
                             row.get("contract_no"),
                             row.get("payment_frequency"),
                             row.get("contract_pos"),
@@ -446,9 +470,9 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             float(row["gross_cost"]) if row.get("gross_cost") else None,
                             row.get("goods_service_description"),
                             row.get("confirmation_name"),
-                            row.get("delivery_from"),
-                            row.get("delivery_to"),
-                            row.get("last_delivery"),
+                            parse_date(row.get("delivery_from")),
+                            parse_date(row.get("delivery_to")),
+                            parse_date(row.get("last_delivery")),
                             current_user["user_id"],
                             timestamp,
                         ),
