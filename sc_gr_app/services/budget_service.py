@@ -92,20 +92,23 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
     """Compute budget for an FC PO: call-off SC allocation + downstream GR trace."""
     with connect(config) as conn:
         po = conn.execute(
-            "select po_amount, sc_id from pos where po_id = ?",
+            "select po_amount, sc_id, request_type from pos where po_id = ?",
             (po_id,),
         ).fetchone()
         if po is None:
             raise NotFound(f"PO not found: {po_id}")
 
-        sc = conn.execute(
-            "select request_type from sc_records where sc_id = ?",
-            (po["sc_id"],),
-        ).fetchone()
-        if sc is None:
-            raise NotFound(f"PO references non-existent SC: {po['sc_id']}")
-        if sc["request_type"] != "FC":
-            raise ValidationError("PO is not under an FC-type SC")
+        if po["sc_id"] is not None:
+            sc = conn.execute(
+                "select request_type from sc_records where sc_id = ?",
+                (po["sc_id"],),
+            ).fetchone()
+            if sc is None:
+                raise NotFound(f"PO references non-existent SC: {po['sc_id']}")
+            if sc["request_type"] != "FC":
+                raise ValidationError("PO is not under an FC-type SC")
+        elif po["request_type"] != "FC":
+            raise ValidationError("PO is not an FC-type PO")
 
         null_con_value_gr = conn.execute(
             """
