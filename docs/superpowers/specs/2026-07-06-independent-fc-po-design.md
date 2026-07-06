@@ -63,6 +63,49 @@ Rebuild `gr_requests` to fix FK references after `pos` table rebuild (same patte
 
 ## Backend Changes
 
+### sc_service.py
+
+**`_validate_calloff_po`** (line 68) — **Critical**: This is the gate for creating call-off SCs under a PO(FC). The query at line 81 uses INNER JOIN:
+
+```sql
+select po.po_id, po.po_amount, po.status, sc.request_type as parent_sc_type
+from pos po
+join sc_records sc on sc.sc_id = po.sc_id
+where po.po_id = ?
+```
+
+For independent FC PO (`sc_id IS NULL`), the JOIN returns nothing → `NotFound("PO not found: {calloff_po_id}")`. **Cannot create any call-off SC under independent FC PO.**
+
+Fix:
+```sql
+select po.po_id, po.po_amount, po.status, po.request_type as po_request_type,
+       sc.request_type as parent_sc_type
+from pos po
+left join sc_records sc on sc.sc_id = po.sc_id
+where po.po_id = ?
+```
+
+Then update the FC validation (line 87-88):
+```python
+# OLD: if po_row["parent_sc_type"] != "FC":
+# NEW: check both PO-level and SC-level type
+is_fc_po = (po_row["po_request_type"] == "FC" or po_row["parent_sc_type"] == "FC")
+if not is_fc_po:
+    raise ValidationError("Call-off PO must be an FC-type PO (either independent or under SC(FC))")
+```
+
+Status check (line 89-90): `po_row["status"] != "active"` — still works (reads from `pos` directly).
+
+Budget check (line 103-104): `po_row["po_amount"]` — still works (reads from `pos` directly).
+
+**Callers**: `create_sc` (line 481), `create_sc_draft` (line ~575), `submit_sc` (line ~680). All share this fix.
+
+**`update_sc` call-off budget check** (lines 824-836): Already safe — queries `pos` directly without `sc_records` JOIN.
+
+**`get_sc_detail` — parent PO info for call-off SCs** (lines 1247-1252): Uses INNER JOIN `join sc_records sc_parent on sc_parent.sc_id = po.sc_id` to fetch parent PO info. For call-off SC under independent FC PO, this returns null → parent PO info not shown. Fix: LEFT JOIN.
+
+---
+
 ### po_service.py
 
 **REQUIRED_FIELDS** changes from `("sc_id", "vendor_id", "po_amount")` to `("vendor_id", "po_amount")`. `sc_id` is validated conditionally inside the function.
@@ -313,6 +356,17 @@ Also add `pos.request_type` to the row data returned by the PO query that feeds 
 2. Semantic validation — same four-cell checks
 3. SC existence check — already conditional, fine
 
+**`_validate_sc_rows` — calloff_po_id validation** (lines 120-124): When SC import validates that `calloff_po_id` references an FC PO, it uses:
+```sql
+select 1 from pos po join sc_records sc on sc.sc_id = po.sc_id
+where po.po_id = ? and sc.request_type = 'FC'
+```
+This INNER JOIN excludes independent FC POs. Fix:
+```sql
+select 1 from pos po left join sc_records sc on sc.sc_id = po.sc_id
+where po.po_id = ? and (po.request_type = 'FC' or sc.request_type = 'FC')
+```
+
 **`PO_IMPORT_ALLOWED_STATUSES`** (line 185): Independent FC PO can be draft. Add `"draft"` to the set (or conditionally allow draft for FC POs only). For regular POs, draft import is still blocked (budget lock concerns).
 
 **Download template** (`download_po_template` in bridge.py):
@@ -346,7 +400,11 @@ Fix:
 2. Fix `open_po_amount` calculation for FC POs (same COALESCE pattern as search_pos)
 3. The `calloff_totals` subquery (line 78-81) already uses LEFT JOIN — no change needed
 
-**`sender.py`** — builds email content from PO data. The JOIN at line 88 (`JOIN pos po ON po.po_id = gr.po_id`) is fine (traces through GRs). But line 121 reads PO data with `JOIN sc_records` — if used for independent FC POs, needs LEFT JOIN.
+**`sender.py`** — builds email content from PO data. The JOIN at line 88 (`JOIN pos po ON po.po_id = gr.po_id`) is fine (traces through GRs). But line 121 reads PO data with `JOIN sc_records` — if used for independent FC POs, needs LEFT JOIN. For `entity_type == "po"` (line 108), `_attach_child_grs` is called — for independent FC PO, GRs don't exist, so this produces empty GR list. That's correct behavior. However, the email template at `templates.py:108` lists `sc_id` in `_PO_ORDER` — for independent FC PO this will be blank. Acceptable — just renders as empty cell.
+
+**`schedules.py`** — custom schedule cron (lines 34-37): `JOIN sc_records sc ON sc.sc_id = po.sc_id` (INNER JOIN). Independent FC POs' custom schedules are excluded from processing. Additionally, `sc.requester_id` (line 34) is used for recipient list at line 57. Fix: LEFT JOIN + `COALESCE(sc.requester_id, po.requester_id) as requester_id`.
+
+**`notification_service.py`** — `queue_status_change` for "po" entity_type (line ~96): This function handles SC-triggered notification transitions. PO lifecycle events (create/submit/finish/recall) all pass requester_id via context dict and are already guarded by `if sc else {}`. No changes needed here. However, verify that `get_entity_config` (config.py:14) works with null sc_id — it queries `notification_config WHERE entity_id = ?`, which uses `po_id` directly. Fine.
 
 ---
 
@@ -414,6 +472,17 @@ def get_po_detail(self, payload) -> dict:
 **`get_po`** (existing helper used by deep links in main.js): Already exists? Check — if it's a standalone endpoint, ensure it returns `request_type` in the result so the frontend can determine the type.
 
 **Download template**: See import_service.py section above for full changes.
+
+**`save_po_notification_config`** (line 749) and **`save_po_custom_schedules`** (line 780): Both use INNER JOIN `pos JOIN sc_records sc ON sc.sc_id = po.sc_id` to look up `sc.requester_id` for permission check. For independent FC PO, the query returns nothing → `NotFound("PO not found")`. Fix: change to LEFT JOIN, then:
+```
+if not po:
+    raise NotFound("PO not found")
+requester_id = po["requester_id"]  # may be po.requester_id directly for independent FC PO
+# If sc.requester_id is not None (SC-bound PO), use sc's requester; else use PO's requester
+if current_user["role"] != "admin" and current_user["user_id"] != requester_id:
+    raise PermissionDenied(...)
+```
+OR: do a two-step check — first query `pos` alone for existence + `requester_id`, then conditionally join SC for permission. Simpler approach: query `pos` alone, then if `po.sc_id` is set, look up SC requester as secondary check. For independent FC PO, use `po.requester_id` directly.
 
 ---
 
