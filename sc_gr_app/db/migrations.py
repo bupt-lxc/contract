@@ -1410,6 +1410,56 @@ def _migrate_v34(conn) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
 
+    # Rebuild sc_records to fix FK references (calloff_po_id -> pos)
+    if _table_exists(conn, "sc_records"):
+        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        has_calloff = "calloff_po_id" in existing_cols
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+        conn.execute("""
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              finished_at TEXT,
+              confirmed_at TEXT,
+              asset TEXT NOT NULL DEFAULT 'N',
+              asset_nums TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              internal_system_number TEXT,
+              currency TEXT NOT NULL DEFAULT 'CNY',
+              CHECK (
+                status = 'draft'
+                OR status = 'manager_confirm'
+                OR (
+                  request_type IS NOT NULL
+                  AND cost_center IS NOT NULL
+                  AND sc_amount IS NOT NULL
+                  AND service_period_start IS NOT NULL
+                  AND service_period_end IS NOT NULL
+                )
+              )
+            )
+        """)
+        if has_calloff:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
+        conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
+        conn.execute("DROP TABLE sc_records_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+
     # Rebuild gr_requests to fix FK references (they point to pos_old after rename)
     if _table_exists(conn, "gr_requests"):
         conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
