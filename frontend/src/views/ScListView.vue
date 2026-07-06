@@ -330,8 +330,8 @@ function handleExport() {
 const importVisible = ref(false)
 
 const scImportColumns = [
-  { prop: 'sc_id', label: 'SC ID', width: '160' },
   { prop: 'sc_no', label: t('sc.scNo'), width: '120' },
+  { prop: 'vendor_id', label: t('vendor.vendorId'), width: '120' },
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
   { prop: 'request_type', label: t('sc.requestType'), width: '100' },
   { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },

@@ -424,8 +424,7 @@ function handleExport() {
 const importVisible = ref(false)
 
 const grImportColumns = [
-  { prop: 'gr_id', label: 'GR ID', width: '160' },
-  { prop: 'po_id', label: 'PO ID', width: '160' },
+  { prop: 'po_no', label: t('po.poNo'), width: '120' },
   { prop: 'gr_no', label: t('gr.grNo'), width: '120' },
   { prop: 'requester_id', label: t('gr.requester'), width: '100' },
   { prop: 'estimated_amount', label: t('gr.estimatedAmount'), width: '110' },

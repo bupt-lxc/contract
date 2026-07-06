@@ -260,6 +260,16 @@ def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict
                         f"it is referenced by {dep_count} purchase order(s). "
                         f"Please delete the related POs first."
                     )
+                sc_vendor_count = conn.execute(
+                    "select count(*) from sc_vendors where vendor_id = ?",
+                    (vendor_id,),
+                ).fetchone()[0]
+                if sc_vendor_count > 0:
+                    raise ValidationError(
+                        f"Cannot delete vendor '{before['vendor_name']}': "
+                        f"it is referenced by {sc_vendor_count} SC(s) via sc_vendors. "
+                        f"Please remove the vendor from those SCs first."
+                    )
                 conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
                 write_operation_record(
                     conn,
