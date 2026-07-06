@@ -378,12 +378,27 @@ def search_pos(
 ) -> list[dict]:
     base_clauses, base_params = _sc_visibility_clauses(current_user)
 
+    if current_user and current_user.get("role") == "requester":
+        base_clauses = [
+            f"({c} OR (po.sc_id IS NULL AND po.requester_id = ?))"
+            for c in base_clauses
+        ]
+        total_placeholders = sum(c.count("?") for c in base_clauses)
+        base_params = [current_user["user_id"]] * total_placeholders
+
     if filters and "is_fc_po" in filters:
         if filters["is_fc_po"] == "1":
-            base_clauses.append("sc.request_type = 'FC'")
+            base_clauses.append("(pos.request_type = 'FC' OR sc.request_type = 'FC')")
         elif filters["is_fc_po"] == "0":
-            base_clauses.append("sc.request_type != 'FC'")
+            base_clauses.append("(pos.request_type IS NULL AND sc.request_type != 'FC')")
         filters = {k: v for k, v in filters.items() if k != "is_fc_po"}
+
+    if filters and "is_independent" in filters:
+        if filters["is_independent"] == "1":
+            base_clauses.append("po.sc_id IS NULL")
+        elif filters["is_independent"] == "0":
+            base_clauses.append("po.sc_id IS NOT NULL")
+        filters = {k: v for k, v in filters.items() if k != "is_independent"}
 
     return _search(
         config,
@@ -391,11 +406,11 @@ def search_pos(
         select
           po.*,
           sc.sc_no,
-          sc.request_type as sc_request_type,
+          coalesce(pos.request_type, sc.request_type) as sc_request_type,
           u.user_name as requester_name,
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
-          case when sc.request_type = 'FC'
+          case when pos.request_type = 'FC' or sc.request_type = 'FC'
             then po.po_amount - coalesce(calloff_totals.allocated, 0)
             else po.po_amount - coalesce(gr_totals.pending_total, 0)
                  - coalesce(gr_totals.con_value_total, 0)
@@ -404,7 +419,7 @@ def search_pos(
           coalesce(gr_totals.pending_total, 0) as po_pending_total,
           coalesce(gr_totals.pending_total_incl_tax, 0) as po_pending_total_incl_tax
         from pos po
-        join sc_records sc on sc.sc_id = po.sc_id
+        left join sc_records sc on sc.sc_id = po.sc_id
         join users u on u.user_id = po.requester_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
         left join (
@@ -709,13 +724,13 @@ def workbench_data(
                 f"po.created_at, po.contract_from, po.contract_to, "
                 f"sc.sc_no, sc.currency, "
                 f"u.user_name AS requester_name, "
-                f"CASE WHEN sc.request_type = 'FC' "
+                f"CASE WHEN pos.request_type = 'FC' OR sc.request_type = 'FC' "
                 f"THEN po.po_amount - COALESCE(calloff_sums.allocated, 0) "
                 f"ELSE po.po_amount - COALESCE(gr_sums.pending_total, 0) "
                 f"- COALESCE(gr_sums.con_value_total, 0) END AS open_po_amount "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"LEFT JOIN ("
                 f"  SELECT po_id,"
                 f"    SUM(CASE WHEN status IN ('pending', 'manager_confirm') "
