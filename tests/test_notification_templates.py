@@ -7,7 +7,7 @@ class TestBuildBody:
     def test_sc_body_shows_sc_fields(self):
         entry = {
             "entity_type": "sc",
-            "entity_id": "SC-001",
+            "entity_id": "SC-V2SE7PP-20260629-002",
             "event_type": "status_change",
             "event_key": "approve",
             "created_at": "2026-01-15T10:00:00Z",
@@ -19,11 +19,37 @@ class TestBuildBody:
             "status": "approved",
         }
         body = templates.build_body(entry, entity_info, {})
+        # Greeting (no actor_name passed → defaults to "System")
+        assert "System performed Approved on SC 0629-002" in body
+        assert "Details below:" in body
+        # Existing assertions
         assert "SC-2026-001" in body
         assert "Sc No" in body
         assert "150,000.00" in body
         assert "IT equipment" in body
         assert "Approved" in body  # plain text status (English)
+
+    def test_greeting_shows_operator_and_action(self):
+        entry = {
+            "entity_type": "gr",
+            "entity_id": "GR-V2SE7PP-20260615-003",
+            "event_type": "status_change",
+            "event_key": "submit",
+        }
+        entity_info = {"gr_no": "GR-2026-003", "status": "manager_confirm"}
+        body = templates.build_body(entry, entity_info, {}, actor_name="Li, Xingchen (C/EV-L)")
+        assert "LiXingchen performed Submitted on GR 0615-003" in body
+
+    def test_greeting_shows_system_when_no_actor(self):
+        entry = {
+            "entity_type": "po",
+            "entity_id": "PO-001",
+            "event_type": "threshold_date",
+            "event_key": "threshold_date:3m",
+        }
+        entity_info = {"po_no": "PO-001", "status": "active"}
+        body = templates.build_body(entry, entity_info, {})
+        assert "System performed" in body
 
     def test_po_body_shows_po_fields_not_sc_fields(self):
         entry = {
