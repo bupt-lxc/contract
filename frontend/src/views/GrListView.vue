@@ -19,6 +19,9 @@
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
+      <el-button @click="openAnnualReportDialog">
+        <el-icon><Download /></el-icon> {{ $t('gr.annualReport') }}
+      </el-button>
     </div>
 
     <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
@@ -173,6 +176,31 @@
       :filtered-count="state.total"
       :total-count="state.total"
     />
+    <!-- Annual Report Export Dialog -->
+    <el-dialog
+      v-model="annualReportVisible"
+      :title="$t('gr.annualReportTitle')"
+      width="360px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('gr.selectYear')">
+          <el-date-picker
+            v-model="annualReportYear"
+            type="year"
+            placeholder="YYYY"
+            format="YYYY"
+            value-format="YYYY"
+            style="width:100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="annualReportVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="annualExporting" @click="handleAnnualExport">
+          {{ $t('common.export') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -202,6 +230,9 @@ const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, 
 const { exportAll, exportMultiSheet } = useExport()
 const exporting = ref(false)
 const exportDialogVisible = ref(false)
+const annualReportVisible = ref(false)
+const annualReportYear = ref(new Date().getFullYear().toString())
+const annualExporting = ref(false)
 
 const grStatuses = [
   { label: t('status.manager_confirm'), value: 'manager_confirm' },
@@ -418,6 +449,60 @@ async function handleBatchConfirm() {
 
 function handleExport() {
   exportDialogVisible.value = true
+}
+
+function openAnnualReportDialog() {
+  annualReportYear.value = new Date().getFullYear().toString()
+  annualReportVisible.value = true
+}
+
+async function handleAnnualExport() {
+  annualExporting.value = true
+  try {
+    const result = await callApi('get_gr_annual_report', { year: annualReportYear.value })
+    const rows = result.rows || []
+
+    // Build column definitions matching the spec
+    const templateColumns = [
+      { key: 'cost_center', label: 'cost center' },
+      { key: 'status', label: 'Status', getValue: (row) => row.status === 'finished' ? 'Finished' : 'Approved' },
+      { key: 'po_no', label: 'PO number' },
+      { key: 'confirmation_name', label: 'Confirmation number' },
+      { key: 'gr_no', label: 'GR NO' },
+      { key: 'con_value', label: 'GR Value' },
+      { key: 'goods_service_description', label: 'GR Description' },
+      { key: 'requester_name', label: 'GR Requester' },
+      { key: '__sending_gr_date', label: 'Sending GR date', getValue: () => '' },
+      { key: '__finished_date', label: 'Finished Date', getValue: () => '' },
+      { key: '__provision', label: 'provision', getValue: () => '' },
+      { key: '__provision_net', label: 'Provision amount NET', getValue: () => '' },
+    ]
+
+    // Collect remaining GR field names, excluding those already in templateColumns
+    const usedKeys = new Set([
+      'cost_center', 'status', 'po_no', 'confirmation_name', 'gr_no',
+      'con_value', 'goods_service_description', 'requester_name',
+      'sc_id', '_type',
+    ])
+    let remainingKeys = []
+    if (rows.length > 0) {
+      remainingKeys = Object.keys(rows[0]).filter(k => !usedKeys.has(k) && !k.startsWith('_'))
+    }
+
+    const allColumns = [
+      ...templateColumns,
+      ...remainingKeys.map(k => ({ key: k, label: k })),
+    ]
+
+    const { exportRows } = useExport()
+    await exportRows(rows, allColumns, `GR_Annual_Report_${annualReportYear.value}`)
+    ElMessage.success(t('msg.exportedSuccessfully'))
+    annualReportVisible.value = false
+  } catch (e) {
+    ElMessage.error(e.message || t('msg.exportFailed'))
+  } finally {
+    annualExporting.value = false
+  }
 }
 
 // GR import
