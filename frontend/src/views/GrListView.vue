@@ -227,7 +227,7 @@ const router = useRouter()
 const { t } = useI18n()
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
-const { exportAll, exportMultiSheet } = useExport()
+const { exportAll, exportMultiSheet, exportRows } = useExport()
 const exporting = ref(false)
 const exportDialogVisible = ref(false)
 const annualReportVisible = ref(false)
@@ -482,7 +482,7 @@ async function handleAnnualExport() {
     const usedKeys = new Set([
       'cost_center', 'status', 'po_no', 'confirmation_name', 'gr_no',
       'con_value', 'goods_service_description', 'requester_name',
-      'sc_id', '_type',
+      'sc_id',
     ])
     let remainingKeys = []
     if (rows.length > 0) {
@@ -494,7 +494,6 @@ async function handleAnnualExport() {
       ...remainingKeys.map(k => ({ key: k, label: k })),
     ]
 
-    const { exportRows } = useExport()
     await exportRows(rows, allColumns, `GR_Annual_Report_${annualReportYear.value}`)
     ElMessage.success(t('msg.exportedSuccessfully'))
     annualReportVisible.value = false
