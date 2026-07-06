@@ -1413,7 +1413,11 @@ def _migrate_v34(conn) -> None:
     # Rebuild sc_records to fix FK references (calloff_po_id -> pos)
     if _table_exists(conn, "sc_records"):
         conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
-        conn.execute("""
+        old_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records_old)")}
+        has_submitted_date = "submitted_date" in old_cols
+        has_calloff_po_id = "calloff_po_id" in old_cols
+        # Build base CREATE TABLE, then add optional columns
+        base_sql = """
             CREATE TABLE sc_records (
               sc_id TEXT PRIMARY KEY,
               sc_no TEXT,
@@ -1437,8 +1441,13 @@ def _migrate_v34(conn) -> None:
               pending_date TEXT,
               approved_date TEXT,
               internal_system_number TEXT,
-              currency TEXT NOT NULL DEFAULT 'CNY',
-              calloff_po_id TEXT REFERENCES pos(po_id),
+              currency TEXT NOT NULL DEFAULT 'CNY'
+        """
+        if has_submitted_date:
+            base_sql += ",\n              submitted_date TEXT"
+        if has_calloff_po_id:
+            base_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
+        base_sql += """,
               CHECK (
                 status = 'draft'
                 OR status = 'manager_confirm'
@@ -1451,7 +1460,8 @@ def _migrate_v34(conn) -> None:
                 )
               )
             )
-        """)
+        """
+        conn.execute(base_sql)
         conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
         conn.execute("DROP TABLE sc_records_old")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
