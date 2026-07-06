@@ -150,22 +150,9 @@ git commit -m "feat: add parse_date utility with multi-format support to import_
 **Files:**
 - Modify: `sc_gr_app/services/import_service.py`
 
-- [ ] **Step 1: Update _is_template_meta_row for SC**
+- [ ] **Step 1: Verify _is_template_meta_row call sites**
 
-Replace `_is_template_meta_row` with an entity-aware version. Add a new helper that checks `sc_no` instead of `sc_id`:
-
-```python
-def _is_template_meta_row(row: dict, id_field: str) -> bool:
-    """Check if this is a template meta row (hint or sample) that should be skipped."""
-    val = str(row.get(id_field, "")).strip()
-    if val == "[EXAMPLE]":
-        return True
-    if " " in val or "(" in val:
-        return True
-    return False
-```
-
-(This already skips `EXAMPLE` and hint rows by their text, but now `id_field` will be `sc_no`, `po_no`, or `gr_no` instead of the system IDs.)
+The function `_is_template_meta_row(row, id_field)` already exists and is parameterized on `id_field`. No function changes needed. Only the call sites change from `"sc_id"` → `"sc_no"`, `"po_id"` → `"po_no"`, `"gr_id"` → `"gr_no"`. The template sample rows use `[EXAMPLE]` in the NO columns (see Tasks 6-8) so the detection logic still works.
 
 - [ ] **Step 2: Add SC NO uniqueness check to _validate_sc_rows**
 
@@ -769,12 +756,12 @@ def download_sc_template(self, _payload=None) -> dict:
              "CNY/EUR/USD", "Optional (FC only)",
              "Optional (FC call-off only)",
              "Y/N (default N)", "Optional"]
-    sample = ["", "", current_user["user_id"], "material", "12345",
+    sample = ["[EXAMPLE]", "", current_user["user_id"], "material", "12345",
               "50000", "2026-01-01", "2026-12-31", "approved",
               "Sample SC description", "CNY", "", "",
               "N", ""]
-
-    # (keep the same _col_letter, _inline_str_cell, _xml_escape helpers)
+    # NOTE: sc_no is "[EXAMPLE]" so _is_template_meta_row can skip the sample row.
+    # Without this, the sample would appear as a validation error in preview.
     def _col_letter(i):
         s = ""
         n = i
@@ -881,12 +868,11 @@ def download_po_template(self, _payload=None) -> dict:
              "active/finished", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY", "Optional",
              "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
              "Optional", "YYYY-MM-DD or MM/DD/YYYY"]
-    sample = ["", "", "", current_user["user_id"],
+    sample = ["", "", "[EXAMPLE]", current_user["user_id"],
               "50000", "active", "", "", "",
               "monthly", "", "", "", "",
               ""]
-
-    # ... (same helpers as SC template)
+    # NOTE: po_no is "[EXAMPLE]" so _is_template_meta_row can skip the sample row.
 ```
 
 - [ ] **Step 2: Update info text**
@@ -936,12 +922,11 @@ def download_gr_template(self, _payload=None) -> dict:
              "approved/finished", "Optional",
              "Optional (e.g. 13)", "Optional", "Optional", "Optional",
              "Required (YYYY-MM-DD or MM/DD/YYYY)", "Required (YYYY-MM-DD or MM/DD/YYYY)", "Optional (YYYY-MM-DD or MM/DD/YYYY)"]
-    sample = ["", "", current_user["user_id"],
+    sample = ["", "[EXAMPLE]", current_user["user_id"],
               "10000", "10000", "approved", "", "13",
               "", "Sample goods description", "",
               "2026-01-01", "2026-12-31", ""]
-
-    # ... (same helpers as before)
+    # NOTE: gr_no is "[EXAMPLE]" so _is_template_meta_row can skip the sample row.
 ```
 
 - [ ] **Step 2: Update info text**
@@ -1050,12 +1035,13 @@ git commit -m "feat: update frontend import columns — NO-based, hide ID column
 
 ---
 
-### Task 10: Add vendor_id column to VendorListView
+### Task 10: Vendor list improvements
 
 **Files:**
 - Modify: `frontend/src/views/VendorListView.vue`
+- Modify: `sc_gr_app/services/vendor_service.py`
 
-- [ ] **Step 1: Add vendor_id as first column in the table**
+- [ ] **Step 1: Add vendor_id as first column in VendorListView table**
 
 In the `<el-table>` element, add before `<el-table-column prop="vendor_name" ...>`:
 
@@ -1070,11 +1056,29 @@ The full first two columns become:
 <el-table-column prop="vendor_name" :label="$t('vendor.vendor')" sortable="custom" min-width="160" />
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Fix delete_vendor to check sc_vendors junction table**
+
+In `sc_gr_app/services/vendor_service.py`, the `delete_vendor` function only checks `pos` for vendor references before deleting. After this plan, SCs will also link to vendors via the `sc_vendors` junction table. Add a check for that:
+
+```python
+# After the existing pos dep_count check (line 253-262), add:
+sc_vendor_count = conn.execute(
+    "select count(*) from sc_vendors where vendor_id = ?",
+    (vendor_id,),
+).fetchone()[0]
+if sc_vendor_count > 0:
+    raise ValidationError(
+        f"Cannot delete vendor '{before['vendor_name']}': "
+        f"it is referenced by {sc_vendor_count} SC(s) via sc_vendors. "
+        f"Please remove the vendor from those SCs first."
+    )
+```
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/views/VendorListView.vue
-git commit -m "feat: show vendor_id as first column in vendor list"
+git add frontend/src/views/VendorListView.vue sc_gr_app/services/vendor_service.py
+git commit -m "feat: show vendor_id column; check sc_vendors in delete_vendor"
 ```
 
 ---
@@ -1312,4 +1316,5 @@ git status
 | `frontend/src/views/PoListView.vue` | Updated `poImportColumns` (remove po_id/sc_id, add sc_no/active_date) |
 | `frontend/src/views/GrListView.vue` | Updated `grImportColumns` (remove gr_id/po_id, add po_no) |
 | `frontend/src/views/VendorListView.vue` | Add `vendor_id` as first table column |
+| `sc_gr_app/services/vendor_service.py` | Check `sc_vendors` in `delete_vendor` |
 | `tests/test_import_service.py` | Tests for parse_date, NO uniqueness, updated existing tests |
