@@ -306,8 +306,7 @@ function handleExport() {
 const importVisible = ref(false)
 
 const poImportColumns = [
-  { prop: 'po_id', label: 'PO ID', width: '160' },
-  { prop: 'sc_id', label: 'SC ID', width: '160' },
+  { prop: 'sc_no', label: t('sc.scNo'), width: '120' },
   { prop: 'vendor_id', label: t('po.vendor'), width: '100' },
   { prop: 'po_no', label: t('po.poNo'), width: '120' },
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
@@ -321,6 +320,7 @@ const poImportColumns = [
   { prop: 'contract_type', label: t('po.contractType'), width: '100' },
   { prop: 'cost_center', label: t('po.costCenter'), width: '100' },
   { prop: 'purchaser', label: t('po.purchaser'), width: '100' },
+  { prop: 'active_date', label: t('po.activeDate'), width: '110' },
 ]
 
 async function downloadTemplate() {
