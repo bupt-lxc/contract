@@ -624,9 +624,9 @@ def workbench_data(
       - Draft / Approved: own records only
       - Pending: all records
     """
-    sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
+    sc_statuses = ["draft", "manager_confirm", "pending", "approved", "denied"]
     po_statuses = ["draft", "active"]
-    gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
+    gr_statuses = ["draft", "manager_confirm", "pending", "approved", "denied"]
 
     def _is_own_only(status: str) -> bool:
         if current_user is None:
@@ -635,7 +635,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "active", "manager_confirm", "approved")
+            return status not in ("pending", "active", "manager_confirm", "approved", "denied")
         return False
 
     user_id = current_user["user_id"] if current_user else None
@@ -717,6 +717,7 @@ def workbench_data(
             rows = conn.execute(
                 f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
                 f"gr.created_at, gr.pending_date, gr.submitted_date, "
+                f"gr.denied_by, gr.denied_at, "
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
