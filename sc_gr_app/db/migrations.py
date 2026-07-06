@@ -1412,8 +1412,6 @@ def _migrate_v34(conn) -> None:
 
     # Rebuild sc_records to fix FK references (calloff_po_id -> pos)
     if _table_exists(conn, "sc_records"):
-        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
-        has_calloff = "calloff_po_id" in existing_cols
         conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
         conn.execute("""
             CREATE TABLE sc_records (
@@ -1440,6 +1438,7 @@ def _migrate_v34(conn) -> None:
               approved_date TEXT,
               internal_system_number TEXT,
               currency TEXT NOT NULL DEFAULT 'CNY',
+              calloff_po_id TEXT REFERENCES pos(po_id),
               CHECK (
                 status = 'draft'
                 OR status = 'manager_confirm'
@@ -1453,8 +1452,6 @@ def _migrate_v34(conn) -> None:
               )
             )
         """)
-        if has_calloff:
-            conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
         conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
         conn.execute("DROP TABLE sc_records_old")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
