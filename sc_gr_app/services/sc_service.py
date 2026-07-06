@@ -76,15 +76,17 @@ def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | No
         raise ValidationError("Call-off SC cannot have request_type 'FC'")
 
     po_row = conn.execute(
-        """select po.po_id, po.po_amount, po.status, sc.request_type as parent_sc_type
+        """select po.po_id, po.po_amount, po.status, sc.request_type as parent_sc_type,
+                  po.request_type as po_request_type
            from pos po
-           join sc_records sc on sc.sc_id = po.sc_id
+           left join sc_records sc on sc.sc_id = po.sc_id
            where po.po_id = ?""",
         (calloff_po_id,),
     ).fetchone()
     if po_row is None:
         raise NotFound(f"PO not found: {calloff_po_id}")
-    if po_row["parent_sc_type"] != "FC":
+    is_fc_po = (po_row["po_request_type"] == "FC" or po_row["parent_sc_type"] == "FC")
+    if not is_fc_po:
         raise ValidationError("Call-off PO must belong to an FC-type SC")
     if po_row["status"] != "active":
         raise ConflictError("Call-off PO must be active to create call-off SCs")
@@ -1246,7 +1248,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             parent_po_row = conn.execute(
                 """select po.*, sc_parent.request_type as parent_sc_type
                    from pos po
-                   join sc_records sc_parent on sc_parent.sc_id = po.sc_id
+                   left join sc_records sc_parent on sc_parent.sc_id = po.sc_id
                    where po.po_id = ?""",
                 (sc["calloff_po_id"],),
             ).fetchone()
