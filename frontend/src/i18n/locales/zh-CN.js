@@ -168,6 +168,7 @@ home: {
     colAmount: '金额',
     colType: '类型',
     viewAllOfType: '查看此类全部',
+    denied: '已驳回',
   },
 
   sc: {

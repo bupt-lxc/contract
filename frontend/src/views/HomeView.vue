@@ -6,7 +6,76 @@
       {{ $t('home.loadError') }}: {{ error }}
     </div>
 
-    <!-- SC Row 1: draft + manager_confirm -->
+    <!-- Denied Section -->
+    <div class="wb-row" v-if="deniedScCount > 0 || deniedGrCount > 0">
+      <div class="wb-row__header">
+        <span class="wb-row__label">{{ $t('home.denied') }}</span>
+      </div>
+      <div class="wb-grid wb-grid--2">
+        <div
+          v-if="deniedScCount > 0"
+          class="wb-cell wb-cell--denied"
+        >
+          <div class="wb-cell__head wb-cell__head--denied">
+            <span class="wb-cell__status">{{ $t('status.denied') }}</span>
+            <span class="wb-cell__count">{{ deniedScCount }}</span>
+          </div>
+          <div class="wb-cell__table">
+            <div class="wb-cell__th wb-cell__th--sc5">
+              <span class="wb-cell__th-no">{{ $t('home.colScNo') }}</span>
+              <span class="wb-cell__th-req">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-type">{{ $t('home.colRequestType') }}</span>
+              <span class="wb-cell__th-amt">{{ $t('sc.scAmount') }}</span>
+              <span class="wb-cell__th-date">{{ $t('home.colDeadline') }}</span>
+            </div>
+            <div
+              v-for="row in (data.sc?.denied?.rows || [])"
+              :key="row.sc_id"
+              class="wb-cell__tr wb-cell__tr--sc5"
+              @click="$router.push(`/sc/${row.sc_id}`)"
+            >
+              <span class="wb-cell__td-no" :title="row.sc_no">{{ row.sc_no || shortId(row.sc_id) }}</span>
+              <span class="wb-cell__td-req">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-type">{{ row.request_type }}</span>
+              <span class="wb-cell__td-amt">{{ formatCurrency(row.sc_amount) }}</span>
+              <span class="wb-cell__td-date">{{ (row.deadline || '').slice(0, 10) || '-' }}</span>
+            </div>
+            <div v-if="!data.sc?.denied?.rows?.length" class="wb-cell__empty">—</div>
+          </div>
+          <div class="wb-cell__link" @click="$router.push('/sc?status=denied')">{{ $t('home.viewAllOfType') }}</div>
+        </div>
+        <div
+          v-if="deniedGrCount > 0"
+          class="wb-cell wb-cell--denied"
+        >
+          <div class="wb-cell__head wb-cell__head--denied">
+            <span class="wb-cell__status">{{ $t('status.denied') }}</span>
+            <span class="wb-cell__count">{{ deniedGrCount }}</span>
+          </div>
+          <div class="wb-cell__table">
+            <div class="wb-cell__th">
+              <span class="wb-cell__th-id">{{ $t('home.colGrId') }}</span>
+              <span class="wb-cell__th-sub">{{ $t('home.colRequester') }}</span>
+              <span class="wb-cell__th-date">{{ $t('home.colCreatedAt') }}</span>
+            </div>
+            <div
+              v-for="row in (data.gr?.denied?.rows || [])"
+              :key="row.gr_id"
+              class="wb-cell__tr"
+              @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)"
+            >
+              <span class="wb-cell__td-id" :title="row.gr_id">{{ shortId(row.gr_id) }}</span>
+              <span class="wb-cell__td-sub">{{ row.requester_name }}</span>
+              <span class="wb-cell__td-date">{{ (row.created_at || '').slice(0, 10) || '-' }}</span>
+            </div>
+            <div v-if="!data.gr?.denied?.rows?.length" class="wb-cell__empty">—</div>
+          </div>
+          <div class="wb-cell__link" @click="$router.push('/gr?status=denied')">{{ $t('home.viewAllOfType') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SC Row -->
     <div class="wb-row">
       <div class="wb-row__header">
         <span class="wb-row__label">SC</span>
@@ -220,6 +289,9 @@ const grCells = computed(() => [
   { status: 'approved',         label: t('status.approved') },
 ])
 
+const deniedScCount = computed(() => data.value.sc?.denied?.count ?? 0)
+const deniedGrCount = computed(() => data.value.gr?.denied?.count ?? 0)
+
 function headStatus(status) {
   if (status.includes('draft')) return 'draft'
   if (status.includes('manager')) return 'manager'
@@ -227,6 +299,7 @@ function headStatus(status) {
   if (status.includes('pending')) return 'pending'
   if (status.includes('approved')) return 'approved'
   if (status.includes('finished')) return 'approved'
+  if (status.includes('denied')) return 'denied'
   return 'draft'
 }
 
@@ -332,6 +405,10 @@ onMounted(async () => {
   grid-template-columns: repeat(4, 1fr);
 }
 
+.wb-grid--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .wb-grid--po {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -382,6 +459,9 @@ onMounted(async () => {
 .wb-cell--manager .wb-cell__table  { background: #f8fafd; }
 .wb-cell--pending .wb-cell__table  { background: #fefaf5; }
 .wb-cell--approved .wb-cell__table { background: #f6fcf7; }
+
+.wb-cell__head--denied    { background: #fef2f2; }
+.wb-cell--denied .wb-cell__table { background: #fefaf9; }
 
 .wb-cell__th,
 .wb-cell__tr,
@@ -525,6 +605,56 @@ onMounted(async () => {
   flex: 0 0 18%;
   min-width: 0;
   text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SC 5-column layout for denied section */
+.wb-cell__th--sc5 .wb-cell__th-no,
+.wb-cell__tr--sc5 .wb-cell__td-no {
+  flex: 1 1 22%;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-req,
+.wb-cell__tr--sc5 .wb-cell__td-req {
+  flex: 0 0 18%;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-type,
+.wb-cell__tr--sc5 .wb-cell__td-type {
+  flex: 0 0 14%;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-amt,
+.wb-cell__tr--sc5 .wb-cell__td-amt {
+  flex: 0 0 20%;
+}
+
+.wb-cell__th--sc5 .wb-cell__th-date,
+.wb-cell__tr--sc5 .wb-cell__td-date {
+  flex: 0 0 22%;
+}
+
+.wb-cell__th-no,
+.wb-cell__td-no {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th-req,
+.wb-cell__td-req {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cell__th-type,
+.wb-cell__td-type {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -168,6 +168,7 @@ home: {
     colAmount: 'Amount',
     colType: 'Type',
     viewAllOfType: 'View all of this type',
+    denied: 'Denied',
   },
 
   sc: {
