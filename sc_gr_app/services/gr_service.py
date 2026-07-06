@@ -137,6 +137,35 @@ def _validate_user_exists(conn, user_id: str) -> None:
         raise NotFound(f"User not found: {user_id}")
 
 
+def _validate_last_delivery_value(value) -> None:
+    """Validate last_delivery is 'Y', 'N', or empty/None."""
+    if value is not None and value != "" and value not in ("Y", "N"):
+        raise ValidationError("last_delivery must be 'Y' or 'N'")
+
+
+def _validate_last_delivery_unique(conn, po_id: str, exclude_gr_id: str = None) -> None:
+    """Raise ConflictError if another active GR under the same PO is marked as Last Delivery."""
+    if exclude_gr_id:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')
+                 AND gr_id != ?""",
+            (po_id, exclude_gr_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')""",
+            (po_id,),
+        ).fetchall()
+    if rows:
+        raise ConflictError(
+            f"GR {rows[0]['gr_id']} under this PO is already marked as Last Delivery"
+        )
+
+
 def _validate_gr_creation_context(
     config: AppConfig,
     po_sc,
@@ -214,6 +243,10 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                     raise ValidationError(f"Invalid GR status: {gr_status}")
 
                 _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
+
+                _validate_last_delivery_value(data.get("last_delivery"))
+                if data.get("last_delivery") == "Y":
+                    _validate_last_delivery_unique(conn, po_id)
 
                 is_draft = gr_status == "draft"
                 is_manager_confirm = gr_status == "manager_confirm"
@@ -676,6 +709,10 @@ def update_gr(
                             if po_budget["open_po_amount"] < po_budget_amount:
                                 raise ConflictError("PO open amount is insufficient")
 
+                    _validate_last_delivery_value(allowed.get("last_delivery"))
+                    if "last_delivery" in allowed and allowed["last_delivery"] == "Y":
+                        _validate_last_delivery_unique(conn, merged["po_id"], gr_id)
+
                     conn.execute(
                         """
                         update gr_requests
@@ -725,6 +762,10 @@ def update_gr(
                     }
                     if not allowed:
                         raise ValidationError("No GR fields to update")
+
+                    _validate_last_delivery_value(allowed.get("last_delivery"))
+                    if "last_delivery" in allowed and allowed["last_delivery"] == "Y":
+                        _validate_last_delivery_unique(conn, before["po_id"], gr_id)
 
                     merged = {**before, **allowed}
                     # Recalculate gross_cost when tax_rate changes on approved GR
@@ -856,8 +897,9 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
-    """Mark an approved GR as finished (goods received / service completed)."""
+def finish_gr(config: AppConfig, current_user: dict, gr_id: str,
+              confirm_cascade: bool = False) -> dict:
+    """Mark an approved GR as finished. If Last Delivery, cascade-finish PO."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
@@ -872,7 +914,117 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 if before["status"] != "approved":
                     raise ConflictError("GR must be approved")
 
-                timestamp = utc_now()
+                if before.get("last_delivery") != "Y":
+                    # Non-LD GR: normal finish (confirm_cascade silently ignored)
+                    timestamp = utc_now()
+                    conn.execute(
+                        """
+                        update gr_requests
+                        set status = 'finished',
+                            finished_by = ?,
+                            finished_at = ?,
+                            updated_at = ?
+                        where gr_id = ?
+                        """,
+                        (current_user["user_id"], timestamp, timestamp, gr_id),
+                    )
+                    after = _get_gr(conn, gr_id)
+                    write_operation_record(
+                        conn,
+                        action_type="finish_gr",
+                        object_type="gr",
+                        object_id=gr_id,
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=before,
+                        after=after,
+                    )
+                    sc = conn.execute(
+                        "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                        (sc_id,),
+                    ).fetchone()
+                    notification_service.queue_status_change(
+                        conn, "gr", gr_id, "finish",
+                        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    )
+                    conn.commit()
+                    return after
+
+                # Last Delivery GR — cascade logic
+                po_id = before["po_id"]
+                all_other_grs = conn.execute(
+                    """
+                    SELECT gr_id, status FROM gr_requests
+                    WHERE po_id = ? AND gr_id != ?
+                    """,
+                    (po_id, gr_id),
+                ).fetchall()
+
+                problematic = [
+                    {"gr_id": r["gr_id"], "status": r["status"]}
+                    for r in all_other_grs
+                    if r["status"] in ("draft", "manager_confirm", "pending", "denied")
+                ]
+                approved_nf_ids = [
+                    r["gr_id"]
+                    for r in all_other_grs
+                    if r["status"] == "approved"
+                ]
+
+                if problematic:
+                    raise ConflictError(
+                        f"Cannot finish Last Delivery GR: "
+                        + ", ".join(f"{c['gr_id']}({c['status']})" for c in problematic),
+                        conflicts=problematic,
+                    )
+
+                if not confirm_cascade:
+                    # Rollback the BEGIN IMMEDIATE (no changes made) and return
+                    # needs_cascade flag. Bridge wraps in ok() so callApi passes
+                    # it through as the data object directly.
+                    conn.rollback()
+                    return {
+                        "needs_cascade": True,
+                        "grs_to_finish": approved_nf_ids,
+                    }
+
+                # confirm_cascade=True: execute the full cascade
+                shared_ts = utc_now()
+
+                # 1. Finish approved (non-LD) GRs — no notifications
+                for cascade_gr_id in approved_nf_ids:
+                    gr_before = _get_gr(conn, cascade_gr_id)
+                    if gr_before["status"] != "approved":
+                        raise ConflictError(
+                            f"GR {cascade_gr_id} status changed to {gr_before['status']}",
+                            conflicts=[{"gr_id": cascade_gr_id, "status": gr_before["status"]}],
+                        )
+                    conn.execute(
+                        """
+                        update gr_requests
+                        set status = 'finished',
+                            finished_by = ?,
+                            finished_at = ?,
+                            updated_at = ?
+                        where gr_id = ?
+                        """,
+                        (current_user["user_id"], shared_ts, shared_ts, cascade_gr_id),
+                    )
+                    gr_after = _get_gr(conn, cascade_gr_id)
+                    write_operation_record(
+                        conn,
+                        action_type="finish_gr",
+                        object_type="gr",
+                        object_id=cascade_gr_id,
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=gr_before,
+                        after=gr_after,
+                    )
+
+                # 2. Finish THIS (LD) GR — with notification
                 conn.execute(
                     """
                     update gr_requests
@@ -882,9 +1034,9 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                         updated_at = ?
                     where gr_id = ?
                     """,
-                    (current_user["user_id"], timestamp, timestamp, gr_id),
+                    (current_user["user_id"], shared_ts, shared_ts, gr_id),
                 )
-                after = _get_gr(conn, gr_id)
+                primary_gr_after = _get_gr(conn, gr_id)
                 write_operation_record(
                     conn,
                     action_type="finish_gr",
@@ -894,7 +1046,7 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     operator_id=current_user["user_id"],
                     machine_id=current_user["machine_id"],
                     before=before,
-                    after=after,
+                    after=primary_gr_after,
                 )
                 sc = conn.execute(
                     "SELECT requester_id FROM sc_records WHERE sc_id = ?",
@@ -904,12 +1056,22 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     conn, "gr", gr_id, "finish",
                     {"requester_id": sc["requester_id"]} if sc else {}, current_user
                 )
+
+                # 3. Finish PO
+                from sc_gr_app.services.po_service import _finish_po_in_transaction
+                po_after = _finish_po_in_transaction(conn, po_id, current_user, shared_ts)
+
                 conn.commit()
+
+                return {
+                    "gr": primary_gr_after,
+                    "cascaded_grs": approved_nf_ids,
+                    "po_finished": po_id,
+                }
+
             except Exception:
                 conn.rollback()
                 raise
-
-    return after
 
 
 def recall_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:

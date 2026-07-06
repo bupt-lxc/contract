@@ -24,7 +24,9 @@ export async function callApi(method, payload = {}) {
       result = await window.pywebview.api[method](payload)
     }
     if (!result.ok) {
-      throw new ApiError(result.error)
+      const err = new ApiError(result.error)
+      if (result.conflicts) err.conflicts = result.conflicts
+      throw err
     }
     return result.data
   } finally {

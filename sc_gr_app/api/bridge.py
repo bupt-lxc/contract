@@ -462,9 +462,22 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            result = gr_service.finish_gr(self.config, current_user, gr_id)
-            self._auto_open_outlook_draft("gr", gr_id, "finish")
-            return ok(_format_entity_timestamps(result))
+            confirm_cascade = payload.get("confirm_cascade", False)
+            result = gr_service.finish_gr(self.config, current_user, gr_id, confirm_cascade)
+
+            if isinstance(result, dict) and "needs_cascade" in result:
+                # LD GR needs cascade confirmation — return directly (ok:true, data has needs_cascade)
+                return ok(result)
+            elif isinstance(result, dict) and "gr" in result:
+                # Cascade executed successfully
+                primary_gr = _format_entity_timestamps(result["gr"])
+                self._auto_open_outlook_draft("gr", gr_id, "finish")
+                self._auto_open_outlook_draft("po", result["po_finished"], "finish")
+                return ok(primary_gr)
+            else:
+                # Normal finish: result is the GR dict
+                self._auto_open_outlook_draft("gr", gr_id, "finish")
+                return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 

@@ -6,7 +6,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1349,6 +1349,15 @@ def _migrate_v32(conn) -> None:
     _record(conn, 32)
 
 
+def _migrate_v33(conn) -> None:
+    """Add finished_by column to pos table for PO finish audit trail."""
+    if _table_exists(conn, "pos"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
+        if "finished_by" not in existing:
+            conn.execute("ALTER TABLE pos ADD COLUMN finished_by TEXT REFERENCES users(user_id)")
+    _record(conn, 33)
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
 
@@ -1524,6 +1533,10 @@ def migrate(config: AppConfig) -> None:
             if 32 not in _applied_versions(conn):
                 conn.execute("BEGIN")
                 _migrate_v32(conn)
+                conn.commit()
+            if 33 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v33(conn)
                 conn.commit()
         except Exception:
             conn.rollback()
