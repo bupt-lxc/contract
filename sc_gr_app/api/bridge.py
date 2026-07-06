@@ -18,6 +18,10 @@ def _require_payload_field(payload: dict, field: str):
     return value
 
 
+def _row_to_dict(row):
+    return dict(row)
+
+
 def _attachment_sc_id(entity_type: str, entity_id: str,
                       parent_sc_id: str = None, parent_po_id: str = None) -> str | None:
     """Resolve the sc_id that an attachment belongs to."""
@@ -404,6 +408,79 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_po(self, payload) -> dict:
+        """Return basic PO info (for deep-link navigation)."""
+        try:
+            payload = self._required_payload(payload)
+            self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.errors import NotFound
+            with connect(self.config) as conn:
+                po = conn.execute(
+                    "select po_id, sc_id, request_type, vendor_id, status, po_amount, "
+                    "requester_id, po_no from pos where po_id = ?",
+                    (po_id,),
+                ).fetchone()
+                if po is None:
+                    raise NotFound(f"PO not found: {po_id}")
+                return ok(_row_to_dict(po))
+        except Exception as exc:
+            return fail(exc)
+
+    def get_po_detail(self, payload) -> dict:
+        """Return full PO detail including operations, call-off SCs, permissions."""
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            from sc_gr_app.db.connection import connect
+            from sc_gr_app.errors import NotFound
+            with connect(self.config) as conn:
+                po = conn.execute(
+                    """select po.*, v.vendor_name,
+                       coalesce(po.request_type, sc.request_type) as sc_request_type,
+                       sc.sc_no
+                       from pos po
+                       left join sc_records sc on sc.sc_id = po.sc_id
+                       join vendors v on v.vendor_id = po.vendor_id
+                       where po.po_id = ?""",
+                    (po_id,),
+                ).fetchone()
+                if po is None:
+                    raise NotFound(f"PO not found: {po_id}")
+                po = _row_to_dict(po)
+
+                ops = conn.execute(
+                    "select * from operation_records where object_type = 'po' "
+                    "and object_id = ? order by created_at desc",
+                    (po_id,),
+                ).fetchall()
+
+                calloff_scs = []
+                if po.get("sc_request_type") == "FC":
+                    calloff_scs = conn.execute(
+                        "select * from sc_records where calloff_po_id = ?", (po_id,)
+                    ).fetchall()
+
+                user_id = current_user["user_id"]
+                is_owner = po.get("requester_id") == user_id
+                is_admin = current_user.get("role") == "admin"
+                permissions = {
+                    "can_manage_po": is_owner or is_admin,
+                    "can_manage_gr": False if po.get("sc_request_type") == "FC" else (is_owner or is_admin),
+                    "can_delete_po": is_owner or is_admin,
+                }
+
+                return ok({
+                    "po": po,
+                    "calloff_scs": [_row_to_dict(s) for s in calloff_scs],
+                    "operation_records": [_row_to_dict(o) for o in ops],
+                    "permissions": permissions,
+                })
+        except Exception as exc:
+            return fail(exc)
+
     def create_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -769,13 +846,16 @@ class ApiBridge:
             from sc_gr_app.errors import PermissionDenied, NotFound
             with connect(self.config) as conn:
                 po = conn.execute(
-                    "SELECT sc.requester_id FROM pos po JOIN sc_records sc ON sc.sc_id = po.sc_id WHERE po.po_id = ?",
+                    """SELECT po.requester_id as po_requester, sc.requester_id as sc_requester
+                       FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
+                       WHERE po.po_id = ?""",
                     (po_id,),
                 ).fetchone()
             if not po:
                 raise NotFound("PO not found")
-            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
-                raise PermissionDenied("Only the SC owner or admin can modify notification settings")
+            requester_id = po["sc_requester"] or po["po_requester"]
+            if current_user.get("role") != "admin" and current_user.get("user_id") != requester_id:
+                raise PermissionDenied("Only the owner or admin can modify notification settings")
             notification_service.save_po_notification_config(self.config, po_id, data)
             return ok()
         except Exception as exc:
@@ -800,14 +880,15 @@ class ApiBridge:
             from sc_gr_app.errors import PermissionDenied, NotFound
             with connect(self.config) as conn:
                 po = conn.execute(
-                    """SELECT sc.requester_id FROM pos po
-                       JOIN sc_records sc ON sc.sc_id = po.sc_id
+                    """SELECT po.requester_id as po_requester, sc.requester_id as sc_requester
+                       FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
                        WHERE po.po_id = ?""", (po_id,),
                 ).fetchone()
             if not po:
                 raise NotFound("PO not found")
-            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
-                raise PermissionDenied("Only the SC owner or admin can modify custom schedules")
+            requester_id = po["sc_requester"] or po["po_requester"]
+            if current_user.get("role") != "admin" and current_user.get("user_id") != requester_id:
+                raise PermissionDenied("Only the owner or admin can modify custom schedules")
             notification_service.save_po_custom_schedules(self.config, po_id, schedules)
             return ok()
         except Exception as exc:
@@ -1507,8 +1588,10 @@ class ApiBridge:
         if entity_type == "sc":
             target_dir = base / "sc" / entity_id
         elif entity_type == "po":
-            pid = parent_sc_id or "unknown-sc"
-            target_dir = base / "sc" / pid / "po" / entity_id
+            if parent_sc_id:
+                target_dir = base / "sc" / parent_sc_id / "po" / entity_id
+            else:
+                target_dir = base / "po" / entity_id
         elif entity_type == "gr":
             sid = parent_sc_id or "unknown-sc"
             pid = parent_po_id or "unknown-po"
