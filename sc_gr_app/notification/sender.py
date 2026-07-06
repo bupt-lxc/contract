@@ -69,6 +69,22 @@ def _attach_budget_info(
         approved = gr_totals["con_value_total"] or 0
         pending_incl_tax = gr_totals["pending_total_incl_tax"] or 0
         entity_info["open_po_amount"] = po_amount - pending - approved
+
+        # Deduct call-off SC amounts for FC-type POs
+        is_fc = entity_info.get("request_type") == "FC"
+        if not is_fc and entity_info.get("sc_id"):
+            sc_row = conn.execute(
+                "SELECT request_type FROM sc_records WHERE sc_id = ?",
+                (entity_info["sc_id"],),
+            ).fetchone()
+            is_fc = sc_row and sc_row["request_type"] == "FC"
+        if is_fc:
+            calloff_allocated = conn.execute(
+                "SELECT COALESCE(SUM(sc_amount), 0) FROM sc_records WHERE calloff_po_id = ?",
+                (entity_id,),
+            ).fetchone()[0]
+            entity_info["open_po_amount"] = max(0, po_amount - calloff_allocated)
+
         entity_info["consumed_amount"] = approved
         entity_info["pending_total"] = pending
         entity_info["pending_total_incl_tax"] = pending_incl_tax

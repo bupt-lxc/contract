@@ -17,15 +17,15 @@ def _utc_now() -> str:
 def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
     """Check all active POs for threshold breaches. Returns (date_events, amount_events)."""
     rows = conn.execute(
-        """SELECT po.*, sc.requester_id, sc.request_type,
+        """SELECT po.*, COALESCE(sc.requester_id, po.requester_id) as requester_id, sc.request_type as sc_request_type,
                   po.po_amount - COALESCE(
-                    CASE WHEN sc.request_type = 'FC'
+                    CASE WHEN po.request_type = 'FC' OR sc.request_type = 'FC'
                       THEN calloff_totals.allocated
                       ELSE gr_totals.con_value_total
                     END, 0
                   ) as remaining
            FROM pos po
-           JOIN sc_records sc ON sc.sc_id = po.sc_id
+           LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
            LEFT JOIN (
              SELECT po_id, SUM(con_value) as con_value_total
              FROM gr_requests WHERE status = 'approved'

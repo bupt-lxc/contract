@@ -62,16 +62,16 @@ def check_monthly_summary(conn: sqlite3.Connection) -> int:
         """SELECT
                p.po_id, p.po_no, p.po_amount, p.contract_to, p.status,
                p.requester_id, u.user_name as requester_name, u.email as requester_email,
-               sc.sc_no, sc.request_type, v.vendor_name,
+               sc.sc_no, p.request_type as po_request_type, sc.request_type as sc_request_type, v.vendor_name,
                p.po_amount - COALESCE(
-                   CASE WHEN sc.request_type = 'FC'
+                   CASE WHEN p.request_type = 'FC' OR sc.request_type = 'FC'
                      THEN calloff_totals.allocated
                      ELSE (SELECT SUM(gr.con_value) FROM gr_requests gr
                            WHERE gr.po_id = p.po_id AND gr.status = 'approved')
                    END, 0
                ) as open_po_amount
            FROM pos p
-           JOIN sc_records sc ON sc.sc_id = p.sc_id
+           LEFT JOIN sc_records sc ON sc.sc_id = p.sc_id
            JOIN users u ON u.user_id = p.requester_id
            JOIN vendors v ON v.vendor_id = p.vendor_id
            LEFT JOIN (
