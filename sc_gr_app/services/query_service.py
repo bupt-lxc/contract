@@ -388,9 +388,9 @@ def search_pos(
 
     if filters and "is_fc_po" in filters:
         if filters["is_fc_po"] == "1":
-            base_clauses.append("(pos.request_type = 'FC' OR sc.request_type = 'FC')")
+            base_clauses.append("(po.request_type = 'FC' OR sc.request_type = 'FC')")
         elif filters["is_fc_po"] == "0":
-            base_clauses.append("(pos.request_type IS NULL AND sc.request_type != 'FC')")
+            base_clauses.append("(po.request_type IS NULL AND sc.request_type != 'FC')")
         filters = {k: v for k, v in filters.items() if k != "is_fc_po"}
 
     if filters and "is_independent" in filters:
@@ -406,11 +406,11 @@ def search_pos(
         select
           po.*,
           sc.sc_no,
-          coalesce(pos.request_type, sc.request_type) as sc_request_type,
+          coalesce(po.request_type, sc.request_type) as sc_request_type,
           u.user_name as requester_name,
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
-          case when pos.request_type = 'FC' or sc.request_type = 'FC'
+          case when po.request_type = 'FC' or sc.request_type = 'FC'
             then po.po_amount - coalesce(calloff_totals.allocated, 0)
             else po.po_amount - coalesce(gr_totals.pending_total, 0)
                  - coalesce(gr_totals.con_value_total, 0)
@@ -724,7 +724,7 @@ def workbench_data(
                 f"po.created_at, po.contract_from, po.contract_to, "
                 f"sc.sc_no, sc.currency, "
                 f"u.user_name AS requester_name, "
-                f"CASE WHEN pos.request_type = 'FC' OR sc.request_type = 'FC' "
+                f"CASE WHEN po.request_type = 'FC' OR sc.request_type = 'FC' "
                 f"THEN po.po_amount - COALESCE(calloff_sums.allocated, 0) "
                 f"ELSE po.po_amount - COALESCE(gr_sums.pending_total, 0) "
                 f"- COALESCE(gr_sums.con_value_total, 0) END AS open_po_amount "

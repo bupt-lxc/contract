@@ -529,7 +529,7 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                 # FC PO call-off amount check (effective FC type)
                 is_fc = before.get("request_type") == "FC"
                 if not is_fc and sc_id and sc:
-                    is_fc = sc.get("request_type") == "FC"
+                    is_fc = sc["request_type"] == "FC"
 
                 if is_fc and "po_amount" in updates:
                     calloff_total = conn.execute(
