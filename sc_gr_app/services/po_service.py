@@ -509,7 +509,6 @@ def _finish_po_in_transaction(conn, po_id: str, current_user: dict, timestamp: s
 def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     require_requester_or_admin(current_user)
 
-
     with connect(config) as lookup_conn:
         sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
 
