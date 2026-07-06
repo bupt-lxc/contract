@@ -345,6 +345,8 @@ home: {
     downstreamConsumed: 'Downstream Consumed',
     downstreamPendingGr: 'Downstream Pending GR',
     newCalloffSc: 'New Call-off SC',
+    newRegularPo: 'New Regular PO',
+    newFcPo: 'New FC PO',
   },
 
   gr: {

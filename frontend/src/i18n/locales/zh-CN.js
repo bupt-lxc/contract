@@ -341,6 +341,8 @@ home: {
     downstreamPendingGr: '下游待验收 GR',
     downstreamPendingGrIncl: '下游待批准收货（含税）',
     newCalloffSc: '新建外委 SC',
+    newRegularPo: '新建常规PO',
+    newFcPo: '新建FC PO',
   },
 
   gr: {

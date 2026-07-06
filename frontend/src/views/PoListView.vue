@@ -7,9 +7,17 @@
     />
 
     <div style="margin-bottom:12px;display:flex;gap:8px">
-      <el-button type="primary" @click="openCreatePoDialog">
-        <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
-      </el-button>
+      <el-dropdown @command="handleCreatePoCommand" style="margin-right:8px">
+        <el-button type="primary">
+          <el-icon><Plus /></el-icon> {{ $t('po.addPo') }} <el-icon><ArrowDown /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="regular">{{ $t('po.newRegularPo') }}</el-dropdown-item>
+            <el-dropdown-item command="fc">{{ $t('po.newFcPo') }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button @click="importVisible = true">
         <el-icon><Upload /></el-icon> Import
       </el-button>
@@ -26,7 +34,9 @@
       :loading="state.loading"
       selectable
       @selection-change="val => selectedRows = val"
-      @detail="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+      @detail="row => row.sc_id
+        ? $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)
+        : $router.push(`/po/${row.po_id}`)"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
       @submit="row => handleSubmitPo(row)"
       @finish="row => handleFinishPo(row)"
@@ -103,7 +113,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload } from '@element-plus/icons-vue'
+import { Plus, ArrowDown, Download, Upload } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { usePo } from '@/composables/usePo.js'
 import { useExport } from '@/composables/useExport.js'
@@ -200,6 +210,27 @@ function openCreatePoDialog() {
   scSelectVisible.value = true
 }
 
+function handleCreatePoCommand(command) {
+  if (command === 'regular') {
+    openCreatePoDialog()
+  } else if (command === 'fc') {
+    openCreateFcPoDialog()
+  }
+}
+
+async function openCreateFcPoDialog() {
+  selectedScId.value = ''
+  selectedScRecord.value = null
+  scSelectVisible.value = false
+  try {
+    const result = await callApi('search_vendors', { limit: 500 })
+    scLinkedVendors.value = result.rows || []
+  } catch { scLinkedVendors.value = [] }
+  poDialogMode.value = 'create'
+  poDialogRecord.value = null
+  poDialogVisible.value = true
+}
+
 async function confirmScSelection() {
   if (!selectedScId.value) return
   selectedScRecord.value = eligibleScs.value.find(s => s.sc_id === selectedScId.value) || null
@@ -256,19 +287,19 @@ async function handleFinishPo(row) {
 async function handlePoSave(data) {
   try {
     const { _attachments, ...formData } = data
-    let poId, scId
-    if (poDialogMode.value === 'create') {
-      const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id }
-      const created = await createPo(payload)
-      poId = created.po_id
-      scId = created.sc_id || payload.sc_id
+    const isFcPo = !selectedScRecord.value
+    const payload = { ...formData }
+    if (isFcPo) {
+      payload.request_type = 'FC'
     } else {
-      poId = poDialogRecord.value?.po_id
-      scId = poDialogRecord.value?.sc_id
-      await updatePo(poId, formData)
+      payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
     }
+    const created = await createPo(payload)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId })
+      await callApi('add_attachments', {
+        entity_type: 'po', entity_id: created.po_id,
+        file_paths: _attachments, parent_sc_id: created.sc_id || null
+      })
     }
     ElMessage.success(t('common.saved'))
     poDialogVisible.value = false
@@ -282,10 +313,19 @@ async function handlePoSave(data) {
 async function handlePoSaveDraft(data) {
   try {
     const { _attachments, ...formData } = data
-    const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id, status: 'draft' }
+    const isFcPo = !selectedScRecord.value
+    const payload = { ...formData, status: 'draft' }
+    if (isFcPo) {
+      payload.request_type = 'FC'
+    } else {
+      payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
+    }
     const created = await createPo(payload)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: created.po_id, file_paths: _attachments, parent_sc_id: created.sc_id })
+      await callApi('add_attachments', {
+        entity_type: 'po', entity_id: created.po_id,
+        file_paths: _attachments, parent_sc_id: created.sc_id || null
+      })
     }
     ElMessage.success(t('po.draftSaved'))
     poDialogVisible.value = false
