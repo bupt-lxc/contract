@@ -329,6 +329,10 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                         before=None,
                         after=created,
                     )
+                    notification_service.queue_status_change(
+                        conn, "po", po_id, "create",
+                        {"requester_id": requester_id}, current_user
+                    )
                     conn.commit()
                 except Exception:
                     conn.rollback()
@@ -713,8 +717,8 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             ).fetchone()
             if sc is None:
                 raise NotFound(f"SC {sc_id} not found")
-            if sc["requester_id"] != current_user["user_id"]:
-                raise PermissionDenied("Only the SC requester can recall POs")
+            if current_user.get("role") != "admin" and sc["requester_id"] != current_user["user_id"]:
+                raise PermissionDenied("Only the SC requester or admin can recall POs")
             if sc["status"] == "finished":
                 raise ConflictError("Finished SC cannot be edited")
         else:
