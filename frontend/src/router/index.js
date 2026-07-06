@@ -32,6 +32,12 @@ const routes = [
     meta: { layout: 'default', title: 'PO Detail' }
   },
   {
+    path: '/po/:poId',
+    name: 'po-detail-independent',
+    component: () => import('@/views/PoDetailView.vue'),
+    meta: { layout: 'default', title: 'PO Detail' }
+  },
+  {
     path: '/sc/:scId/po/:poId/gr/:grId',
     name: 'gr-detail',
     component: () => import('@/views/GrDetailView.vue'),

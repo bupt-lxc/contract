@@ -6,11 +6,11 @@
         <p><StatusBadge v-if="po.status" :status="po.status" /></p>
       </div>
       <div class="header-actions">
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status !== 'finished'" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_manage_po && po.status === 'active'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
+        <el-button v-if="permissions?.can_manage_po && po.status !== 'finished'" :disabled="loadingState.count > 0" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+        <el-button v-if="permissions?.can_manage_po && po.status === 'draft'" type="primary" :disabled="loadingState.count > 0" @click="handleSubmit">{{ $t('common.submit') }}</el-button>
+        <el-button v-if="permissions?.can_manage_po && po.status === 'active'" type="info" :disabled="loadingState.count > 0" @click="handleFinish">{{ $t('common.finish') }}</el-button>
         <el-button v-if="isRequester && po.status === 'active'" type="warning" :disabled="loadingState.count > 0" @click="handleRecall">{{ $t('po.recall') }}</el-button>
-        <el-button v-if="scDetail?.permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
+        <el-button v-if="permissions?.can_delete_po && po.status === 'draft'" type="danger" :disabled="loadingState.count > 0" @click="handleDelete">{{ $t('common.delete') }}</el-button>
         <el-button v-if="po.po_id" :disabled="loadingState.count > 0" @click="handleSendEmail('po', po.po_id)">
           <el-icon><Message /></el-icon> {{ $t('email.sendEmail') }}
         </el-button>
@@ -25,20 +25,22 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poInformation') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo && po.status !== 'finished'" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+          <el-button v-if="permissions?.can_manage_gr && !isFcPo && po.status !== 'finished'" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
-          <el-button v-if="scDetail?.permissions?.can_manage_po && isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
+          <el-button v-if="permissions?.can_manage_po && isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
             <el-icon><Plus /></el-icon> {{ $t('po.newCalloffSc') }}
           </el-button>
         </div>
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item :label="$t('sc.scId')">
-            <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
-          </el-descriptions-item>
-          <el-descriptions-item :label="$t('sc.scNo')">{{ scDetail.sc?.sc_no || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_name || scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
-          <el-descriptions-item />
+          <template v-if="hasSc">
+            <el-descriptions-item :label="$t('sc.scId')">
+              <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
+            </el-descriptions-item>
+            <el-descriptions-item :label="$t('sc.scNo')">{{ scDetail.sc?.sc_no || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_name || scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
+            <el-descriptions-item />
+          </template>
           <el-descriptions-item :label="$t('po.poId')">{{ po.po_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('po.poNo')">{{ po.po_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id }}</el-descriptions-item>
@@ -67,7 +69,7 @@
         :fields="poProcessSummaryFields"
       />
 
-      <div v-if="!isFcPo" class="section-card">
+      <div v-if="hasSc && !isFcPo" class="section-card">
         <div class="section-header">
           <h3>{{ $t('gr.grRecords') }}</h3>
           <el-button size="small" @click="handleExportGrs">
@@ -90,7 +92,7 @@
       <div v-if="isFcPo" class="section-card">
         <div class="section-header">
           <h3>{{ $t('sc.calloffBadge') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_po" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
+          <el-button v-if="permissions?.can_manage_po" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
             <el-icon><Plus /></el-icon> {{ $t('po.newCalloffSc') }}
           </el-button>
         </div>
@@ -115,9 +117,9 @@
         <AttachmentList
           entity-type="po"
           :entity-id="po.po_id"
-          :parent-sc-id="scId"
+          :parent-sc-id="hasSc ? scId : null"
           :refresh-key="attachRefreshKey"
-          @changed="fetchDetail(scId)"
+          @changed="refreshDetail"
         />
       </div>
 
@@ -158,9 +160,9 @@
       v-model:visible="grAttachVisible"
       entity-type="gr"
       :entity-id="grAttachRecord?.gr_id || ''"
-      :parent-sc-id="scId"
+      :parent-sc-id="hasSc ? scId : null"
       :parent-po-id="poId"
-      @changed="fetchDetail(scId)"
+      @changed="refreshDetail"
     />
 
     <PoFormDialog
@@ -234,21 +236,38 @@ const { exportRows } = useExport()
 
 const scId = computed(() => route.params.scId)
 const poId = computed(() => route.params.poId)
+const hasSc = computed(() => !!route.params.scId)
 const scDetail = computed(() => scState.detail)
+const poDetail = ref(null)
 const po = computed(() => {
-  const pos = scDetail.value?.pos || []
-  return pos.find(p => String(p.po_id) === String(poId.value)) || {}
+  if (hasSc.value) {
+    const pos = scDetail.value?.pos || []
+    return pos.find(p => String(p.po_id) === String(poId.value)) || {}
+  }
+  return poDetail.value?.po || {}
 })
 const isFcPo = computed(() => po.value?.sc_request_type === 'FC')
 const grs = computed(() => {
-  const allGrs = scDetail.value?.grs || []
-  return allGrs.filter(g => String(g.po_id) === String(poId.value))
+  if (hasSc.value) {
+    const allGrs = scDetail.value?.grs || []
+    return allGrs.filter(g => String(g.po_id) === String(poId.value))
+  }
+  return []
 })
 const scVendors = computed(() => scDetail.value?.vendors || [])
 const vendors = computed(() => vendorState.rows)
 const poOperationRecords = computed(() => {
-  const logs = scDetail.value?.operation_records || []
-  return logs.filter(l => l.object_type === 'po' && l.object_id === poId.value)
+  if (hasSc.value) {
+    const logs = scDetail.value?.operation_records || []
+    return logs.filter(l => l.object_type === 'po' && l.object_id === poId.value)
+  }
+  return poDetail.value?.operation_records || []
+})
+const permissions = computed(() => {
+  if (hasSc.value) {
+    return scDetail.value?.permissions || {}
+  }
+  return poDetail.value?.permissions || {}
 })
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 const notificationConfig = computed(() => notifState.poConfig)
@@ -287,14 +306,18 @@ const grAttachVisible = ref(false)
 const grAttachRecord = ref(null)
 const attachRefreshKey = ref(0)
 const activeUsers = ref([])
-const calloffScs = ref([])
+const calloffScsData = ref([])
+const calloffScs = computed(() => {
+  if (hasSc.value) return calloffScsData.value
+  return poDetail.value?.calloff_scs || []
+})
 
 async function loadCalloffData() {
   if (!isFcPo.value) return
   try {
     const result = await callApi('search_scs', { filters: { calloff_po_id: po.value.po_id } })
-    calloffScs.value = result.rows || []
-  } catch { calloffScs.value = [] }
+    calloffScsData.value = result.rows || []
+  } catch { calloffScsData.value = [] }
 }
 
 function openEditDialog() { editDialogVisible.value = true }
@@ -305,11 +328,11 @@ async function handleEditSave(data) {
     const targetPoId = formData.po_id || poId.value
     await updatePo(targetPoId, formData)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments, parent_sc_id: scId.value })
+      await callApi('add_attachments', { entity_type: 'po', entity_id: targetPoId, file_paths: _attachments, parent_sc_id: hasSc.value ? scId.value : null })
       attachRefreshKey.value++
     }
     ElMessage.success(t('po.poUpdated'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
     editDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
@@ -319,7 +342,7 @@ async function handleFinish() {
     await ElMessageBox.confirm(t('po.finishConfirm'), t('common.confirm'), { type: 'warning' })
     await finishPo(poId.value)
     ElMessage.success(t('po.poFinished'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -330,7 +353,7 @@ async function handleRecall() {
     await ElMessageBox.confirm(t('po.confirmRecallToDraft'), t('common.confirm'), { type: 'warning' })
     await callApi('recall_po', { po_id: poId.value })
     ElMessage.success(t('po.recalled'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -341,7 +364,11 @@ async function handleDelete() {
     await ElMessageBox.confirm(t('po.confirmDeletePo'), t('common.confirm'), { type: 'error' })
     await callApi('delete_po', { po_id: poId.value })
     ElMessage.success(t('po.poDeleted'))
-    router.replace(`/sc/${scId.value}`)
+    if (hasSc.value) {
+      router.replace(`/sc/${scId.value}`)
+    } else {
+      router.replace('/po')
+    }
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -352,7 +379,7 @@ async function handleSubmit() {
     await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
     await submitPo(poId.value)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
@@ -370,7 +397,7 @@ async function handleCalloffScSave(data) {
     }
     ElMessage.success(t('common.saved'))
     scDialogVisible.value = false
-    await fetchDetail(scId.value)
+    await refreshDetail()
     await loadCalloffData()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error(e.message || String(e))
@@ -395,7 +422,7 @@ async function handleGrApprove(row) {
     const conValue = value ? parseFloat(value) : null
     await approveGr(row.gr_id, conValue)
     ElMessage.success(t('gr.grApproved'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -406,7 +433,7 @@ async function handleGrDeny(row) {
     await ElMessageBox.confirm(t('gr.denyConfirm'), t('common.confirm'), { type: 'warning' })
     await denyGr(row.gr_id)
     ElMessage.success(t('gr.grDenied'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -417,7 +444,7 @@ async function handleGrSubmit(row) {
     await ElMessageBox.confirm(t('common.submit') + ' this GR?', t('common.confirm'), { type: 'warning' })
     await submitGr(row.gr_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
 }
 
@@ -441,7 +468,7 @@ async function handleGrFinish(row) {
     } else {
       ElMessage.success(t('gr.grFinished'))
     }
-    await fetchDetail(scId.value)
+    await refreshDetail()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -486,7 +513,7 @@ async function handleGrSave(data) {
       }
       if (_attachments?.length) {
         payload._attachments = _attachments
-        payload._parent_sc_id = scId.value
+        payload._parent_sc_id = hasSc.value ? scId.value : null
         payload._parent_po_id = poId.value
       }
       const created = await createGr(payload)
@@ -495,12 +522,12 @@ async function handleGrSave(data) {
       grId = formData.gr_id
       await updateGr(grId, formData)
       if (_attachments?.length) {
-        await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+        await callApi('add_attachments', { entity_type: 'gr', entity_id: grId, file_paths: _attachments, parent_sc_id: hasSc.value ? scId.value : null, parent_po_id: poId.value })
         attachRefreshKey.value++
       }
     }
     ElMessage.success(t('common.saved'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
     grDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
@@ -511,16 +538,16 @@ async function handleGrSaveDraft(data) {
     const payload = { ...formData, po_id: poId.value, status: 'draft' }
     if (_attachments?.length) {
       payload._attachments = _attachments
-      payload._parent_sc_id = scId.value
+      payload._parent_sc_id = hasSc.value ? scId.value : null
       payload._parent_po_id = poId.value
     }
     const created = await createGr(payload)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'gr', entity_id: created.gr_id, file_paths: _attachments, parent_sc_id: scId.value, parent_po_id: poId.value })
+      await callApi('add_attachments', { entity_type: 'gr', entity_id: created.gr_id, file_paths: _attachments, parent_sc_id: hasSc.value ? scId.value : null, parent_po_id: poId.value })
       attachRefreshKey.value++
     }
     ElMessage.success(t('po.draftSaved'))
-    await fetchDetail(scId.value)
+    await refreshDetail()
     grDialogVisible.value = false
   } catch (e) { ElMessage.error(e.message); throw e }
 }
@@ -543,14 +570,41 @@ async function handleCustomSchedulesSave(schedules) {
   }
 }
 
+async function refreshDetail() {
+  if (hasSc.value) {
+    await fetchDetail(scId.value)
+  } else {
+    try {
+      const result = await callApi('get_po_detail', { po_id: poId.value })
+      poDetail.value = result
+    } catch (e) {
+      ElMessage.error(e.message || 'Failed to refresh PO detail')
+    }
+  }
+}
+
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  await Promise.all([fetchDetail(scId.value), searchVendors()])
-  await loadCalloffData()
-  // Fetch PO notification config once PO ID is available
-  if (poId.value) {
-    try { await fetchPoConfig(poId.value) } catch {}
-    try { await fetchCustomSchedules(poId.value) } catch {}
+  await searchVendors()
+
+  if (hasSc.value) {
+    await fetchDetail(scId.value)
+    await loadCalloffData()
+    if (poId.value) {
+      try { await fetchPoConfig(poId.value) } catch {}
+      try { await fetchCustomSchedules(poId.value) } catch {}
+    }
+  } else {
+    try {
+      const result = await callApi('get_po_detail', { po_id: poId.value })
+      poDetail.value = result
+    } catch (e) {
+      ElMessage.error(e.message || 'Failed to load PO detail')
+    }
+    if (poId.value) {
+      try { await fetchPoConfig(poId.value) } catch {}
+      try { await fetchCustomSchedules(poId.value) } catch {}
+    }
   }
 })
 </script>
