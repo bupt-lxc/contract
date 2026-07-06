@@ -721,7 +721,9 @@ home: {
 
   settings: {
     attachmentsDir: 'Attachments Directory',
-    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.'
+    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.',
+    senderEmail: 'Sender Email',
+    senderEmailHint: 'Notification emails will be sent from this Outlook account. Leave empty to use the default account.'
   },
 
   confirm: {

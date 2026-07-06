@@ -377,8 +377,14 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     attachments = entity_info.get("_attachments", [])
     attachment_str = ", ".join(attachments) if attachments else "None"
 
+    # Greeting
+    short_id = _short_entity_id(entity_id)
+    operator = _abbreviate_name(actor_name) if actor_name else "System"
+    action = _describe_event(event_type, event_key)
+    greeting = f"<p style=\"margin:0 0 16px 0;font-family:Arial,sans-serif;font-size:14px;color:#333\">{operator} performed {action} on {short_id}. Details below:</p>"
+
     # Table 1: Notification Info
-    lines = []
+    lines = [greeting]
     lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-bottom:20px">')
     lines.append('<tr><th colspan="2" style="background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd">Notification Info</th></tr>')
     for label, value in [

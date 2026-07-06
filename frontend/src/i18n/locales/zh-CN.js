@@ -721,7 +721,9 @@ home: {
 
   settings: {
     attachmentsDir: '附件存储位置',
-    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。'
+    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。',
+    senderEmail: '发件邮箱',
+    senderEmailHint: '通知邮件将使用此 Outlook 账户发送。留空则使用默认账户。'
   },
 
   confirm: {

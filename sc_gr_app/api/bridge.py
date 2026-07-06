@@ -1263,6 +1263,39 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_sender_email(self, _payload=None) -> dict:
+        """Return the configured notification sender email address."""
+        try:
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
+                ).fetchone()
+                return ok({"email": row["setting_value"] if row else ""})
+        except Exception as exc:
+            return fail(exc)
+
+    def set_sender_email(self, payload) -> dict:
+        """Set the notification sender email address."""
+        try:
+            from sc_gr_app.db.connection import connect
+            from datetime import datetime, timezone
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            email = _require_payload_field(payload, "email")
+            timestamp = datetime.now(timezone.utc).isoformat()
+            with connect(self.config) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                    ("notify.sender_email", email.strip(), timestamp),
+                )
+                conn.commit()
+            return ok({"email": email.strip()})
+        except Exception as exc:
+            return fail(exc)
+
     def pick_folder(self, _payload=None) -> dict:
         """Open native folder picker dialog, return chosen path."""
         try:
