@@ -12,7 +12,7 @@ from sc_gr_app.services.budget_service import compute_sc_budget_decimal
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("sc_id", "vendor_id", "po_amount")
+REQUIRED_FIELDS = ("vendor_id", "po_amount")
 SUPPORTED_STATUSES = {"draft", "active", "finished"}
 
 
@@ -110,124 +110,229 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
     _require_fields(data, REQUIRED_FIELDS)
     po_amount = _positive_number(data["po_amount"], "po_amount")
 
-    sc_id = data["sc_id"]
+    sc_id = data.get("sc_id")
+    request_type = data.get("request_type")
     timestamp = utc_now()
 
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
-        po_id = _generate_po_id(config, current_user["machine_id"])
-        with connect(config) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                sc = conn.execute(
-                    "select * from sc_records where sc_id = ?",
-                    (sc_id,),
-                ).fetchone()
-                if sc is None:
-                    raise NotFound(f"SC not found: {sc_id}")
+    # Semantic validation
+    if sc_id and request_type == "FC":
+        raise ValidationError(
+            "request_type 'FC' is not valid when sc_id is provided; "
+            "use independent FC PO without sc_id"
+        )
+    if not sc_id and request_type != "FC":
+        raise ValidationError(
+            "request_type must be 'FC' when creating an independent PO without sc_id"
+        )
 
-                sc_status = sc["status"]
-                if sc_status not in ("draft", "approved"):
-                    raise ConflictError("SC must be draft or approved")
+    machine_id = current_user["machine_id"]
 
-                # Derive PO status from SC context
-                status = data.get("status")
-                if status is None:
-                    status = "draft" if sc_status == "draft" else "active"
-                elif status not in SUPPORTED_STATUSES:
-                    raise ValidationError("status is invalid")
-                # Enforce: draft SC → draft PO only
-                if sc_status == "draft" and status != "draft":
-                    raise ConflictError("Draft SC only allows draft PO")
+    if sc_id:
+        # SC-linked PO branch
+        with LeaseLock(config.lock_dir, f"sc:{sc_id}", machine_id):
+            po_id = _generate_po_id(config, machine_id)
+            with connect(config) as conn:
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    sc = conn.execute(
+                        "select * from sc_records where sc_id = ?",
+                        (sc_id,),
+                    ).fetchone()
+                    if sc is None:
+                        raise NotFound(f"SC not found: {sc_id}")
 
-                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
-                    raise PermissionDenied("Only the SC owner or admin can create POs")
+                    sc_status = sc["status"]
+                    if sc_status not in ("draft", "approved"):
+                        raise ConflictError("SC must be draft or approved")
 
-                vendor = conn.execute(
-                    "select vendor_id from vendors where vendor_id = ?",
-                    (data["vendor_id"],),
-                ).fetchone()
-                if vendor is None:
-                    raise NotFound(f"Vendor not found: {data['vendor_id']}")
+                    # Derive PO status from SC context
+                    status = data.get("status")
+                    if status is None:
+                        status = "draft" if sc_status == "draft" else "active"
+                    elif status not in SUPPORTED_STATUSES:
+                        raise ValidationError("status is invalid")
+                    # Enforce: draft SC → draft PO only
+                    if sc_status == "draft" and status != "draft":
+                        raise ConflictError("Draft SC only allows draft PO")
 
-                sc_vendor = conn.execute(
-                    "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
-                    (sc_id, data["vendor_id"]),
-                ).fetchone()
-                if sc_vendor is None:
-                    raise ValidationError(
-                        f"Vendor {data['vendor_id']} is not linked to SC {sc_id}"
+                    if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the SC owner or admin can create POs")
+
+                    vendor = conn.execute(
+                        "select vendor_id from vendors where vendor_id = ?",
+                        (data["vendor_id"],),
+                    ).fetchone()
+                    if vendor is None:
+                        raise NotFound(f"Vendor not found: {data['vendor_id']}")
+
+                    sc_vendor = conn.execute(
+                        "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                        (sc_id, data["vendor_id"]),
+                    ).fetchone()
+                    if sc_vendor is None:
+                        raise ValidationError(
+                            f"Vendor {data['vendor_id']} is not linked to SC {sc_id}"
+                        )
+
+                    is_draft = status == "draft"
+                    if not is_draft:
+                        budget = compute_sc_budget_decimal(config, sc_id)
+                        if budget["allocated_po_amount"] + po_amount > Decimal(
+                            str(sc["sc_amount"])
+                        ):
+                            raise ConflictError("PO total would exceed SC amount")
+
+                    active_date_value = None if is_draft else timestamp
+
+                    conn.execute(
+                        """
+                        insert into pos (
+                          po_id,
+                          sc_id,
+                          vendor_id,
+                          po_no,
+                          requester_id,
+                          po_amount,
+                          status,
+                          contract_from,
+                          contract_to,
+                          contract_no,
+                          payment_frequency,
+                          contract_pos,
+                          contract_type,
+                          cost_center,
+                          purchaser,
+                          active_date,
+                          created_at,
+                          updated_at,
+                          request_type
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            po_id,
+                            sc_id,
+                            data["vendor_id"],
+                            data.get("po_no"),
+                            sc["requester_id"],
+                            float(po_amount),
+                            status,
+                            data.get("contract_from"),
+                            data.get("contract_to"),
+                            data.get("contract_no"),
+                            data.get("payment_frequency"),
+                            data.get("contract_pos"),
+                            data.get("contract_type"),
+                            data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
+                            data.get("purchaser"),
+                            active_date_value,
+                            timestamp,
+                            timestamp,
+                            None,  # request_type NULL for SC-linked POs
+                        ),
                     )
+                    created = _get_po(conn, po_id)
+                    write_operation_record(
+                        conn,
+                        action_type="create_po",
+                        object_type="po",
+                        object_id=po_id,
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=machine_id,
+                        before=None,
+                        after=created,
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+    else:
+        # Independent FC PO branch
+        po_id = _generate_po_id(config, machine_id)
+        with LeaseLock(config.lock_dir, f"po:{po_id}", machine_id):
+            with connect(config) as conn:
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
 
-                is_draft = status == "draft"
-                if not is_draft:
-                    budget = compute_sc_budget_decimal(config, sc_id)
-                    if budget["allocated_po_amount"] + po_amount > Decimal(
-                        str(sc["sc_amount"])
-                    ):
-                        raise ConflictError("PO total would exceed SC amount")
+                    # Vendor existence check
+                    vendor = conn.execute(
+                        "select vendor_id from vendors where vendor_id = ?",
+                        (data["vendor_id"],),
+                    ).fetchone()
+                    if vendor is None:
+                        raise NotFound(f"Vendor not found: {data['vendor_id']}")
 
-                active_date_value = None if is_draft else timestamp
+                    status = data.get("status", "draft")
+                    if status not in SUPPORTED_STATUSES:
+                        raise ValidationError("status is invalid")
 
-                conn.execute(
-                    """
-                    insert into pos (
-                      po_id,
-                      sc_id,
-                      vendor_id,
-                      po_no,
-                      requester_id,
-                      po_amount,
-                      status,
-                      contract_from,
-                      contract_to,
-                      contract_no,
-                      payment_frequency,
-                      contract_pos,
-                      contract_type,
-                      cost_center,
-                      purchaser,
-                      active_date,
-                      created_at,
-                      updated_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        po_id,
-                        sc_id,
-                        data["vendor_id"],
-                        data.get("po_no"),
-                        sc["requester_id"],
-                        float(po_amount),
-                        status,
-                        data.get("contract_from"),
-                        data.get("contract_to"),
-                        data.get("contract_no"),
-                        data.get("payment_frequency"),
-                        data.get("contract_pos"),
-                        data.get("contract_type"),
-                        data.get("cost_center") or str(sc["cost_center"]) if sc["cost_center"] is not None else None,
-                        data.get("purchaser"),
-                        active_date_value,
-                        timestamp,
-                        timestamp,
-                    ),
-                )
-                created = _get_po(conn, po_id)
-                write_operation_record(
-                    conn,
-                    action_type="create_po",
-                    object_type="po",
-                    object_id=po_id,
-                    sc_id=sc_id,
-                    operator_id=current_user["user_id"],
-                    machine_id=current_user["machine_id"],
-                    before=None,
-                    after=created,
-                )
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
+                    is_draft = status == "draft"
+                    active_date_value = None if is_draft else timestamp
+
+                    requester_id = data.get("requester_id") or current_user["user_id"]
+
+                    conn.execute(
+                        """
+                        insert into pos (
+                          po_id,
+                          sc_id,
+                          vendor_id,
+                          po_no,
+                          requester_id,
+                          po_amount,
+                          status,
+                          contract_from,
+                          contract_to,
+                          contract_no,
+                          payment_frequency,
+                          contract_pos,
+                          contract_type,
+                          cost_center,
+                          purchaser,
+                          active_date,
+                          created_at,
+                          updated_at,
+                          request_type
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            po_id,
+                            None,  # sc_id NULL for independent FC PO
+                            data["vendor_id"],
+                            data.get("po_no"),
+                            requester_id,
+                            float(po_amount),
+                            status,
+                            data.get("contract_from"),
+                            data.get("contract_to"),
+                            data.get("contract_no"),
+                            data.get("payment_frequency"),
+                            data.get("contract_pos"),
+                            data.get("contract_type"),
+                            data.get("cost_center"),
+                            data.get("purchaser"),
+                            active_date_value,
+                            timestamp,
+                            timestamp,
+                            "FC",
+                        ),
+                    )
+                    created = _get_po(conn, po_id)
+                    write_operation_record(
+                        conn,
+                        action_type="create_po",
+                        object_type="po",
+                        object_id=po_id,
+                        sc_id=None,
+                        operator_id=current_user["user_id"],
+                        machine_id=machine_id,
+                        before=None,
+                        after=created,
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
 
     return created
 
@@ -265,13 +370,16 @@ def _submit_po_drafts(conn, po_ids: list[str], timestamp: str) -> list[dict]:
             before=before,
             after=after,
         )
-        sc = conn.execute(
-            "SELECT requester_id FROM sc_records WHERE sc_id = ?",
-            (after["sc_id"],),
-        ).fetchone()
+        if after.get("sc_id"):
+            sc = conn.execute(
+                "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                (after["sc_id"],),
+            ).fetchone()
+        else:
+            sc = None
         notification_service.queue_status_change(
             conn, "po", po_id, "submit",
-            {"requester_id": sc["requester_id"]} if sc else {},
+            {"requester_id": sc["requester_id"]} if sc else {"requester_id": after.get("requester_id")},
             {"user_id": after.get("created_by", "SYSTEM"), "machine_id": "SYSTEM_CASCADE"}
         )
         submitted.append(after)
@@ -283,9 +391,11 @@ def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
-        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
 
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+    lock_key = f"sc:{sc_id}" if sc_id else f"po:{po_id}"
+    with LeaseLock(config.lock_dir, lock_key, current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -293,25 +403,27 @@ def submit_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "draft":
                     raise ConflictError("PO must be draft to submit")
 
-                # SC must not be draft for PO submission
-                sc = conn.execute(
-                    "SELECT status, sc_amount FROM sc_records WHERE sc_id = ?", (sc_id,)
-                ).fetchone()
-                if sc is None:
-                    raise ConflictError("SC not found")
-                if sc["status"] == "draft":
-                    raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
-
-                # Budget check at submission time (skip if SC has no amount set)
-                if sc["sc_amount"] is not None:
-                    po_amount = Decimal(str(before["po_amount"]))
-                    budget = compute_sc_budget_decimal(config, sc_id)
-                    if budget["allocated_po_amount"] + po_amount > Decimal(
-                        str(sc["sc_amount"])
-                    ):
-                        raise ConflictError("PO total would exceed SC amount")
-
                 timestamp = utc_now()
+
+                if sc_id:
+                    # SC must not be draft for PO submission
+                    sc = conn.execute(
+                        "SELECT status, sc_amount FROM sc_records WHERE sc_id = ?", (sc_id,)
+                    ).fetchone()
+                    if sc is None:
+                        raise ConflictError("SC not found")
+                    if sc["status"] == "draft":
+                        raise ConflictError("Cannot submit PO while SC is still draft. Submit the SC first.")
+
+                    # Budget check at submission time (skip if SC has no amount set)
+                    if sc["sc_amount"] is not None:
+                        po_amount = Decimal(str(before["po_amount"]))
+                        budget = compute_sc_budget_decimal(config, sc_id)
+                        if budget["allocated_po_amount"] + po_amount > Decimal(
+                            str(sc["sc_amount"])
+                        ):
+                            raise ConflictError("PO total would exceed SC amount")
+
                 _submit_po_drafts(conn, [po_id], timestamp)
                 after = _get_po_or_raise(conn, po_id)
                 conn.commit()
@@ -343,25 +455,36 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
         raise ValidationError("No PO fields to update")
 
     with connect(config) as lookup_conn:
-        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
 
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+    lock_key = f"sc:{sc_id}" if sc_id else f"po:{po_id}"
+    with LeaseLock(config.lock_dir, lock_key, current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                sc = conn.execute(
-                    "select * from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if sc["status"] == "finished":
-                    raise ConflictError("Finished SC cannot be edited")
+
+                sc = None
+                if sc_id:
+                    sc = conn.execute(
+                        "select * from sc_records where sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                    if sc is None:
+                        raise NotFound(f"SC not found: {sc_id}")
+                    if sc["status"] == "finished":
+                        raise ConflictError("Finished SC cannot be edited")
+                    if before["status"] == "draft" and sc["status"] == "finished":
+                        raise ConflictError("Finished SC cannot be edited")
+                    if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the SC owner or admin can edit POs")
+                else:
+                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the PO owner or admin can edit POs")
+
                 if before["status"] == "finished":
                     raise ConflictError("Finished PO cannot be edited")
-                if before["status"] == "draft" and sc["status"] == "finished":
-                    raise ConflictError("Finished SC cannot be edited")
-                if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
-                    raise PermissionDenied("Only the SC owner or admin can edit POs")
 
                 merged = {**before, **updates}
                 po_amount = _positive_number(merged["po_amount"], "po_amount")
@@ -375,29 +498,36 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
                     ).fetchone()
                     if vendor is None:
                         raise NotFound(f"Vendor not found: {merged['vendor_id']}")
-                    sc_vendor = conn.execute(
-                        "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
-                        (sc_id, merged["vendor_id"]),
-                    ).fetchone()
-                    if sc_vendor is None:
-                        raise ValidationError(
-                            f"Vendor {merged['vendor_id']} is not linked to SC {sc_id}"
-                        )
+                    if sc_id:
+                        sc_vendor = conn.execute(
+                            "select 1 from sc_vendors where sc_id = ? and vendor_id = ?",
+                            (sc_id, merged["vendor_id"]),
+                        ).fetchone()
+                        if sc_vendor is None:
+                            raise ValidationError(
+                                f"Vendor {merged['vendor_id']} is not linked to SC {sc_id}"
+                            )
 
-                sibling_total = sum(
-                    (
-                        Decimal(str(row["po_amount"]))
-                        for row in conn.execute(
-                            "select po_amount from pos where sc_id = ? and po_id != ?",
-                            (before["sc_id"], po_id),
-                        )
-                    ),
-                    Decimal("0"),
-                )
-                if sibling_total + po_amount > Decimal(str(sc["sc_amount"])):
-                    raise ConflictError("PO total would exceed SC amount")
+                if sc_id:
+                    sibling_total = sum(
+                        (
+                            Decimal(str(row["po_amount"]))
+                            for row in conn.execute(
+                                "select po_amount from pos where sc_id = ? and po_id != ?",
+                                (before["sc_id"], po_id),
+                            )
+                        ),
+                        Decimal("0"),
+                    )
+                    if sibling_total + po_amount > Decimal(str(sc["sc_amount"])):
+                        raise ConflictError("PO total would exceed SC amount")
 
-                if sc["request_type"] == "FC" and "po_amount" in updates:
+                # FC PO call-off amount check (effective FC type)
+                is_fc = before.get("request_type") == "FC"
+                if not is_fc and sc_id and sc:
+                    is_fc = sc.get("request_type") == "FC"
+
+                if is_fc and "po_amount" in updates:
                     calloff_total = conn.execute(
                         "select coalesce(sum(sc_amount), 0) from sc_records where calloff_po_id = ?",
                         (po_id,),
@@ -466,12 +596,15 @@ def _finish_po_in_transaction(conn, po_id: str, current_user: dict, timestamp: s
     """Finish a PO within an existing transaction. Must NOT acquire locks."""
     before = _get_po_or_raise(conn, po_id)
 
-    sc = conn.execute(
-        "select status, requester_id from sc_records where sc_id = ?",
-        (before["sc_id"],),
-    ).fetchone()
-    if sc and sc["status"] == "finished":
-        raise ConflictError("Finished SC cannot be edited")
+    sc = None
+    if before.get("sc_id"):
+        sc = conn.execute(
+            "select status, requester_id from sc_records where sc_id = ?",
+            (before["sc_id"],),
+        ).fetchone()
+        if sc and sc["status"] == "finished":
+            raise ConflictError("Finished SC cannot be edited")
+
     if before["status"] != "active":
         raise ConflictError("PO must be active")
 
@@ -501,7 +634,7 @@ def _finish_po_in_transaction(conn, po_id: str, current_user: dict, timestamp: s
     )
     notification_service.queue_status_change(
         conn, "po", po_id, "finish",
-        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+        {"requester_id": sc["requester_id"]} if sc else {"requester_id": before["requester_id"]}, current_user
     )
     return after
 
@@ -510,20 +643,26 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
-        sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
+        po = _get_po_or_raise(lookup_conn, po_id)
+        sc_id = po["sc_id"]
 
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+    lock_key = f"sc:{sc_id}" if sc_id else f"po:{po_id}"
+    with LeaseLock(config.lock_dir, lock_key, current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
 
-                parent_sc = conn.execute(
-                    "select request_type from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
+                # Effective FC type check
+                is_fc = before.get("request_type") == "FC"
+                if not is_fc and sc_id:
+                    parent_sc = conn.execute(
+                        "select request_type from sc_records where sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                    is_fc = parent_sc and parent_sc["request_type"] == "FC"
 
-                if parent_sc and parent_sc["request_type"] == "FC":
+                if is_fc:
                     non_final_calloffs = conn.execute(
                         """
                         SELECT sc_id, status FROM sc_records
@@ -561,25 +700,29 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Recall PO back to draft. Only the SC requester can recall, and only from active.
-    Requires that the PO has no non-draft GRs."""
+    """Recall PO back to draft. Only the PO/SC owner or admin can recall, and only from active.
+    Requires that the PO has no non-draft GRs (or non-draft call-off SCs for FC POs)."""
 
     with connect(config) as lookup_conn:
         po = _get_po_or_raise(lookup_conn, po_id)
         sc_id = po["sc_id"]
-        sc = lookup_conn.execute(
-            "select status, requester_id from sc_records where sc_id = ?",
-            (sc_id,),
-        ).fetchone()
+        if sc_id:
+            sc = lookup_conn.execute(
+                "select status, requester_id from sc_records where sc_id = ?",
+                (sc_id,),
+            ).fetchone()
+            if sc is None:
+                raise NotFound(f"SC {sc_id} not found")
+            if sc["requester_id"] != current_user["user_id"]:
+                raise PermissionDenied("Only the SC requester can recall POs")
+            if sc["status"] == "finished":
+                raise ConflictError("Finished SC cannot be edited")
+        else:
+            if current_user["role"] != "admin" and po["requester_id"] != current_user["user_id"]:
+                raise PermissionDenied("Only the PO requester can recall POs")
 
-    if sc is None:
-        raise NotFound(f"SC {sc_id} not found")
-    if sc["requester_id"] != current_user["user_id"]:
-        raise PermissionDenied("Only the SC requester can recall POs")
-    if sc["status"] == "finished":
-        raise ConflictError("Finished SC cannot be edited")
-
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+    lock_key = f"sc:{sc_id}" if sc_id else f"po:{po_id}"
+    with LeaseLock(config.lock_dir, lock_key, current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -588,11 +731,16 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 if before["status"] != "active":
                     raise ConflictError("Only active PO can be recalled back to draft")
 
-                parent_sc = conn.execute(
-                    "select request_type from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if parent_sc and parent_sc["request_type"] == "FC":
+                # Effective FC type check
+                is_fc = before.get("request_type") == "FC"
+                if not is_fc and sc_id:
+                    parent_sc = conn.execute(
+                        "select request_type from sc_records where sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                    is_fc = parent_sc and parent_sc["request_type"] == "FC"
+
+                if is_fc:
                     non_draft_calloffs = conn.execute(
                         "select count(*) from sc_records where calloff_po_id = ? and status != 'draft'",
                         (po_id,),
@@ -618,19 +766,23 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                     action_type="recall_po",
                     object_type="po",
                     object_id=po_id,
-                    sc_id=sc_id,
+                    sc_id=before["sc_id"],
                     operator_id=current_user["user_id"],
                     machine_id=current_user["machine_id"],
                     before=before,
                     after=after,
                 )
-                sc_requester = conn.execute(
-                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
+                if sc_id:
+                    sc_requester = conn.execute(
+                        "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                else:
+                    sc_requester = None
                 notification_service.queue_status_change(
                     conn, "po", po_id, "recall",
-                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {}, current_user
+                    {"requester_id": sc_requester["requester_id"]} if sc_requester else {"requester_id": before["requester_id"]},
+                    current_user
                 )
                 conn.commit()
             except Exception:
@@ -641,39 +793,51 @@ def recall_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
 
 def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
-    """Delete a draft PO and its GRs/attachments. Admin or SC owner."""
+    """Delete a draft PO and its GRs/attachments. Admin or PO/SC owner."""
     require_requester_or_admin(current_user)
 
     with connect(config) as lookup_conn:
         po = _get_po_or_raise(lookup_conn, po_id)
         sc_id = po["sc_id"]
 
-    with LeaseLock(config.lock_dir, f"sc:{sc_id}", current_user["machine_id"]):
+    lock_key = f"sc:{sc_id}" if sc_id else f"po:{po_id}"
+    with LeaseLock(config.lock_dir, lock_key, current_user["machine_id"]):
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
                 if before["status"] != "draft":
                     raise ConflictError("Only draft PO can be deleted")
-                parent_sc = conn.execute(
-                    "select request_type from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if parent_sc and parent_sc["request_type"] == "FC":
+
+                # FC check (effective FC type)
+                is_fc = before.get("request_type") == "FC"
+                if not is_fc and sc_id:
+                    parent_sc = conn.execute(
+                        "select request_type from sc_records where sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                    is_fc = parent_sc and parent_sc["request_type"] == "FC"
+                if is_fc:
                     calloff_exists = conn.execute(
                         "select 1 from sc_records where calloff_po_id = ? limit 1",
                         (po_id,),
                     ).fetchone()
                     if calloff_exists:
                         raise ConflictError("Cannot delete PO(FC) with existing call-off SCs")
-                sc = conn.execute(
-                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if current_user["role"] != "admin" and (
-                    sc is None or sc["requester_id"] != current_user["user_id"]
-                ):
-                    raise PermissionDenied("Only the SC owner or admin can delete")
+
+                # Permission check
+                if sc_id:
+                    sc = conn.execute(
+                        "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                        (before["sc_id"],),
+                    ).fetchone()
+                    if current_user["role"] != "admin" and (
+                        sc is None or sc["requester_id"] != current_user["user_id"]
+                    ):
+                        raise PermissionDenied("Only the SC owner or admin can delete")
+                else:
+                    if current_user["role"] != "admin" and before["requester_id"] != current_user["user_id"]:
+                        raise PermissionDenied("Only the PO owner or admin can delete")
 
                 # Collect attachment paths
                 attach_paths = [
