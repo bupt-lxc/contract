@@ -1970,8 +1970,8 @@ def test_delete_draft_gr(app_config):
         assert conn.execute("SELECT 1 FROM gr_requests WHERE gr_id = ?", (gr["gr_id"],)).fetchone() is None
 
 
-def test_reject_draft_po_on_approved_sc(app_config):
-    """Approved SC rejects draft PO."""
+def test_allow_draft_po_on_approved_sc(app_config):
+    """Approved SC allows draft PO."""
     migrate(app_config)
     seed_users(app_config)
     sc_id, _po_id, _vendor_id = seed_approved_sc_vendor_po(app_config)
@@ -1981,11 +1981,11 @@ def test_reject_draft_po_on_approved_sc(app_config):
         {"vendor_id": "V2", "vendor_name": "Vendor2", "service_scope": "General Service"},
     )
     add_sc_vendor(app_config, ADMIN, sc_id, "V2")
-    with pytest.raises(ConflictError, match="Approved SC does not allow draft PO"):
-        create_po(
-            app_config, ADMIN,
-            {"sc_id": sc_id, "vendor_id": "V2", "po_amount": 300, "status": "draft"},
-        )
+    po = create_po(
+        app_config, ADMIN,
+        {"sc_id": sc_id, "vendor_id": "V2", "po_amount": 300, "status": "draft"},
+    )
+    assert po["status"] == "draft"
 
 
 def test_reject_non_pending_gr_on_draft_po(app_config):

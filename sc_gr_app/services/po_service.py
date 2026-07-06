@@ -138,8 +138,6 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                 # Enforce: draft SC → draft PO only
                 if sc_status == "draft" and status != "draft":
                     raise ConflictError("Draft SC only allows draft PO")
-                if sc_status == "approved" and status == "draft":
-                    raise ConflictError("Approved SC does not allow draft PO")
 
                 if current_user["role"] != "admin" and sc["requester_id"] != current_user["user_id"]:
                     raise PermissionDenied("Only the SC owner or admin can create POs")
