@@ -13,10 +13,13 @@ def fail(exc: Exception) -> dict:
         code = "UNEXPECTED_ERROR"
         message = str(exc) or "Unexpected application error"
 
-    return {
+    result = {
         "ok": False,
         "error": {
             "code": code,
             "message": message,
         },
     }
+    if isinstance(exc, AppError) and hasattr(exc, 'conflicts') and exc.conflicts:
+        result["conflicts"] = exc.conflicts
+    return result
