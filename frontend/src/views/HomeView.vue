@@ -178,7 +178,7 @@
                 v-for="row in (data.po?.[cell.status]?.rows || [])"
                 :key="row.po_id"
                 class="wb-cell__tr"
-                @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+                @click="row.sc_id ? $router.push(`/sc/${row.sc_id}/po/${row.po_id}`) : $router.push(`/po/${row.po_id}`)"
               >
                 <span class="wb-cell__td-id" :title="row.po_id">{{ row.po_no || shortId(row.po_id) }}</span>
                 <span class="wb-cell__td-sc">{{ row.sc_no }}</span>
@@ -200,7 +200,7 @@
                 v-for="row in (data.po?.[cell.status]?.rows || [])"
                 :key="row.po_id"
                 class="wb-cell__tr wb-cell__tr--activating"
-                @click="$router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+                @click="row.sc_id ? $router.push(`/sc/${row.sc_id}/po/${row.po_id}`) : $router.push(`/po/${row.po_id}`)"
               >
                 <span class="wb-cell__td-id" :title="row.po_id">{{ row.po_no || shortId(row.po_id) }}</span>
                 <span class="wb-cell__td-sc">{{ row.sc_no }}</span>

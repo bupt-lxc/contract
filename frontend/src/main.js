@@ -21,7 +21,11 @@ window.__protocolNavigate = async function(params) {
     router.push(`/sc/${params.id}`)
   } else if (params.type === 'po') {
     const po = await callApi('get_po', { po_id: params.id })
-    router.push(`/sc/${po.sc_id}/po/${params.id}`)
+    if (po.sc_id) {
+      router.push(`/sc/${po.sc_id}/po/${params.id}`)
+    } else {
+      router.push(`/po/${params.id}`)
+    }
   } else if (params.type === 'gr') {
     const gr = await callApi('get_gr', { gr_id: params.id })
     const po = await callApi('get_po', { po_id: gr.po_id })
