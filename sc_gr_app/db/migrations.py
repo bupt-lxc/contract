@@ -1359,10 +1359,32 @@ def _migrate_v33(conn) -> None:
 
 
 def _migrate_v34(conn) -> None:
-    """Rebuild pos with nullable sc_id and add request_type column (FC)."""
-    # Rebuild pos table
-    if _table_exists(conn, "pos"):
+    """Rebuild pos with nullable sc_id and add request_type column (FC).
+    All tables with FKs to pos or sc_records must be rebuilt because SQLite
+    updates FK references when a table is renamed (pos->pos_old makes FKs
+    point to pos_old which is then dropped)."""
+    has_pos = _table_exists(conn, "pos")
+    has_sc = _table_exists(conn, "sc_records")
+    has_gr = _table_exists(conn, "gr_requests")
+    has_sv = _table_exists(conn, "sc_vendors")
+
+    # Phase 1: Rename all affected tables
+    if has_pos:
         conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    if has_sc:
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+        sc_old_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records_old)")}
+        sc_has_submitted = "submitted_date" in sc_old_cols
+        sc_has_calloff = "calloff_po_id" in sc_old_cols
+    if has_gr:
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    if has_sv:
+        conn.execute("ALTER TABLE sc_vendors RENAME TO sc_vendors_old")
+        sv_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_vendors_old)")}
+        sv_has_snapshot = "vendor_snapshot" in sv_cols
+
+    # Phase 2: Create all new tables (FKs all point to new tables now)
+    if has_pos:
         conn.execute("""
             CREATE TABLE pos (
               po_id TEXT PRIMARY KEY,
@@ -1388,36 +1410,9 @@ def _migrate_v34(conn) -> None:
               request_type TEXT CHECK (request_type IN ('FC'))
             )
         """)
-        conn.execute("""
-            INSERT INTO pos (
-              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
-              contract_from, contract_to, contract_no, payment_frequency,
-              contract_pos, contract_type, cost_center, purchaser,
-              active_date, created_at, updated_at, finished_at, finished_by,
-              request_type
-            )
-            SELECT
-              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
-              contract_from, contract_to, contract_no, payment_frequency,
-              contract_pos, contract_type, cost_center, purchaser,
-              active_date, created_at, updated_at, finished_at, finished_by,
-              NULL
-            FROM pos_old
-        """)
-        conn.execute("DROP TABLE pos_old")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
 
-    # Rebuild sc_records to fix FK references (calloff_po_id -> pos)
-    if _table_exists(conn, "sc_records"):
-        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
-        old_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records_old)")}
-        has_submitted_date = "submitted_date" in old_cols
-        has_calloff_po_id = "calloff_po_id" in old_cols
-        # Build base CREATE TABLE, then add optional columns
-        base_sql = """
+    if has_sc:
+        sc_sql = """
             CREATE TABLE sc_records (
               sc_id TEXT PRIMARY KEY,
               sc_no TEXT,
@@ -1443,11 +1438,11 @@ def _migrate_v34(conn) -> None:
               internal_system_number TEXT,
               currency TEXT NOT NULL DEFAULT 'CNY'
         """
-        if has_submitted_date:
-            base_sql += ",\n              submitted_date TEXT"
-        if has_calloff_po_id:
-            base_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
-        base_sql += """,
+        if sc_has_submitted:
+            sc_sql += ",\n              submitted_date TEXT"
+        if sc_has_calloff:
+            sc_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
+        sc_sql += """,
               CHECK (
                 status = 'draft'
                 OR status = 'manager_confirm'
@@ -1461,15 +1456,9 @@ def _migrate_v34(conn) -> None:
               )
             )
         """
-        conn.execute(base_sql)
-        conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
-        conn.execute("DROP TABLE sc_records_old")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+        conn.execute(sc_sql)
 
-    # Rebuild gr_requests to fix FK references (they point to pos_old after rename)
-    if _table_exists(conn, "gr_requests"):
-        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    if has_gr:
         conn.execute("""
             CREATE TABLE gr_requests (
               gr_id TEXT PRIMARY KEY,
@@ -1502,11 +1491,73 @@ def _migrate_v34(conn) -> None:
               updated_at TEXT
             )
         """)
+
+    if has_sv:
+        sv_sql = """
+            CREATE TABLE sc_vendors (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id)
+        """
+        if sv_has_snapshot:
+            sv_sql += ",\n              vendor_snapshot TEXT"
+        sv_sql += """,
+              UNIQUE(sc_id, vendor_id)
+            )
+        """
+        conn.execute(sv_sql)
+
+    # Phase 3: Copy data
+    if has_pos:
+        conn.execute("""
+            INSERT INTO pos (
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              request_type
+            )
+            SELECT
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              NULL
+            FROM pos_old
+        """)
+    if has_sc:
+        conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
+    if has_gr:
         conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+    if has_sv:
+        conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
+
+    # Phase 4: Drop old tables
+    if has_pos:
+        conn.execute("DROP TABLE pos_old")
+    if has_sc:
+        conn.execute("DROP TABLE sc_records_old")
+    if has_gr:
         conn.execute("DROP TABLE gr_requests_old")
+    if has_sv:
+        conn.execute("DROP TABLE sc_vendors_old")
+
+    # Phase 5: Create indexes
+    if has_pos:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+    if has_sc:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+    if has_gr:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    if has_sv:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_sc ON sc_vendors(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_vendor ON sc_vendors(vendor_id)")
 
     _record(conn, 34)
 
