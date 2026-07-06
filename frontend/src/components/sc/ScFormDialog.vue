@@ -273,7 +273,6 @@ async function saveDraft() {
   try {
     await formRef.value.validate()
   } catch (err) {
-    console.log('saveDraft validation failed:', err)
     return
   }
   if (!_validateCalloffAmount()) return
@@ -295,7 +294,6 @@ async function saveSubmit() {
     try {
       await formRef.value.validate()
     } catch (err) {
-      console.log('saveSubmit validation failed:', err)
       return
     }
   }

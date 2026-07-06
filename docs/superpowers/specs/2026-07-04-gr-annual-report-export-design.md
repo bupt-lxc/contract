@@ -52,10 +52,11 @@ GR List → click "年报导出" → year picker dialog → confirm
 | 6 | GR Value | `con_value` | |
 | 7 | GR Description | `goods_service_description` | |
 | 8 | GR Requester | `requester_name` | |
-| 9 | Finished Date | `finished_at` | Empty for approved GRs |
-| 10 | provision | — | Always empty |
-| 11 | Provision amount NET | — | Always empty |
-| 12+ | (all remaining GR fields) | raw field name | Includes estimated_amount, gross_cost, tax_rate, sc_no, vendor_name, remark, delivery_from, delivery_to, last_delivery, created_at, approved_date, etc. Column header uses the raw DB field name. |
+| 9 | Sending GR date | — | Always empty (manual fill) |
+| 10 | Finished Date | — | Always empty (manual fill) |
+| 11 | provision | — | Always empty |
+| 12 | Provision amount NET | — | Always empty |
+| 13+ | (all remaining GR fields) | raw field name | Includes estimated_amount, gross_cost, tax_rate, sc_no, vendor_name, remark, delivery_from, delivery_to, last_delivery, created_at, approved_date, finished_at, etc. Column header uses the raw DB field name. |
 
 **Excluded from output:** `dIfference` column (per user request).
 

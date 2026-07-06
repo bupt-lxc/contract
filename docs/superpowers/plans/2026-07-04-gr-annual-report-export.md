@@ -214,7 +214,8 @@ async function handleAnnualExport() {
       { key: 'con_value', label: 'GR Value' },
       { key: 'goods_service_description', label: 'GR Description' },
       { key: 'requester_name', label: 'GR Requester' },
-      { key: 'finished_at', label: 'Finished Date', getValue: (row) => (row.finished_at || '').slice(0, 10) },
+      { key: '__sending_gr_date', label: 'Sending GR date', getValue: () => '' },
+      { key: '__finished_date', label: 'Finished Date', getValue: () => '' },
       { key: '__provision', label: 'provision', getValue: () => '' },
       { key: '__provision_net', label: 'Provision amount NET', getValue: () => '' },
     ]
@@ -223,7 +224,7 @@ async function handleAnnualExport() {
     // and internal/sensitive fields
     const usedKeys = new Set([
       'cost_center', 'status', 'po_no', 'confirmation_name', 'gr_no',
-      'con_value', 'goods_service_description', 'requester_name', 'finished_at',
+      'con_value', 'goods_service_description', 'requester_name',
       'sc_id', '_type',
     ])
     let remainingKeys = []
@@ -405,9 +406,9 @@ cd c:/Users/V2SE7PP/Projects/contract && python run.py
 3. Verify the year picker dialog appears with current year pre-selected
 4. Select a year, click Export
 5. Verify the downloaded Excel file has:
-   - Correct columns (cost center, Status, PO number, Confirmation number, GR NO, GR Value, GR Description, GR Requester, Finished Date, provision, Provision amount NET, + remaining GR fields)
+   - Correct columns (cost center, Status, PO number, Confirmation number, GR NO, GR Value, GR Description, GR Requester, Sending GR date, Finished Date, provision, Provision amount NET, + remaining GR fields)
+   - Sending GR date, Finished Date, provision, Provision amount NET columns are all empty
    - Status values: finished → "Finished", approved → "Approved"
-   - provision and Provision amount NET columns are empty
    - Only approved/finished GRs from the selected year
 
 - [ ] **Step 3: Test edge cases**
