@@ -153,6 +153,7 @@ home: {
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
     viewAllOfType: '查看此类全部',
+    denied: '已驳回',
   },
 
   sc: {

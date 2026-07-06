@@ -153,6 +153,7 @@ home: {
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
     viewAllOfType: 'View all of this type',
+    denied: 'Denied',
   },
 
   sc: {
