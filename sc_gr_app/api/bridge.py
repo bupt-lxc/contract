@@ -1936,21 +1936,26 @@ class ApiBridge:
 
         current_user = self._require_current_user()
 
-        headers = ["sc_no", "vendor_id", "po_no", "requester_id",
-                   "po_amount", "status", "contract_from", "contract_to", "contract_no",
-                   "payment_frequency", "contract_pos", "contract_type", "cost_center",
-                   "purchaser", "active_date"]
-        hints = ["Required (SC NO, must exist in DB)",
+        headers = ["po_id", "sc_no", "vendor_id", "po_no", "requester_id",
+                   "request_type", "po_amount", "status", "contract_from", "contract_to",
+                   "contract_no", "payment_frequency", "contract_pos", "contract_type",
+                   "cost_center", "purchaser"]
+        hints = ["Optional (auto-generated if empty)",
+                 "Required for regular PO; leave empty for independent FC PO",
                  "Optional (must exist if provided)",
-                 "Required (business NO, must be unique)",
-                 "Optional (defaults to importer)", "Required",
-                 "active/finished", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY", "Optional",
+                 "Optional", "Optional (defaults to importer)",
+                 "FC or empty (only set 'FC' for independent FC PO without SC)",
+                 "Required",
+                 "active/finished (draft also allowed for FC PO)",
+                 "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
-                 "Optional", "YYYY-MM-DD or MM/DD/YYYY"]
-        sample = ["", "", "[EXAMPLE]", current_user["user_id"],
-                  "50000", "active", "", "", "",
-                  "monthly", "", "", "", "",
+                 "Optional"]
+        sample = ["", "", "", "[EXAMPLE]", current_user["user_id"],
+                  "", "50000", "active", "", "",
+                  "", "monthly", "", "", "",
                   ""]
+        sample2 = ["[EXAMPLE]", "", "V-000001", "", "", "FC",
+                   "100000", "draft", "2026-01-01", "2026-12-31", "", "monthly", "", "", "", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1971,11 +1976,13 @@ class ApiBridge:
         header_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(headers))
         hint_cells = "".join(_inline_str_cell(i, 3, h) for i, h in enumerate(hints))
         sample_cells = "".join(_inline_str_cell(i, 4, v) for i, v in enumerate(sample))
+        sample2_cells = "".join(_inline_str_cell(i, 5, v) for i, v in enumerate(sample2))
 
         last_col = _col_letter(len(headers) - 1)
         info_text = (
-            "Import Rules: Only PO records with status \"active\" or \"finished\" can be imported. "
-            "Required fields: SC NO, PO NO, PO Amount, Status. "
+            "Import Rules: PO records with status \"active\" or \"finished\" can be imported. "
+            "Independent FC POs (request_type='FC', sc_no empty) also allow \"draft\" status. "
+            "Required fields: SC NO (for non-FC POs), PO NO, PO Amount, Status. "
             "Linking: PO is linked to SC via SC NO (not SC ID). "
             "Duplicate PO NOs in database will cause import errors."
         )
@@ -1988,6 +1995,7 @@ class ApiBridge:
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
+    <row r="5">{sample2_cells}</row>
   </sheetData>
   <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""

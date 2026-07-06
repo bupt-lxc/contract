@@ -118,8 +118,8 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
         calloff_po_id = row.get("calloff_po_id")
         if calloff_po_id:
             po_exists = conn.execute(
-                "select 1 from pos po join sc_records sc on sc.sc_id = po.sc_id "
-                "where po.po_id = ? and sc.request_type = 'FC'",
+                "select 1 from pos po left join sc_records sc on sc.sc_id = po.sc_id "
+                "where po.po_id = ? and (po.request_type = 'FC' or sc.request_type = 'FC')",
                 (calloff_po_id,),
             ).fetchone()
             if not po_exists:
@@ -243,7 +243,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 raise
 
 
-PO_IMPORT_ALLOWED_STATUSES = {"active", "finished"}
+PO_IMPORT_ALLOWED_STATUSES = {"active", "finished", "draft"}
 
 
 def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
@@ -252,15 +252,30 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "po_no"):
             continue
-        for field in ["sc_no", "po_no", "po_amount", "status"]:
+        request_type = str(row.get("request_type", "")).strip()
+        sc_no = str(row.get("sc_no", "")).strip()
+        # Required fields: po_no, po_amount, status are always required;
+        # sc_no is required only for non-FC POs.
+        for field in ["po_no", "po_amount", "status"]:
             val = row.get(field)
             if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
+        # sc_no conditionally required
+        if not sc_no and request_type != "FC":
+            errors.append({"row": i, "field": "sc_no", "message": "sc_no is required for non-FC POs"})
+        # Semantic validation for sc_no + request_type combinations
+        if sc_no and request_type == "FC":
+            errors.append({"row": i, "field": "sc_no", "message": "sc_no should be empty for independent FC POs (request_type='FC')"})
+        # Status validation: draft only allowed for FC POs
         status = str(row.get("status", "")).strip()
-        if status and status not in PO_IMPORT_ALLOWED_STATUSES:
-            errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+        if status:
+            if request_type == "FC":
+                if status not in PO_IMPORT_ALLOWED_STATUSES:
+                    errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+            else:
+                if status not in {"active", "finished"}:
+                    errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
         # Resolve sc_no → sc_id
-        sc_no = str(row.get("sc_no", "")).strip()
         if sc_no:
             sc_rows = conn.execute(
                 "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
@@ -327,25 +342,29 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         skipped_duplicate += 1
                         continue
                     # Resolve sc_no → sc_id
-                    sc_no = row.get("sc_no", "").strip()
-                    sc_row = conn.execute(
-                        "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
-                    ).fetchone()
-                    sc_id = sc_row["sc_id"]
+                    sc_no = (row.get("sc_no") or "").strip()
+                    sc_id = None
+                    if sc_no:
+                        sc_row = conn.execute(
+                            "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
+                        ).fetchone()
+                        sc_id = sc_row["sc_id"]
                     po_id = _generate_po_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO pos (
                           po_id, sc_id, vendor_id, po_no, requester_id,
+                          request_type,
                           po_amount, status, contract_from, contract_to, contract_no,
                           payment_frequency, contract_pos, contract_type, cost_center,
                           purchaser, active_date, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             po_id,
                             sc_id,
                             row.get("vendor_id"),
                             po_no,
                             row.get("requester_id") or current_user["user_id"],
+                            row.get("request_type"),
                             float(row["po_amount"]) if row.get("po_amount") else None,
                             row.get("status", "draft"),
                             parse_date(row.get("contract_from")),
@@ -485,15 +504,29 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             if _is_template_meta_row(row, "po_no"):
                 continue
             errors_list = []
-            for field in ["sc_no", "po_no", "po_amount", "status"]:
+            request_type = str(row.get("request_type", "")).strip()
+            sc_no = str(row.get("sc_no", "")).strip()
+            # Required fields: po_no, po_amount, status are always required;
+            # sc_no is required only for non-FC POs.
+            for field in ["po_no", "po_amount", "status"]:
                 val = row.get(field)
                 if val is None or str(val).strip() == "":
                     errors_list.append(f"{field} is required")
+            # sc_no conditionally required
+            if not sc_no and request_type != "FC":
+                errors_list.append("sc_no is required for non-FC POs")
+            # Semantic validation for sc_no + request_type combinations
+            if sc_no and request_type == "FC":
+                errors_list.append("sc_no should be empty for independent FC POs (request_type='FC')")
+            # Status validation: draft only allowed for FC POs
             status = str(row.get("status", "")).strip()
-            if status and status not in PO_IMPORT_ALLOWED_STATUSES:
-                errors_list.append(f"Invalid status: {status}")
-            # Resolve sc_no → sc_id
-            sc_no = str(row.get("sc_no", "")).strip()
+            if status:
+                if request_type == "FC":
+                    if status not in PO_IMPORT_ALLOWED_STATUSES:
+                        errors_list.append(f"Invalid status: {status}")
+                else:
+                    if status not in {"active", "finished"}:
+                        errors_list.append(f"Invalid status: {status}")
             if sc_no:
                 sc_rows = conn.execute(
                     "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
