@@ -248,26 +248,48 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all PO rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        if _is_template_meta_row(row, "po_id"):
+        if _is_template_meta_row(row, "po_no"):
             continue
-        for field in ["sc_id", "po_no", "po_amount", "status"]:
-            if not row.get(field):
+        for field in ["sc_no", "po_no", "po_amount", "status"]:
+            val = row.get(field)
+            if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
-        status = row.get("status", "")
+        status = str(row.get("status", "")).strip()
         if status and status not in PO_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
-        if row.get("sc_id"):
-            exists = conn.execute(
-                "SELECT 1 FROM sc_records WHERE sc_id = ?", (row["sc_id"],)
-            ).fetchone()
-            if not exists:
-                errors.append({"row": i, "field": "sc_id", "message": f"SC {row['sc_id']} not found"})
+        # Resolve sc_no → sc_id
+        sc_no = str(row.get("sc_no", "")).strip()
+        if sc_no:
+            sc_rows = conn.execute(
+                "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
+            ).fetchall()
+            if len(sc_rows) == 0:
+                errors.append({"row": i, "field": "sc_no", "message": f"SC with SC NO '{sc_no}' not found"})
+            elif len(sc_rows) > 1:
+                raise ValidationError(
+                    f"Duplicate SC NO '{sc_no}' found in database ({len(sc_rows)} records). "
+                    f"Please resolve duplicates before importing."
+                )
         if row.get("vendor_id"):
             exists = conn.execute(
                 "SELECT 1 FROM vendors WHERE vendor_id = ?", (row["vendor_id"],)
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "vendor_id", "message": f"Vendor {row['vendor_id']} not found"})
+
+    # DB-level PO NO uniqueness check
+    po_nos_in_file = [r["po_no"].strip() for r in rows if r.get("po_no") and not _is_template_meta_row(r, "po_no")]
+    if po_nos_in_file:
+        placeholders = ",".join(["?"] * len(po_nos_in_file))
+        dupes = conn.execute(
+            f"SELECT po_no, COUNT(*) as cnt FROM pos WHERE po_no IN ({placeholders}) GROUP BY po_no HAVING COUNT(*) > 1",
+            po_nos_in_file,
+        ).fetchall()
+        if dupes:
+            raise ValidationError(
+                f"Duplicate PO NO found in database: {', '.join(d['po_no'] for d in dupes)}. "
+                f"Please resolve duplicates before importing."
+            )
     return errors
 
 
@@ -275,7 +297,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
     """Import PO records with direct status writes.
 
     ID fields are optional and auto-generated when empty.
-    Duplicate IDs are silently skipped.
+    Duplicate NOs are silently skipped.
     Sample rows (ID = [EXAMPLE]) are silently skipped.
     """
     timestamp = utc_now()
@@ -292,18 +314,23 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 imported = 0
                 skipped_duplicate = 0
                 for row in rows:
-                    if _is_template_meta_row(row, "po_id"):
+                    if _is_template_meta_row(row, "po_no"):
                         continue
-                    po_id = (row.get("po_id") or "").strip()
-                    if po_id:
-                        exists = conn.execute(
-                            "SELECT 1 FROM pos WHERE po_id = ?", (po_id,)
-                        ).fetchone()
-                        if exists:
-                            skipped_duplicate += 1
-                            continue
-                    else:
-                        po_id = _generate_po_id(conn, machine_id)
+                    po_no = (row.get("po_no") or "").strip()
+                    # Uniqueness check by po_no
+                    exists = conn.execute(
+                        "SELECT 1 FROM pos WHERE po_no = ?", (po_no,)
+                    ).fetchone()
+                    if exists:
+                        skipped_duplicate += 1
+                        continue
+                    # Resolve sc_no → sc_id
+                    sc_no = row.get("sc_no", "").strip()
+                    sc_row = conn.execute(
+                        "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
+                    ).fetchone()
+                    sc_id = sc_row["sc_id"]
+                    po_id = _generate_po_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO pos (
                           po_id, sc_id, vendor_id, po_no, requester_id,
@@ -313,9 +340,9 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             po_id,
-                            row["sc_id"],
+                            sc_id,
                             row.get("vendor_id"),
-                            row.get("po_no"),
+                            po_no,
                             row.get("requester_id") or current_user["user_id"],
                             float(row["po_amount"]) if row.get("po_amount") else None,
                             row.get("status", "draft"),
@@ -327,7 +354,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("contract_type"),
                             row.get("cost_center"),
                             row.get("purchaser"),
-                            None if row.get("status") == "draft" else timestamp,
+                            parse_date(row.get("active_date")) if row.get("active_date") else None,
                             timestamp,
                             timestamp,
                         ),
@@ -337,7 +364,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         action_type="import_po",
                         object_type="po",
                         object_id=po_id,
-                        sc_id=row["sc_id"],
+                        sc_id=sc_id,
                         operator_id=current_user["user_id"],
                         machine_id=machine_id,
                         before=None,
@@ -431,21 +458,26 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     with connect(config) as conn:
         preview = []
         for row in rows:
-            if _is_template_meta_row(row, "po_id"):
+            if _is_template_meta_row(row, "po_no"):
                 continue
             errors_list = []
-            for field in ["sc_id", "po_no", "po_amount", "status"]:
-                if not row.get(field):
+            for field in ["sc_no", "po_no", "po_amount", "status"]:
+                val = row.get(field)
+                if val is None or str(val).strip() == "":
                     errors_list.append(f"{field} is required")
-            status = row.get("status", "")
+            status = str(row.get("status", "")).strip()
             if status and status not in PO_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
-            if row.get("sc_id"):
-                exists = conn.execute(
-                    "SELECT 1 FROM sc_records WHERE sc_id = ?", (row["sc_id"],)
-                ).fetchone()
-                if not exists:
-                    errors_list.append(f"SC {row['sc_id']} not found")
+            # Resolve sc_no → sc_id
+            sc_no = str(row.get("sc_no", "")).strip()
+            if sc_no:
+                sc_rows = conn.execute(
+                    "SELECT sc_id FROM sc_records WHERE sc_no = ?", (sc_no,)
+                ).fetchall()
+                if len(sc_rows) == 0:
+                    errors_list.append(f"SC with SC NO '{sc_no}' not found")
+                elif len(sc_rows) > 1:
+                    errors_list.append(f"SC NO '{sc_no}' matches {len(sc_rows)} records in DB (duplicate NO)")
             if row.get("vendor_id"):
                 exists = conn.execute(
                     "SELECT 1 FROM vendors WHERE vendor_id = ?", (row["vendor_id"],)
@@ -456,6 +488,19 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             annotated["_errors"] = errors_list
             annotated["_valid"] = len(errors_list) == 0
             preview.append(annotated)
+
+        # File-level PO NO duplicate detection
+        po_no_counts = {}
+        for r in preview:
+            po_no = (r.get("po_no") or "").strip()
+            if po_no:
+                po_no_counts[po_no] = po_no_counts.get(po_no, 0) + 1
+        for r in preview:
+            po_no = (r.get("po_no") or "").strip()
+            if po_no and po_no_counts.get(po_no, 0) > 1:
+                r["_errors"].append(f"PO NO '{po_no}' appears {po_no_counts[po_no]} times in this file")
+                r["_valid"] = False
+
     return preview
 
 
