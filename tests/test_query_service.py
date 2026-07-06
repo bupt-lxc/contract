@@ -2,7 +2,7 @@ import pytest
 
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ValidationError
-from sc_gr_app.services.gr_service import approve_gr, create_gr
+from sc_gr_app.services.gr_service import approve_gr, create_gr, deny_gr
 from sc_gr_app.services.po_service import create_po
 from sc_gr_app.services.query_service import (
     search_operation_records,
@@ -12,7 +12,7 @@ from sc_gr_app.services.query_service import (
     search_vendors,
     workbench_data,
 )
-from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft, add_sc_vendor
+from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft, add_sc_vendor, deny_sc
 from sc_gr_app.services.vendor_service import create_vendor
 from tests.test_sc_po_gr_flow import ADMIN, OTHER_USER, USER, seed_other_user, seed_users
 
@@ -509,3 +509,111 @@ def test_workbench_data_po_has_requester_name(app_config):
     assert po_row["requester_name"] == "Requester"
     assert "vendor_name" not in po_row
     assert "po_amount" not in po_row
+
+
+def test_workbench_denied_sc_visibility(app_config):
+    """Requester sees own denied SCs; admin sees all denied SCs."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # USER1 creates an SC
+    sc1 = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc1["sc_id"])
+
+    # USER2 creates an SC
+    sc2 = create_sc(
+        app_config, OTHER_USER,
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+         "cost_center": 1002, "sc_amount": 500,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc2["sc_id"])
+
+    # USER1 sees only own denied SC
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["sc"]["denied"]["count"] == 1
+
+    # Admin sees both denied SCs
+    admin_data = workbench_data(app_config, ADMIN)
+    assert admin_data["sc"]["denied"]["count"] == 2
+
+    # USER2 sees only own denied SC
+    user2_data = workbench_data(app_config, OTHER_USER)
+    assert user2_data["sc"]["denied"]["count"] == 1
+
+
+def test_workbench_denied_sc_hidden_from_other_requester(app_config):
+    """A requester should NOT see another requester's denied SC."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # USER2 creates and denies an SC
+    sc = create_sc(
+        app_config, OTHER_USER,
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+         "cost_center": 1002, "sc_amount": 500,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc["sc_id"])
+
+    # USER1 should see zero denied SCs (they belong to USER2)
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["sc"]["denied"]["count"] == 0
+
+
+def test_workbench_denied_gr_visibility(app_config):
+    """Requester sees own denied GRs; admin sees all denied GRs."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # Create and approve SC + PO so GRs can be created
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
+    vendor = create_vendor(app_config, USER, {
+        "vendor_name": "Vendor A", "ksrm_vendor_code": "VA-1",
+        "service_scope": "General Service",
+    })
+    add_sc_vendor(app_config, ADMIN, sc["sc_id"], vendor["vendor_id"])
+    po = create_po(app_config, ADMIN, {
+        "sc_id": sc["sc_id"], "vendor_id": vendor["vendor_id"],
+        "po_no": "PO-1", "po_amount": 800, "status": "active",
+    })
+
+    # USER1 creates and denies a GR
+    gr1 = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1",
+         "estimated_amount": 100, "status": "pending"},
+    )
+    deny_gr(app_config, ADMIN, gr1["gr_id"])
+
+    # Create and deny a GR for USER2 (by ADMIN, since only SC owner/admin can create GRs)
+    gr2 = create_gr(
+        app_config, ADMIN,
+        {"po_id": po["po_id"], "requester_id": "U2",
+         "estimated_amount": 200, "status": "pending"},
+    )
+    deny_gr(app_config, ADMIN, gr2["gr_id"])
+
+    # USER1 sees only own denied GR
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["gr"]["denied"]["count"] == 1
+    assert len(user1_data["gr"]["denied"]["rows"]) == 1
+    assert "denied_at" in user1_data["gr"]["denied"]["rows"][0]
+
+    # Admin sees both denied GRs
+    admin_data = workbench_data(app_config, ADMIN)
+    assert admin_data["gr"]["denied"]["count"] == 2
