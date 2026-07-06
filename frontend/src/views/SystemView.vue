@@ -72,6 +72,19 @@
 
     <div v-if="isAdmin" class="section-card">
       <div class="section-header">
+        <h3>{{ $t('settings.senderEmail') }}</h3>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <el-input v-model="senderEmail" :placeholder="'VGC.RS-POMP@audi.com'" style="flex:1" />
+        <el-button type="primary" :disabled="senderEmail === savedSenderEmail" @click="handleSaveSenderEmail">
+          {{ $t('common.save') }}
+        </el-button>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;margin-top:8px">{{ $t('settings.senderEmailHint') }}</p>
+    </div>
+
+    <div v-if="isAdmin" class="section-card">
+      <div class="section-header">
         <h3>{{ $t('record.recordLogs') }}</h3>
         <el-button size="small" @click="handleLogsExport" :loading="logsExporting">
           <el-icon><Download /></el-icon> {{ $t('common.export') }}
@@ -286,8 +299,29 @@ async function handleSaveAttachmentsDir() {
   } catch (e) { ElMessage.error(e.message) }
 }
 
+// ── Sender email ──
+const senderEmail = ref('')
+const savedSenderEmail = ref('')
+
+async function fetchSenderEmail() {
+  try {
+    const result = await callApi('get_sender_email')
+    senderEmail.value = result.email || ''
+    savedSenderEmail.value = result.email || ''
+  } catch { senderEmail.value = ''; savedSenderEmail.value = '' }
+}
+
+async function handleSaveSenderEmail() {
+  try {
+    const result = await callApi('set_sender_email', { email: senderEmail.value })
+    savedSenderEmail.value = result.email
+    ElMessage.success(t('common.saved'))
+  } catch (e) { ElMessage.error(e.message) }
+}
+
 onMounted(() => {
   if (isAdmin.value) { fetchUsers(); searchLogs() }
   fetchAttachmentsDir()
+  fetchSenderEmail()
 })
 </script>
