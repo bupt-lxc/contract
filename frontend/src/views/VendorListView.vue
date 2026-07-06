@@ -19,6 +19,7 @@
     </AdvancedFilterBar>
 
     <el-table :data="state.rows" v-loading="state.loading" stripe border>
+      <el-table-column prop="vendor_id" :label="$t('vendor.vendorId')" width="120" />
       <el-table-column prop="vendor_name" :label="$t('vendor.vendor')" sortable="custom" min-width="160" />
       <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140">
         <template #default="{ row }">{{ row.company_name_cn || '-' }}</template>
