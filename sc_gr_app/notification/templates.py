@@ -268,7 +268,7 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                 val = _fmt_amount(val)
             elif key in ("service_period_start", "service_period_end",
                         "contract_from", "contract_to", "delivery_from",
-                        "delivery_to", "last_delivery"):
+                        "delivery_to"):
                 val = _fmt_datetime(val)
             elif key == "status":
                 if val == "manager_confirm":

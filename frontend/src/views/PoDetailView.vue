@@ -25,7 +25,7 @@
       <div class="section-card">
         <div class="section-header">
           <h3>{{ $t('po.poInformation') }}</h3>
-          <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
+          <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo && po.status !== 'finished'" type="primary" size="small" :disabled="loadingState.count > 0" @click="grDialogVisible = true; grDialogMode = 'create'; grDialogRecord = null">
             <el-icon><Plus /></el-icon> {{ $t('gr.addGr') }}
           </el-button>
           <el-button v-if="scDetail?.permissions?.can_manage_po && isFcPo" type="primary" size="small" :disabled="loadingState.count > 0" @click="openCalloffScDialog">
