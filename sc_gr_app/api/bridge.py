@@ -1795,19 +1795,25 @@ class ApiBridge:
         import base64
         import zipfile
 
-        headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
+        current_user = self._require_current_user()
+
+        headers = ["sc_no", "vendor_id", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "internal_system_number", "calloff_po_id"]
-        hints = ["Optional (auto-generated if empty)", "Optional",
+                   "description", "currency", "internal_system_number", "calloff_po_id",
+                   "asset", "asset_nums"]
+        hints = ["Required (business NO, must be unique)",
+                 "Optional (comma-separated, e.g. V000001,V000002)",
                  "Optional (defaults to importer)",
                  "material/service/fixed_asset/FC", "Cost center number",
-                 "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
+                 "Required (e.g. 50000)", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY",
                  "approved/finished", "Optional",
                  "CNY/EUR/USD", "Optional (FC only)",
-                 "Optional (FC call-off only)"]
-        sample = ["[EXAMPLE]", "", "", "material", "12345",
-                  "50000", "2026-01-01", "2026-12-31", "draft",
-                  "Sample SC description", "CNY", "", ""]
+                 "Optional (FC call-off only)",
+                 "Y/N (default N)", "Optional"]
+        sample = ["[EXAMPLE]", "", current_user["user_id"], "material", "12345",
+                  "50000", "2026-01-01", "2026-12-31", "approved",
+                  "Sample SC description", "CNY", "", "",
+                  "N", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1834,7 +1840,8 @@ class ApiBridge:
         info_text = (
             "Import Rules: Only SC records with status \"approved\" or \"finished\" can be imported. "
             "Required fields: SC NO, SC Amount, Status. "
-            "Leave SC ID empty to auto-generate."
+            "Linking: Records are identified by SC NO (not system ID). "
+            "Duplicate SC NOs in database will cause import errors."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
@@ -1901,19 +1908,23 @@ class ApiBridge:
         import base64
         import zipfile
 
-        headers = ["po_id", "sc_id", "vendor_id", "po_no", "requester_id",
+        current_user = self._require_current_user()
+
+        headers = ["sc_no", "vendor_id", "po_no", "requester_id",
                    "po_amount", "status", "contract_from", "contract_to", "contract_no",
                    "payment_frequency", "contract_pos", "contract_type", "cost_center",
-                   "purchaser"]
-        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                   "purchaser", "active_date"]
+        hints = ["Required (SC NO, must exist in DB)",
                  "Optional (must exist if provided)",
-                 "Optional", "Optional (defaults to importer)", "Required",
-                 "active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "Required (business NO, must be unique)",
+                 "Optional (defaults to importer)", "Required",
+                 "active/finished", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
-                 "Optional"]
-        sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
-                  "50000", "draft", "2026-01-01", "2026-12-31", "",
-                  "monthly", "", "", "", ""]
+                 "Optional", "YYYY-MM-DD or MM/DD/YYYY"]
+        sample = ["", "", "[EXAMPLE]", current_user["user_id"],
+                  "50000", "active", "", "", "",
+                  "monthly", "", "", "", "",
+                  ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1938,8 +1949,9 @@ class ApiBridge:
         last_col = _col_letter(len(headers) - 1)
         info_text = (
             "Import Rules: Only PO records with status \"active\" or \"finished\" can be imported. "
-            "Required fields: SC ID, PO NO, PO Amount, Status. "
-            "Leave PO ID empty to auto-generate."
+            "Required fields: SC NO, PO NO, PO Amount, Status. "
+            "Linking: PO is linked to SC via SC NO (not SC ID). "
+            "Duplicate PO NOs in database will cause import errors."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
@@ -2006,17 +2018,20 @@ class ApiBridge:
         import base64
         import zipfile
 
-        headers = ["gr_id", "po_id", "gr_no", "requester_id",
+        current_user = self._require_current_user()
+
+        headers = ["po_no", "gr_no", "requester_id",
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
                    "delivery_from", "delivery_to", "last_delivery"]
-        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
-                 "Optional", "Optional (defaults to importer)",
-                 "Required", "Optional",
+        hints = ["Required (PO NO, must exist in DB)",
+                 "Required (business NO, must be unique)",
+                 "Optional (defaults to importer)",
+                 "Required", "Required",
                  "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "Required (YYYY-MM-DD)", "Required (YYYY-MM-DD)", "YYYY-MM-DD"]
-        sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
+                 "Required (YYYY-MM-DD or MM/DD/YYYY)", "Required (YYYY-MM-DD or MM/DD/YYYY)", "Optional (YYYY-MM-DD or MM/DD/YYYY)"]
+        sample = ["", "[EXAMPLE]", current_user["user_id"],
                   "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
                   "2026-01-01", "2026-12-31", ""]
@@ -2044,8 +2059,9 @@ class ApiBridge:
         last_col = _col_letter(len(headers) - 1)
         info_text = (
             "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
-            "Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
-            "Leave GR ID empty to auto-generate."
+            "Required fields: PO NO, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
+            "Linking: GR is linked to PO via PO NO (not PO ID). "
+            "Duplicate GR NOs in database will cause import errors."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
