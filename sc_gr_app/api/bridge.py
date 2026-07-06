@@ -917,6 +917,19 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_gr_annual_report(self, payload=None) -> dict:
+        try:
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            year = payload.get("year", "")
+            if not year:
+                from datetime import datetime
+                year = str(datetime.now().year)
+            rows = gr_service.get_annual_report_data(self.config, year, current_user)
+            return ok({"rows": _format_list_timestamps(rows)})
+        except Exception as exc:
+            return fail(exc)
+
     def save_file(self, payload) -> dict:
         """Receive base64 data, show native save dialog, write to chosen path."""
         try:
