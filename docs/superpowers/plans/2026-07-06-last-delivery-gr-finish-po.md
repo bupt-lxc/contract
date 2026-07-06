@@ -103,7 +103,6 @@ class ApiError extends Error {
   constructor(error) {
     super(error.message || 'API error')
     this.code = error.code || 'UNKNOWN'
-    this.conflicts = error.conflicts || null
   }
 }
 ```
@@ -266,16 +265,22 @@ def _validate_last_delivery_value(value) -> None:
 
 
 def _validate_last_delivery_unique(conn, po_id: str, exclude_gr_id: str = None) -> None:
-    """Ensure no other active GR under the same PO is marked as Last Delivery."""
-    rows = conn.execute(
-        """
-        SELECT gr_id FROM gr_requests
-        WHERE po_id = ? AND last_delivery = 'Y'
-          AND status NOT IN ('denied', 'finished')
-          AND (? IS NULL OR gr_id != ?)
-        """,
-        (po_id, exclude_gr_id, exclude_gr_id or ""),
-    ).fetchall()
+    """如果同一 PO 下没有其他活跃 GR 被标记为上次交付，则不执行任何操作。"""
+    if exclude_gr_id:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')
+                 AND gr_id != ?""",
+            (po_id, exclude_gr_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT gr_id FROM gr_requests
+               WHERE po_id = ? AND last_delivery = 'Y'
+                 AND status NOT IN ('denied', 'finished')""",
+            (po_id,),
+        ).fetchall()
     if rows:
         raise ConflictError(
             f"GR {rows[0]['gr_id']} under this PO is already marked as Last Delivery"
@@ -412,9 +417,10 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str,
                     )
 
                 if not confirm_cascade:
-                    # Return needs_cascade dict — goes through ok() in bridge,
-                    # so callApi returns it as the data object directly
-                    conn.commit()  # no changes made, but clean exit
+                    # Rollback the BEGIN IMMEDIATE (no changes made) and return
+                    # needs_cascade flag. Bridge wraps in ok() so callApi passes
+                    # it through as the data object directly.
+                    conn.rollback()
                     return {
                         "needs_cascade": True,
                         "grs_to_finish": approved_nf_ids,
@@ -536,15 +542,11 @@ Replace the `finish_gr` method (around line 460-469) with:
                 # LD GR needs cascade confirmation — return directly (ok:true, data has needs_cascade)
                 return ok(result)
             elif isinstance(result, dict) and "gr" in result:
-                # Cascade executed: result = {"gr": ..., "cascaded_grs": [...], "po_finished": "..."}
+                # Cascade executed successfully
                 primary_gr = _format_entity_timestamps(result["gr"])
                 self._auto_open_outlook_draft("gr", gr_id, "finish")
                 self._auto_open_outlook_draft("po", result["po_finished"], "finish")
-                return ok({
-                    "data": primary_gr,
-                    "cascaded_grs": result["cascaded_grs"],
-                    "po_finished": result["po_finished"],
-                })
+                return ok(primary_gr)
             else:
                 # Normal finish: result is the GR dict
                 self._auto_open_outlook_draft("gr", gr_id, "finish")
@@ -728,7 +730,50 @@ git commit -m "feat: handle Last Delivery cascade confirmation in PoDetailView"
 
 ---
 
-### Task 11: Write backend unit tests
+### Task 11: Cross-module fixes — PoDetailView gate + notification template
+
+**Files:**
+- Modify: `frontend/src/views/PoDetailView.vue`
+- Modify: `sc_gr_app/notification/templates.py`
+
+- [ ] **Step 1: Gate "Add GR" button on PO not being finished**
+
+In `PoDetailView.vue`, find the "Add GR" button (search for `gr.addGr`). The `v-if` should gate on `po.status !== 'finished'` to prevent creating GRs under a finished PO. This is a pre-existing UX gap that the cascade feature makes more important.
+
+Change:
+```html
+      <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo" type="primary" size="small" @click="handleCreateGr">
+```
+To:
+```html
+      <el-button v-if="scDetail?.permissions?.can_manage_gr && !isFcPo && po.status !== 'finished'" type="primary" size="small" @click="handleCreateGr">
+```
+
+The exact line may vary — search for `gr.addGr` to locate the button element.
+
+- [ ] **Step 2: Remove `last_delivery` from datetime formatting keys in notification templates**
+
+In `sc_gr_app/notification/templates.py`, in the `_entity_detail_rows` function (around line 270-272), `last_delivery` is incorrectly listed among datetime-formatted keys:
+
+```python
+elif key in ("service_period_start", "service_period_end",
+            "contract_from", "contract_to", "delivery_from",
+            "delivery_to", "last_delivery"):
+    val = _fmt_datetime(val)
+```
+
+Remove `"last_delivery"` from this tuple. The `last_delivery` field is `'Y'`/`'N'` (not a date), so routing it through `_fmt_datetime` is incorrect. The field appears in GR detail emails and would silently fall through `_fmt_datetime`'s error handling, rendering as a raw string. Removing it from the datetime branch lets it render directly as text ("Y" or "N").
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/views/PoDetailView.vue sc_gr_app/notification/templates.py
+git commit -m "fix: gate Add GR button on PO status, fix last_delivery rendering in notifications"
+```
+
+---
+
+### Task 12: Write backend unit tests
 
 **Files:**
 - Modify: `tests/test_gr_service.py`
@@ -740,13 +785,18 @@ After the `_setup_approved_sc_with_active_po` helper, add:
 ```python
 def _create_gr(app_config, current_user, po_id, status="approved",
                last_delivery=None, estimated_amount=1000):
-    """Create a GR with given status under the given PO. Returns GR dict."""
-    from sc_gr_app.services.gr_service import create_gr, submit_gr, approve_gr
+    """创建一个具有给定状态的 GR。返回 GR 字典。
+
+    从草稿开始并执行生命周期转换——submit_gr 要求草稿状态。
+    使用模块级别的导入（create_gr、submit_gr、confirm_gr、approve_gr
+    已在顶部导入）。
+    """
     data = {
         "po_id": po_id,
         "requester_id": current_user["user_id"],
         "estimated_amount": estimated_amount,
         "gr_no": f"GR-NO-TEST-{status}",
+        "status": "draft",  # 必须从草稿开始——submit_gr 要求草稿状态
     }
     if last_delivery is not None:
         data["last_delivery"] = last_delivery
@@ -897,17 +947,23 @@ class TestLastDeliveryCascadeFinish:
         assert gr_other["gr_id"] in result["cascaded_grs"]
         assert result["po_finished"] == po["po_id"]
 
-        # Verify all GRs and PO are finished
+        # 验证所有 GR 和 PO 均为已完成状态，且 finished_by 已设置
         with connect(app_config) as conn:
             for gr_id in [gr_ld["gr_id"], gr_other["gr_id"]]:
-                status = conn.execute(
-                    "SELECT status FROM gr_requests WHERE gr_id = ?", (gr_id,)
-                ).fetchone()["status"]
-                assert status == "finished"
-            po_status = conn.execute(
-                "SELECT status FROM pos WHERE po_id = ?", (po["po_id"],)
+                gr = conn.execute(
+                    "SELECT status, finished_by, finished_at FROM gr_requests WHERE gr_id = ?",
+                    (gr_id,),
+                ).fetchone()
+                assert gr["status"] == "finished"
+                assert gr["finished_by"] == requester["user_id"]
+                assert gr["finished_at"] is not None
+            po_row = conn.execute(
+                "SELECT status, finished_by, finished_at FROM pos WHERE po_id = ?",
+                (po["po_id"],),
             ).fetchone()
-            assert po_status["status"] == "finished"
+            assert po_row["status"] == "finished"
+            assert po_row["finished_by"] == requester["user_id"]
+            assert po_row["finished_at"] is not None
 
     def test_confirm_cascade_on_non_ld_gr_ignored(self, app_config):
         """confirm_cascade=True on non-LD GR silently ignored, normal finish."""
@@ -956,7 +1012,7 @@ git commit -m "test: add Last Delivery cascade and uniqueness unit tests"
 
 ---
 
-### Task 12: Run full test suite and validate
+### Task 13: Run full test suite and validate
 
 **Files:** (verification only)
 
