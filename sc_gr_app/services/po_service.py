@@ -462,8 +462,53 @@ def update_po(config: AppConfig, current_user: dict, po_id: str, data: dict) -> 
 
 
 
+def _finish_po_in_transaction(conn, po_id: str, current_user: dict, timestamp: str) -> dict:
+    """Finish a PO within an existing transaction. Must NOT acquire locks."""
+    before = _get_po_or_raise(conn, po_id)
+
+    sc = conn.execute(
+        "select status, requester_id from sc_records where sc_id = ?",
+        (before["sc_id"],),
+    ).fetchone()
+    if sc and sc["status"] == "finished":
+        raise ConflictError("Finished SC cannot be edited")
+    if before["status"] != "active":
+        raise ConflictError("PO must be active")
+
+    conn.execute(
+        """
+        update pos
+        set status = 'finished',
+            updated_at = ?,
+            finished_at = ?,
+            finished_by = ?
+        where po_id = ?
+        """,
+        (timestamp, timestamp, current_user["user_id"], po_id),
+    )
+    after = _get_po_or_raise(conn, po_id)
+
+    write_operation_record(
+        conn,
+        action_type="finish_po",
+        object_type="po",
+        object_id=po_id,
+        sc_id=before["sc_id"],
+        operator_id=current_user["user_id"],
+        machine_id=current_user["machine_id"],
+        before=before,
+        after=after,
+    )
+    notification_service.queue_status_change(
+        conn, "po", po_id, "finish",
+        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+    )
+    return after
+
+
 def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
     require_requester_or_admin(current_user)
+
 
     with connect(config) as lookup_conn:
         sc_id = _get_po_or_raise(lookup_conn, po_id)["sc_id"]
@@ -473,14 +518,6 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 before = _get_po_or_raise(conn, po_id)
-                sc = conn.execute(
-                    "select status from sc_records where sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                if sc["status"] == "finished":
-                    raise ConflictError("Finished SC cannot be edited")
-                if before["status"] != "active":
-                    raise ConflictError("PO must be active")
 
                 parent_sc = conn.execute(
                     "select request_type from sc_records where sc_id = ?",
@@ -501,7 +538,6 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                             "Finish or deny all call-off SCs first."
                         )
                 else:
-                    # Block if any GR is not in a final state
                     non_final_grs = conn.execute(
                         """
                         SELECT gr_id, status FROM gr_requests
@@ -516,36 +552,7 @@ def finish_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                         )
 
                 timestamp = utc_now()
-                conn.execute(
-                    """
-                    update pos
-                    set status = 'finished',
-                        updated_at = ?,
-                        finished_at = ?
-                    where po_id = ?
-                    """,
-                    (timestamp, timestamp, po_id),
-                )
-                after = _get_po_or_raise(conn, po_id)
-                write_operation_record(
-                    conn,
-                    action_type="finish_po",
-                    object_type="po",
-                    object_id=po_id,
-                    sc_id=before["sc_id"],
-                    operator_id=current_user["user_id"],
-                    machine_id=current_user["machine_id"],
-                    before=before,
-                    after=after,
-                )
-                sc = conn.execute(
-                    "SELECT requester_id FROM sc_records WHERE sc_id = ?",
-                    (before["sc_id"],),
-                ).fetchone()
-                notification_service.queue_status_change(
-                    conn, "po", po_id, "finish",
-                    {"requester_id": sc["requester_id"]} if sc else {}, current_user
-                )
+                after = _finish_po_in_transaction(conn, po_id, current_user, timestamp)
                 conn.commit()
             except Exception:
                 conn.rollback()
