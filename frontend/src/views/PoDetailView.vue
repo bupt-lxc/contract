@@ -196,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download, Message } from '@element-plus/icons-vue'
@@ -334,7 +334,7 @@ async function handleEditSave(data) {
     ElMessage.success(t('po.poUpdated'))
     await refreshDetail()
     editDialogVisible.value = false
-  } catch (e) { ElMessage.error(e.message); throw e }
+  } catch (e) { ElMessage.error(e.message || String(e)) }
 }
 
 async function handleFinish() {
@@ -380,7 +380,7 @@ async function handleSubmit() {
     await submitPo(poId.value)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await refreshDetail()
-  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+  } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e)) }
 }
 
 function openCalloffScDialog() {
@@ -400,7 +400,7 @@ async function handleCalloffScSave(data) {
     await refreshDetail()
     await loadCalloffData()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.message || String(e))
+    if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
 }
 
@@ -445,7 +445,7 @@ async function handleGrSubmit(row) {
     await submitGr(row.gr_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
     await refreshDetail()
-  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message || String(e)) }
+  } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e)) }
 }
 
 async function handleGrFinish(row) {
@@ -529,7 +529,7 @@ async function handleGrSave(data) {
     ElMessage.success(t('common.saved'))
     await refreshDetail()
     grDialogVisible.value = false
-  } catch (e) { ElMessage.error(e.message); throw e }
+  } catch (e) { ElMessage.error(e.message || String(e)) }
 }
 
 async function handleGrSaveDraft(data) {
@@ -549,7 +549,7 @@ async function handleGrSaveDraft(data) {
     ElMessage.success(t('po.draftSaved'))
     await refreshDetail()
     grDialogVisible.value = false
-  } catch (e) { ElMessage.error(e.message); throw e }
+  } catch (e) { ElMessage.error(e.message || String(e)) }
 }
 
 async function handleNotificationSave(data) {
@@ -583,7 +583,36 @@ async function refreshDetail() {
   }
 }
 
+let isMounted = false
+
+// Re-fetch data when navigating between POs on the same route pattern
+watch(
+  () => [route.params.scId, route.params.poId],
+  async ([newScId, newPoId], [oldScId, oldPoId]) => {
+    if (!isMounted) return
+    if (newScId === oldScId && newPoId === oldPoId) return
+    await refreshDetail()
+    if (hasSc.value) {
+      await loadCalloffData()
+      if (newPoId) {
+        try { await fetchPoConfig(newPoId) } catch {}
+        try { await fetchCustomSchedules(newPoId) } catch {}
+      }
+    } else {
+      if (newPoId) {
+        try { await fetchPoConfig(newPoId) } catch {}
+        try { await fetchCustomSchedules(newPoId) } catch {}
+      }
+    }
+  }
+)
+
+onUnmounted(() => {
+  isMounted = false
+})
+
 onMounted(async () => {
+  isMounted = true
   try { activeUsers.value = await callApi('list_users') } catch {}
   await searchVendors()
 

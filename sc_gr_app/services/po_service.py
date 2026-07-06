@@ -248,7 +248,9 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     raise
     else:
         # Independent FC PO branch
-        po_id = _generate_po_id(config, machine_id)
+        # Serialize ID generation per machine to prevent duplicate IDs
+        with LeaseLock(config.lock_dir, f"po:gen:{machine_id}", machine_id):
+            po_id = _generate_po_id(config, machine_id)
         with LeaseLock(config.lock_dir, f"po:{po_id}", machine_id):
             with connect(config) as conn:
                 try:
@@ -269,7 +271,11 @@ def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
                     is_draft = status == "draft"
                     active_date_value = None if is_draft else timestamp
 
-                    requester_id = data.get("requester_id") or current_user["user_id"]
+                    requester_id = (
+                        data.get("requester_id")
+                        if current_user.get("role") == "admin" and data.get("requester_id")
+                        else current_user["user_id"]
+                    )
 
                     conn.execute(
                         """
