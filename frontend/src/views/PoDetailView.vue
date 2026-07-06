@@ -424,8 +424,23 @@ async function handleGrSubmit(row) {
 async function handleGrFinish(row) {
   try {
     await ElMessageBox.confirm(t('gr.finishGrConfirm'), t('gr.finishGr'), { type: 'warning' })
-    await finishGr(row.gr_id)
-    ElMessage.success(t('gr.grFinished'))
+    const result = await finishGr(row.gr_id, false)
+
+    if (result.needs_cascade) {
+      const grsToFinish = result.grs_to_finish || []
+      const message = grsToFinish.length > 0
+        ? t('gr.lastDeliveryCascadeMessage', { list: grsToFinish.join(', ') })
+        : t('gr.lastDeliveryNoCascadeMessage')
+      await ElMessageBox.confirm(message, t('gr.lastDeliveryCascadeTitle'), {
+        type: 'warning',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+      })
+      await finishGr(row.gr_id, true)
+      ElMessage.success(t('gr.grAndPoFinished'))
+    } else {
+      ElMessage.success(t('gr.grFinished'))
+    }
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
