@@ -386,20 +386,42 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all GR rows. Returns list of error dicts."""
     errors = []
     for i, row in enumerate(rows, start=1):
-        if _is_template_meta_row(row, "gr_id"):
+        if _is_template_meta_row(row, "gr_no"):
             continue
-        for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
-            if not row.get(field):
+        for field in ["po_no", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+            val = row.get(field)
+            if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
-        status = row.get("status", "")
+        status = str(row.get("status", "")).strip()
         if status and status not in GR_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
-        if row.get("po_id"):
-            exists = conn.execute(
-                "SELECT 1 FROM pos WHERE po_id = ?", (row["po_id"],)
-            ).fetchone()
-            if not exists:
-                errors.append({"row": i, "field": "po_id", "message": f"PO {row['po_id']} not found"})
+        # Resolve po_no → po_id
+        po_no = str(row.get("po_no", "")).strip()
+        if po_no:
+            po_rows = conn.execute(
+                "SELECT po_id FROM pos WHERE po_no = ?", (po_no,)
+            ).fetchall()
+            if len(po_rows) == 0:
+                errors.append({"row": i, "field": "po_no", "message": f"PO with PO NO '{po_no}' not found"})
+            elif len(po_rows) > 1:
+                raise ValidationError(
+                    f"Duplicate PO NO '{po_no}' found in database ({len(po_rows)} records). "
+                    f"Please resolve duplicates before importing."
+                )
+
+    # DB-level GR NO uniqueness check
+    gr_nos_in_file = [r["gr_no"].strip() for r in rows if r.get("gr_no") and not _is_template_meta_row(r, "gr_no")]
+    if gr_nos_in_file:
+        placeholders = ",".join(["?"] * len(gr_nos_in_file))
+        dupes = conn.execute(
+            f"SELECT gr_no, COUNT(*) as cnt FROM gr_requests WHERE gr_no IN ({placeholders}) GROUP BY gr_no HAVING COUNT(*) > 1",
+            gr_nos_in_file,
+        ).fetchall()
+        if dupes:
+            raise ValidationError(
+                f"Duplicate GR NO found in database: {', '.join(d['gr_no'] for d in dupes)}. "
+                f"Please resolve duplicates before importing."
+            )
     return errors
 
 
@@ -509,25 +531,43 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     with connect(config) as conn:
         preview = []
         for row in rows:
-            if _is_template_meta_row(row, "gr_id"):
+            if _is_template_meta_row(row, "gr_no"):
                 continue
             errors_list = []
-            for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
-                if not row.get(field):
+            for field in ["po_no", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+                val = row.get(field)
+                if val is None or str(val).strip() == "":
                     errors_list.append(f"{field} is required")
-            status = row.get("status", "")
+            status = str(row.get("status", "")).strip()
             if status and status not in GR_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
-            if row.get("po_id"):
-                exists = conn.execute(
-                    "SELECT 1 FROM pos WHERE po_id = ?", (row["po_id"],)
-                ).fetchone()
-                if not exists:
-                    errors_list.append(f"PO {row['po_id']} not found")
+            # Resolve po_no → po_id
+            po_no = str(row.get("po_no", "")).strip()
+            if po_no:
+                po_rows = conn.execute(
+                    "SELECT po_id FROM pos WHERE po_no = ?", (po_no,)
+                ).fetchall()
+                if len(po_rows) == 0:
+                    errors_list.append(f"PO with PO NO '{po_no}' not found")
+                elif len(po_rows) > 1:
+                    errors_list.append(f"PO NO '{po_no}' matches {len(po_rows)} records in DB (duplicate NO)")
             annotated = dict(row)
             annotated["_errors"] = errors_list
             annotated["_valid"] = len(errors_list) == 0
             preview.append(annotated)
+
+        # File-level GR NO duplicate detection
+        gr_no_counts = {}
+        for r in preview:
+            gr_no = (r.get("gr_no") or "").strip()
+            if gr_no:
+                gr_no_counts[gr_no] = gr_no_counts.get(gr_no, 0) + 1
+        for r in preview:
+            gr_no = (r.get("gr_no") or "").strip()
+            if gr_no and gr_no_counts.get(gr_no, 0) > 1:
+                r["_errors"].append(f"GR NO '{gr_no}' appears {gr_no_counts[gr_no]} times in this file")
+                r["_valid"] = False
+
     return preview
 
 def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
@@ -551,18 +591,22 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 imported = 0
                 skipped_duplicate = 0
                 for row in rows:
-                    if _is_template_meta_row(row, "gr_id"):
+                    if _is_template_meta_row(row, "gr_no"):
                         continue
-                    gr_id = (row.get("gr_id") or "").strip()
-                    if gr_id:
-                        exists = conn.execute(
-                            "SELECT 1 FROM gr_requests WHERE gr_id = ?", (gr_id,)
-                        ).fetchone()
-                        if exists:
-                            skipped_duplicate += 1
-                            continue
-                    else:
-                        gr_id = _generate_gr_id(conn, machine_id)
+                    gr_no = (row.get("gr_no") or "").strip()
+                    exists = conn.execute(
+                        "SELECT 1 FROM gr_requests WHERE gr_no = ?", (gr_no,)
+                    ).fetchone()
+                    if exists:
+                        skipped_duplicate += 1
+                        continue
+                    # Resolve po_no → po_id
+                    po_no = row.get("po_no", "").strip()
+                    po_row = conn.execute(
+                        "SELECT po_id FROM pos WHERE po_no = ?", (po_no,)
+                    ).fetchone()
+                    po_id = po_row["po_id"]
+                    gr_id = _generate_gr_id(conn, machine_id)
                     conn.execute(
                         """INSERT INTO gr_requests (
                           gr_id, po_id, gr_no, requester_id,
@@ -573,7 +617,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             gr_id,
-                            row["po_id"],
+                            po_id,
                             row.get("gr_no"),
                             row.get("requester_id") or current_user["user_id"],
                             float(row["estimated_amount"]) if row.get("estimated_amount") else None,
