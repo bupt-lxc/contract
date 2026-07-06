@@ -67,6 +67,52 @@ def _setup_approved_sc_with_active_po(app_config):
     return admin, requester, sc, po
 
 
+_gr_counter = 0
+
+
+def _create_gr(app_config, current_user, po_id, admin, status="approved",
+               last_delivery=None, estimated_amount=1000):
+    """Create a GR with a given status. Returns GR dict.
+
+    Starts from draft and runs lifecycle transitions -- submit_gr requires draft status.
+    Uses module-level imports (create_gr, submit_gr, confirm_gr, approve_gr
+    already imported at top).
+    admin must be a real user dict from the DB (used for confirm/approve steps).
+    """
+    global _gr_counter
+    _gr_counter += 1
+    data = {
+        "po_id": po_id,
+        "requester_id": current_user["user_id"],
+        "estimated_amount": estimated_amount,
+        "gr_no": f"GR-NO-TEST-{status}-{_gr_counter}",
+        "status": "draft",  # must start from draft -- submit_gr requires draft status
+    }
+    if last_delivery is not None:
+        data["last_delivery"] = last_delivery
+
+    gr = create_gr(app_config, current_user, data)
+    if status in ("manager_confirm", "pending", "approved"):
+        gr = submit_gr(app_config, current_user, gr["gr_id"])
+    if status in ("pending", "approved"):
+        gr = confirm_gr(app_config, admin, gr["gr_id"])
+    if status == "approved":
+        gr = approve_gr(app_config, admin, gr["gr_id"], con_value=estimated_amount)
+    return gr
+
+
+def _create_finished_gr(app_config, admin, user, po_id, last_delivery=None):
+    """Create and finish a GR. Returns GR dict."""
+    gr = _create_gr(app_config, user, po_id, admin, status="approved", last_delivery=last_delivery)
+    return finish_gr(app_config, user, gr["gr_id"])
+
+
+def _create_denied_gr(app_config, admin, user, po_id, last_delivery=None):
+    """Create and deny a GR. Returns GR dict."""
+    gr = _create_gr(app_config, user, po_id, admin, status="pending", last_delivery=last_delivery)
+    return deny_gr(app_config, admin, gr["gr_id"])
+
+
 class TestGrCreate:
     def test_create_gr_rejects_missing_required_fields(self, seeded_config):
         admin, _ = _resolve_users(seeded_config)
@@ -525,3 +571,145 @@ class TestGrValidation:
                 "requester_id": requester["user_id"],
                 "estimated_amount": 99999,
             })
+
+
+class TestLastDeliveryUniqueness:
+    def test_create_gr_with_ld_no_conflict(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        assert gr["last_delivery"] == "Y"
+
+    def test_create_gr_with_ld_conflict(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        with pytest.raises(ConflictError, match="already marked as Last Delivery"):
+            _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+
+    def test_create_gr_with_ld_denied_excluded(self, seeded_config):
+        """Denied GR with LD should not block new LD GR."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr1 = _create_gr(seeded_config, requester, po["po_id"], admin,
+                         last_delivery="Y", status="pending")
+        deny_gr(seeded_config, admin, gr1["gr_id"])
+        gr2 = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        assert gr2["last_delivery"] == "Y"
+
+    def test_create_gr_invalid_last_delivery_value(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        data = {
+            "po_id": po["po_id"],
+            "requester_id": requester["user_id"],
+            "estimated_amount": 1000,
+            "last_delivery": "yes",
+        }
+        with pytest.raises(ValidationError, match="must be 'Y' or 'N'"):
+            create_gr(seeded_config, requester, data)
+
+    def test_update_gr_set_ld_conflict(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr1 = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        gr2 = _create_gr(seeded_config, requester, po["po_id"], admin)
+        with pytest.raises(ConflictError, match="already marked as Last Delivery"):
+            update_gr(seeded_config, requester, gr2["gr_id"], {"last_delivery": "Y"})
+
+    def test_update_gr_unset_ld_allowed(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        updated = update_gr(seeded_config, requester, gr["gr_id"], {"last_delivery": "N"})
+        assert updated["last_delivery"] == "N"
+
+
+class TestLastDeliveryCascadeFinish:
+    def test_finish_non_ld_gr_normal(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = _create_gr(seeded_config, requester, po["po_id"], admin)
+        result = finish_gr(seeded_config, requester, gr["gr_id"])
+        assert result["status"] == "finished"
+        # PO should NOT be finished
+        with connect(seeded_config) as conn:
+            po_status = conn.execute(
+                "SELECT status FROM pos WHERE po_id = ?", (po["po_id"],)
+            ).fetchone()
+            assert po_status["status"] == "active"
+
+    def test_finish_ld_gr_needs_cascade(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        gr_other = _create_gr(seeded_config, requester, po["po_id"], admin)
+        result = finish_gr(seeded_config, requester, gr_ld["gr_id"])
+        assert result["needs_cascade"] is True
+        assert gr_other["gr_id"] in result["grs_to_finish"]
+
+    def test_finish_ld_gr_cascade_empty_needs_confirm(self, seeded_config):
+        """LD GR with all others already finished -- still needs confirmation."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        _create_finished_gr(seeded_config, admin, requester, po["po_id"])
+        result = finish_gr(seeded_config, requester, gr_ld["gr_id"])
+        assert result["needs_cascade"] is True
+        assert result["grs_to_finish"] == []
+
+    def test_finish_ld_gr_problematic_blocks(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        gr_pending = _create_gr(seeded_config, requester, po["po_id"], admin, status="pending")
+        with pytest.raises(ConflictError) as exc:
+            finish_gr(seeded_config, requester, gr_ld["gr_id"])
+        assert exc.value.conflicts is not None
+        conflict_ids = [c["gr_id"] for c in exc.value.conflicts]
+        assert gr_pending["gr_id"] in conflict_ids
+
+    def test_finish_ld_gr_denied_blocks(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        _create_denied_gr(seeded_config, admin, requester, po["po_id"])
+        with pytest.raises(ConflictError) as exc:
+            finish_gr(seeded_config, requester, gr_ld["gr_id"])
+        assert exc.value.conflicts is not None
+
+    def test_finish_ld_gr_cascade_success(self, seeded_config):
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        gr_other = _create_gr(seeded_config, requester, po["po_id"], admin)
+
+        result = finish_gr(seeded_config, requester, gr_ld["gr_id"], confirm_cascade=True)
+        assert result["gr"]["status"] == "finished"
+        assert gr_other["gr_id"] in result["cascaded_grs"]
+        assert result["po_finished"] == po["po_id"]
+
+        # Verify all GRs and PO are finished with finished_by set
+        with connect(seeded_config) as conn:
+            for gr_id in [gr_ld["gr_id"], gr_other["gr_id"]]:
+                gr = conn.execute(
+                    "SELECT status, finished_by, finished_at FROM gr_requests WHERE gr_id = ?",
+                    (gr_id,),
+                ).fetchone()
+                assert gr["status"] == "finished"
+                assert gr["finished_by"] == requester["user_id"]
+                assert gr["finished_at"] is not None
+            po_row = conn.execute(
+                "SELECT status, finished_by, finished_at FROM pos WHERE po_id = ?",
+                (po["po_id"],),
+            ).fetchone()
+            assert po_row["status"] == "finished"
+            assert po_row["finished_by"] == requester["user_id"]
+            assert po_row["finished_at"] is not None
+
+    def test_confirm_cascade_on_non_ld_gr_ignored(self, seeded_config):
+        """confirm_cascade=True on non-LD GR silently ignored, normal finish."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr = _create_gr(seeded_config, requester, po["po_id"], admin)
+        result = finish_gr(seeded_config, requester, gr["gr_id"], confirm_cascade=True)
+        assert result["status"] == "finished"
+        assert "gr" not in result  # plain dict, not cascade wrapper
+
+    def test_problematic_priority_over_approved(self, seeded_config):
+        """When both problematic and approved GRs exist, problematic takes priority."""
+        admin, requester, sc, po = _setup_approved_sc_with_active_po(seeded_config)
+        gr_ld = _create_gr(seeded_config, requester, po["po_id"], admin, last_delivery="Y")
+        _create_gr(seeded_config, requester, po["po_id"], admin)  # approved
+        _create_gr(seeded_config, requester, po["po_id"], admin, status="pending")  # problematic
+
+        with pytest.raises(ConflictError) as exc:
+            finish_gr(seeded_config, requester, gr_ld["gr_id"])
+        assert exc.value.conflicts is not None
