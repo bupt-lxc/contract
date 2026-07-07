@@ -309,20 +309,46 @@ def check_ksrm_duplicate(config: AppConfig, ksrm_code: str, exclude_vendor_id: s
 
 # ── Vendor import ──
 
-VENDOR_COLUMN_MAP = {
-    "vendor_id": "供应商ID",
-    "vendor_name": "供应商名称",
-    "ksrm_vendor_code": "KSRM代码",
-    "company_name_cn": "公司中文名",
-    "contact_person": "联系人",
-    "phone": "电话",
-    "service_scope": "服务范围",
-    "email": "邮箱",
-    "description": "描述",
-    "inquiry_history": "询价历史",
+# Each internal field maps to a list of recognized header names (English + Chinese).
+VENDOR_COLUMN_ALIASES = {
+    "vendor_id":          ["Vendor ID", "vendor_id", "供应商ID"],
+    "vendor_name":        ["Vendor Name", "vendor_name", "供应商名称"],
+    "ksrm_vendor_code":   ["KSRM Code", "KSRM Vendor Code", "ksrm_vendor_code", "KSRM代码"],
+    "company_name_cn":    ["Company Name (CN)", "Company Name CN", "Chinese Name", "company_name_cn", "公司中文名"],
+    "contact_person":     ["Contact", "Contact Person", "contact_person", "联系人"],
+    "phone":              ["Phone", "Phone Number", "phone", "电话"],
+    "service_scope":      ["Service Scope", "service_scope", "服务范围"],
+    "email":              ["Email", "email", "邮箱"],
+    "description":        ["Description", "description", "描述"],
+    "inquiry_history":    ["Inquiry History", "inquiry_history", "询价历史"],
 }
 
-VENDOR_IMPORT_FIELDS = list(VENDOR_COLUMN_MAP.keys())
+VENDOR_IMPORT_FIELDS = list(VENDOR_COLUMN_ALIASES.keys())
+
+
+def _normalize_header(h: str) -> str:
+    """Normalize header text for fuzzy matching: lowercase, strip parentheses,
+    collapse whitespace and underscores into single underscores."""
+    import re
+    h = h.strip().lower()
+    h = re.sub(r'[()（）]', '', h)
+    h = re.sub(r'[\s_]+', '_', h)
+    return h.strip('_')
+
+
+def _build_column_map(header: list[str]) -> dict[int, str]:
+    """Map column index → internal field name by matching normalized headers."""
+    col_map: dict[int, str] = {}
+    for idx, col_name in enumerate(header):
+        norm = _normalize_header(col_name)
+        for field_key, aliases in VENDOR_COLUMN_ALIASES.items():
+            for alias in aliases:
+                if norm == _normalize_header(alias):
+                    col_map[idx] = field_key
+                    break
+            if idx in col_map:
+                break
+    return col_map
 
 
 def parse_vendor_file(file_path: str) -> list[dict]:
@@ -351,19 +377,12 @@ def _parse_excel(file_path: str) -> list[dict]:
         wb.close()
         raise ValidationError("File is empty")
 
-    col_map = {}
-    for idx, col_name in enumerate(header):
-        col_lower = col_name.lower().replace(" ", "_")
-        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
-            if col_lower == field_key.lower() or col_name.strip() == cn_label:
-                col_map[idx] = field_key
-                break
-
+    col_map = _build_column_map(header)
     if not col_map:
         wb.close()
         raise ValidationError(
             "No recognized columns found. Expected headers: "
-            + ", ".join(VENDOR_COLUMN_MAP.keys())
+            + ", ".join(VENDOR_IMPORT_FIELDS)
         )
 
     rows = []
@@ -387,18 +406,11 @@ def _parse_csv(file_path: str) -> list[dict]:
         except StopIteration:
             raise ValidationError("File is empty")
 
-    col_map = {}
-    for idx, col_name in enumerate(header):
-        col_lower = col_name.lower().replace(" ", "_")
-        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
-            if col_lower == field_key.lower() or col_name.strip() == cn_label:
-                col_map[idx] = field_key
-                break
-
+    col_map = _build_column_map(header)
     if not col_map:
         raise ValidationError(
             "No recognized columns found. Expected headers: "
-            + ", ".join(VENDOR_COLUMN_MAP.keys())
+            + ", ".join(VENDOR_IMPORT_FIELDS)
         )
 
     rows = []

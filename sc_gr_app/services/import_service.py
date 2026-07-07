@@ -1,4 +1,5 @@
 """Bulk import service for SC, PO, GR records with direct status writes."""
+import re
 from datetime import datetime, timezone
 
 from sc_gr_app.config import AppConfig
@@ -8,6 +9,90 @@ from sc_gr_app.services.lock_service import LeaseLock
 from sc_gr_app.services.record_service import write_operation_record
 
 SC_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
+
+# Column aliases: internal field → recognized header names (English + Chinese)
+_SC_COLUMN_ALIASES: dict[str, list[str]] = {
+    "sc_id":                  ["SC ID", "sc_id", "合同ID"],
+    "sc_no":                  ["SC NO", "SC Number", "Contract NO", "sc_no", "合同编号", "合同号"],
+    "vendor_id":              ["Vendor ID", "Supplier ID", "vendor_id", "供应商ID"],
+    "requester_id":           ["Requester ID", "requester_id", "申请人ID", "申请人"],
+    "request_type":           ["Request Type", "request_type", "类型", "采购类型", "请求类型"],
+    "cost_center":            ["Cost Center", "cost_center", "成本中心"],
+    "sc_amount":              ["SC Amount", "Amount", "sc_amount", "合同金额", "金额"],
+    "service_period_start":   ["Service Period Start", "Start Date", "service_period_start", "服务开始日期", "开始日期"],
+    "service_period_end":     ["Service Period End", "End Date", "service_period_end", "服务结束日期", "结束日期"],
+    "status":                 ["Status", "status", "状态"],
+    "description":            ["Description", "description", "描述", "备注"],
+    "currency":               ["Currency", "currency", "币种", "货币"],
+    "internal_system_number": ["Internal System Number", "internal_system_number", "内部系统编号"],
+    "calloff_po_id":          ["Call-off PO ID", "FC PO ID", "calloff_po_id"],
+    "asset":                  ["Asset", "asset", "资产"],
+    "asset_nums":             ["Asset Nums", "asset_nums", "资产数量"],
+}
+
+_PO_COLUMN_ALIASES: dict[str, list[str]] = {
+    "po_id":             ["PO ID", "po_id", "采购订单ID"],
+    "sc_no":             ["SC NO", "SC Number", "sc_no", "合同编号", "合同号"],
+    "vendor_id":         ["Vendor ID", "Supplier ID", "vendor_id", "供应商ID"],
+    "po_no":             ["PO NO", "PO Number", "po_no", "采购订单号", "采购订单编号"],
+    "requester_id":      ["Requester ID", "requester_id", "申请人ID", "申请人"],
+    "request_type":      ["Request Type", "request_type", "类型", "请求类型"],
+    "po_amount":         ["PO Amount", "Amount", "po_amount", "订单金额", "金额"],
+    "status":            ["Status", "status", "状态"],
+    "contract_from":     ["Contract From", "Start Date", "contract_from", "合同开始日期", "开始日期"],
+    "contract_to":       ["Contract To", "End Date", "contract_to", "合同结束日期", "结束日期"],
+    "contract_no":       ["Contract NO", "Contract Number", "contract_no", "合同编号", "合同号"],
+    "payment_frequency": ["Payment Frequency", "payment_frequency", "付款频率"],
+    "contract_pos":      ["Contract POS", "contract_pos", "合同订单"],
+    "contract_type":     ["Contract Type", "contract_type", "合同类型"],
+    "cost_center":       ["Cost Center", "cost_center", "成本中心"],
+    "purchaser":         ["Purchaser", "purchaser", "采购员", "采购人"],
+}
+
+_GR_COLUMN_ALIASES: dict[str, list[str]] = {
+    "po_no":                     ["PO NO", "PO Number", "po_no", "采购订单号", "采购订单编号"],
+    "gr_no":                     ["GR NO", "GR Number", "gr_no", "收货编号", "收货编号"],
+    "requester_id":              ["Requester ID", "requester_id", "申请人ID", "申请人"],
+    "estimated_amount":          ["Estimated Amount", "estimated_amount", "预估金额", "估计金额"],
+    "con_value":                 ["Con Value", "con_value", "合同价值"],
+    "status":                    ["Status", "status", "状态"],
+    "remark":                    ["Remark", "remark", "备注"],
+    "tax_rate":                  ["Tax Rate", "tax_rate", "税率"],
+    "gross_cost":                ["Gross Cost", "gross_cost", "总成本"],
+    "goods_service_description": ["Goods/Service Description", "goods_service_description", "商品/服务描述", "货物/服务描述"],
+    "confirmation_name":         ["Confirmation Name", "confirmation_name", "确认人", "确认人"],
+    "delivery_from":             ["Delivery From", "delivery_from", "交付开始", "开始日期"],
+    "delivery_to":               ["Delivery To", "delivery_to", "交付结束", "结束日期"],
+    "last_delivery":             ["Last Delivery", "last_delivery", "最后交付"],
+}
+
+
+def _normalize_import_header(h: str) -> str:
+    """Normalize header text for fuzzy matching: lowercase, strip parentheses,
+    collapse whitespace and underscores into single underscores."""
+    h = h.strip().lower()
+    h = re.sub(r'[()（）]', '', h)
+    h = re.sub(r'[\s_]+', '_', h)
+    return h.strip('_')
+
+
+def _map_import_columns(rows: list[dict], aliases: dict[str, list[str]]) -> list[dict]:
+    """Map incoming row keys to canonical field names using the alias table."""
+    if not rows:
+        return rows
+    norm_to_field: dict[str, str] = {}
+    for field_key, alias_list in aliases.items():
+        for alias in alias_list:
+            norm_to_field[_normalize_import_header(alias)] = field_key
+    mapped = []
+    for row in rows:
+        new_row: dict = {}
+        for key, value in row.items():
+            norm_key = _normalize_import_header(str(key))
+            canonical = norm_to_field.get(norm_key, key)
+            new_row[canonical] = value
+        mapped.append(new_row)
+    return mapped
 
 _DATE_FORMATS = [
     "%Y-%m-%d",
@@ -157,6 +242,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
     Duplicate IDs are silently skipped.
     Sample rows (ID = [EXAMPLE]) are silently skipped.
     """
+    rows = _map_import_columns(rows, _SC_COLUMN_ALIASES)
     timestamp = utc_now()
     machine_id = current_user["machine_id"]
     with LeaseLock(config.lock_dir, "import:lock", machine_id):
@@ -317,6 +403,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
     Duplicate NOs are silently skipped.
     Sample rows (ID = [EXAMPLE]) are silently skipped.
     """
+    rows = _map_import_columns(rows, _PO_COLUMN_ALIASES)
     timestamp = utc_now()
     machine_id = current_user["machine_id"]
     with LeaseLock(config.lock_dir, "import:lock", machine_id):
@@ -448,6 +535,7 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
 
 def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     """Validate SC rows without inserting. Returns rows annotated with _errors and _valid."""
+    rows = _map_import_columns(rows, _SC_COLUMN_ALIASES)
     with connect(config) as conn:
         preview = []
         for row in rows:
@@ -498,6 +586,7 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
 
 def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     """Validate PO rows without inserting. Returns rows annotated with _errors and _valid."""
+    rows = _map_import_columns(rows, _PO_COLUMN_ALIASES)
     with connect(config) as conn:
         preview = []
         for row in rows:
@@ -563,6 +652,7 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
 
 def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
     """Validate GR rows without inserting. Returns rows annotated with _errors and _valid."""
+    rows = _map_import_columns(rows, _GR_COLUMN_ALIASES)
     with connect(config) as conn:
         preview = []
         for row in rows:
@@ -612,6 +702,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
     Duplicate IDs are silently skipped.
     Sample rows (ID = [EXAMPLE]) are silently skipped.
     """
+    rows = _map_import_columns(rows, _GR_COLUMN_ALIASES)
     timestamp = utc_now()
     machine_id = current_user["machine_id"]
     with LeaseLock(config.lock_dir, "import:lock", machine_id):
