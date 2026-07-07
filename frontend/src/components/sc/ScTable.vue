@@ -29,13 +29,18 @@
     <el-table-column prop="requester_name" :label="$t('sc.requester')" sortable="custom" width="130" />
     <el-table-column :label="$t('sc.type')" sortable="custom" width="140">
       <template #default="{ row }">
-        <span>{{ row.request_type }}</span>
+        <span>{{ requestTypeLabel(row.request_type) || '-' }}</span>
         <el-tag v-if="row.calloff_po_id" type="warning" size="small" style="margin-left:4px">
           {{ $t('sc.calloffBadge') }}
         </el-tag>
       </template>
     </el-table-column>
     <el-table-column prop="cost_center" :label="$t('sc.costCenter')" sortable="custom" width="110" />
+    <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="150">
+      <template #default="{ row }">
+        <span>{{ row.service_scope || '-' }}</span>
+      </template>
+    </el-table-column>
     <el-table-column prop="asset" :label="$t('sc.asset')" sortable="custom" width="70" />
     <el-table-column prop="sc_amount" :label="$t('sc.scAmount')" sortable="custom" width="130">
       <template #default="{ row }">
@@ -84,6 +89,7 @@
 <script setup>
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
+import { requestTypeLabel } from '@/composables/useRequestType.js'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },

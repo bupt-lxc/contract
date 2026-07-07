@@ -61,6 +61,12 @@ _STATUS_LABELS: dict[str, str] = {
     "po_approved": "PO Approved",
 }
 
+_REQUEST_TYPE_LABELS: dict[str, str] = {
+    "FC": "FC",
+    "call_off": "Call Off",
+    "new": "",
+}
+
 _TRANSITION_LABELS: dict[str, str] = {
     "create": "Created",
     "submit": "Submitted",
@@ -275,6 +281,8 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                     val = "To be confirm"
                 else:
                     val = _STATUS_LABELS.get(val, val)
+            elif key == "request_type":
+                val = _REQUEST_TYPE_LABELS.get(val, val)
             result.append((label, val))
 
     for key, value in entity_info.items():
@@ -287,6 +295,8 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                 value = "To be confirm"
             else:
                 value = _STATUS_LABELS.get(value, value)
+        elif key == "request_type":
+            value = _REQUEST_TYPE_LABELS.get(value, value)
         result.append((label, value))
 
     return result

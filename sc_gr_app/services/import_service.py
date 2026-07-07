@@ -28,6 +28,7 @@ _SC_COLUMN_ALIASES: dict[str, list[str]] = {
     "calloff_po_id":          ["Call-off PO ID", "FC PO ID", "calloff_po_id"],
     "asset":                  ["Asset", "asset", "资产"],
     "asset_nums":             ["Asset Nums", "asset_nums", "资产数量"],
+    "service_scope":          ["Service Scope", "service_scope", "服务范围"],
 }
 
 _PO_COLUMN_ALIASES: dict[str, list[str]] = {
@@ -194,6 +195,10 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
         status = str(row.get("status", "")).strip()
         if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+        # Validate request_type
+        rt = str(row.get("request_type", "")).strip()
+        if rt and rt not in ("FC", "call_off", "new"):
+            errors.append({"row": i, "field": "request_type", "message": f"Invalid request_type: {rt}"})
         if row.get("requester_id"):
             exists = conn.execute(
                 "SELECT 1 FROM users WHERE user_id = ?", (row["requester_id"],)
@@ -209,6 +214,12 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not po_exists:
                 errors.append({"row": i, "field": "calloff_po_id", "message": f"calloff_po_id {calloff_po_id} is not a valid FC PO"})
+        # Validate service_scope if provided
+        scope = str(row.get("service_scope", "")).strip()
+        if scope:
+            from sc_gr_app.services.vendor_service import SUPPORTED_SERVICE_SCOPES
+            if scope not in SUPPORTED_SERVICE_SCOPES:
+                errors.append({"row": i, "field": "service_scope", "message": f"Invalid service_scope: {scope}"})
         # Validate vendor_ids if provided
         vendor_ids = str(row.get("vendor_id", "")).strip()
         if vendor_ids:
@@ -274,10 +285,10 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         """INSERT INTO sc_records (
                           sc_id, sc_no, requester_id, request_type, cost_center,
                           sc_amount, service_period_start, service_period_end,
-                          status, description, currency, internal_system_number,
+                          status, description, currency, service_scope, internal_system_number,
                           calloff_po_id,
                           created_by, created_at, updated_at, asset, asset_nums
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             sc_id,
                             sc_no,
@@ -290,6 +301,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row["status"],
                             row.get("description"),
                             row.get("currency", "CNY"),
+                            row.get("service_scope"),
                             row.get("internal_system_number"),
                             row.get("calloff_po_id"),
                             current_user["user_id"],

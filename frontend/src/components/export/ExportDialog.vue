@@ -144,6 +144,7 @@ const CASCADE_COLUMNS = [
   { key: 'service_period_end', label: t('sc.endDate'), getValue: r => (r.service_period_end || '').slice(0, 10) },
   { key: 'asset_nums', label: t('exportCol.assetNums') },
   { key: 'internal_system_number', label: t('exportCol.internalSystemNumber') },
+  { key: 'service_scope', label: t('vendor.serviceScope') },
   // PO-specific
   { key: 'vendor_name', label: t('export.vendorName') },
   { key: 'ksrm_vendor_code', label: t('export.ksrmCode') },

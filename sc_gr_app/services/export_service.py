@@ -445,7 +445,7 @@ def _build_where(table, filters, selected_ids, id_col):
 
     elif filters:
         allowed = {
-            "sc_records": {"status": "status", "requester_id": "requester_id", "sc_no": "sc_no", "request_type": "request_type", "cost_center": "cost_center"},
+            "sc_records": {"status": "status", "requester_id": "requester_id", "sc_no": "sc_no", "request_type": "request_type", "cost_center": "cost_center", "service_scope": "service_scope"},
             "pos": {"status": "status", "sc_id": "sc_id", "vendor_id": "vendor_id", "po_no": "po_no", "requester_id": "requester_id"},
             "gr_requests": {"status": "status", "po_id": "po_id", "gr_no": "gr_no", "requester_id": "requester_id", "sc_id": "sc_id"},
         }.get(table, {})

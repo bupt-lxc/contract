@@ -121,6 +121,7 @@ import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
 import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { requestTypeLabel } from '@/composables/useRequestType.js'
 
 const route = useRoute()
 const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
@@ -136,7 +137,12 @@ const scStatuses = [
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
   { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
-const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
+const requestTypes = ['FC', 'call_off', 'new']
+const serviceScopes = [
+  'Transportation', 'Engineering Service', 'Equipment', 'Parts', 'Driver',
+  'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
+  'Insurance', 'Harness', 'Maintenance&Calibration', 'Security', 'Testing support', 'Others'
+]
 const activeUsers = ref([])
 const vendors = computed(() => vendorState.rows)
 
@@ -219,7 +225,8 @@ function computeDeadlineEnd(value) {
 
 const scFilterConfig = [
   { name: 'status', label: t('filter.status'), type: 'select', options: scStatuses },
-  { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: requestTypeLabel(t) || t, value: t })) },
+  { name: 'service_scope', label: t('vendor.serviceScope'), type: 'select', options: serviceScopes.map(s => ({ label: s, value: s })) },
   { name: 'is_calloff', label: t('filter.isCalloff'), type: 'select', options: [{ label: t('sc.topLevel'), value: '0' }, { label: t('sc.calloffBadge'), value: '1' }] },
   { name: 'asset', label: t('filter.asset'), type: 'select', options: [{label:'Y',value:'Y'},{label:'N',value:'N'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },

@@ -30,7 +30,16 @@
         <el-col :span="12">
           <el-form-item :label="$t('sc.requestType')" prop="request_type">
             <el-select v-model="form.request_type">
-              <el-option v-for="t in requestTypes" :key="t" :label="t" :value="t" />
+              <el-option v-for="t in requestTypes" :key="t" :label="requestTypeLabel(t) || t" :value="t" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('vendor.serviceScope')">
+            <el-select v-model="form.service_scope" clearable>
+              <el-option v-for="s in serviceScopes" :key="s" :label="s" :value="s" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -154,6 +163,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
+import { requestTypeLabel } from '@/composables/useRequestType.js'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
@@ -171,10 +181,16 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'save-draft', 'save-submit'])
 
 const requestTypes = computed(() => {
-  const types = ['material', 'service', 'fixed_asset', 'FC']
+  const types = ['FC', 'call_off', 'new']
   if (props.calloffPoId) return types.filter(t => t !== 'FC')
   return types
 })
+
+const serviceScopes = [
+  'Transportation', 'Engineering Service', 'Equipment', 'Parts', 'Driver',
+  'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
+  'Insurance', 'Harness', 'Maintenance&Calibration', 'Security', 'Testing support', 'Others'
+]
 const formRef = ref()
 const submitting = ref(false)
 const pickedFiles = ref([])
@@ -192,7 +208,8 @@ const emptyForm = () => ({
   asset: 'N',
   asset_nums: '',
   internal_system_number: '',
-  currency: 'CNY'
+  currency: 'CNY',
+  service_scope: ''
 })
 
 const form = reactive(emptyForm())
@@ -229,9 +246,15 @@ watch(() => props.visible, (val) => {
       if (props.record.vendors?.length) {
         form.vendor_ids = props.record.vendors.map(v => v.vendor_id)
       }
+      if (props.calloffPoId) {
+        form.request_type = 'call_off'
+      }
     } else {
       Object.assign(form, emptyForm())
       form.requester_id = currentUser.value?.user_id || ''
+      if (props.calloffPoId) {
+        form.request_type = 'call_off'
+      }
     }
     _setRules(draftRules)
   }

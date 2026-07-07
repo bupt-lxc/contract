@@ -261,6 +261,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
+import { requestTypeAbbr } from '@/composables/useRequestType.js'
 
 const { t } = useI18n()
 
@@ -311,7 +312,7 @@ function shortId(id) {
 
 function typeLabel(requestType) {
   if (!requestType) return '-'
-  const map = { material: 'M', service: 'S', fixed_asset: 'FA', FC: 'FC' }
+  const map = { FC: 'FC', call_off: 'CO', new: '' }
   return map[requestType] || requestType
 }
 
