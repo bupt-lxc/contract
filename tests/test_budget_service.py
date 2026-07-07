@@ -69,7 +69,7 @@ def seed_sc(conn, sc_id="SC1", sc_amount=1000):
             sc_id,
             f"{sc_id}-NO",
             "U1",
-            "service",
+            "new",
             100,
             sc_amount,
             "2026-05-01",
@@ -575,7 +575,7 @@ def test_compute_po_fc_budget_with_calloffs(app_config):
               created_by, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "new", 2000, 30000.0,
              "2026-01-01", "2026-12-31", "approved", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP),
         )
@@ -587,7 +587,7 @@ def test_compute_po_fc_budget_with_calloffs(app_config):
               created_by, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-002", "SC-CO-002-NO", "U-FC", "service", 3000, 20000.0,
+            ("SC-CO-002", "SC-CO-002-NO", "U-FC", "new", 3000, 20000.0,
              "2026-01-01", "2026-12-31", "pending", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP),
         )
@@ -642,7 +642,7 @@ def test_compute_po_fc_budget_downstream_gr_trace(app_config):
               created_by, created_at, updated_at, approved_by, approved_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "new", 2000, 30000.0,
              "2026-01-01", "2026-12-31", "approved", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP, "U-FC", TIMESTAMP),
         )
@@ -711,7 +711,7 @@ def test_compute_sc_fc_budget_downstream_gr_trace(app_config):
               created_by, created_at, updated_at, approved_by, approved_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "new", 2000, 30000.0,
              "2026-01-01", "2026-12-31", "approved", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP, "U-FC", TIMESTAMP),
         )
@@ -791,7 +791,7 @@ def test_compute_po_fc_budget_rejects_null_con_value_downstream(app_config):
               created_by, created_at, updated_at, approved_by, approved_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "new", 2000, 30000.0,
              "2026-01-01", "2026-12-31", "approved", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP, "U-FC", TIMESTAMP),
         )
@@ -836,7 +836,7 @@ def test_compute_sc_fc_budget_rejects_null_con_value_downstream(app_config):
               created_by, created_at, updated_at, approved_by, approved_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "material", 2000, 30000.0,
+            ("SC-CO-001", "SC-CO-001-NO", "U-FC", "new", 2000, 30000.0,
              "2026-01-01", "2026-12-31", "approved", po_id,
              "U-FC", TIMESTAMP, TIMESTAMP, "U-FC", TIMESTAMP),
         )

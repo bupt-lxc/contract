@@ -27,7 +27,7 @@ def seed_query_data(app_config):
         {
             "sc_no": "SC-ALPHA",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -140,7 +140,7 @@ def test_filters_and_pagination_work_for_scs(app_config):
         {
             "sc_no": "SC-BETA",
             "requester_id": "U1",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 2002,
             "sc_amount": 500,
             "service_period_start": "2026-01-01",
@@ -336,7 +336,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
         {
             "sc_no": "SC-BETA",
             "requester_id": "U2",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 2002,
             "sc_amount": 500,
             "service_period_start": "2026-01-01",
@@ -409,7 +409,7 @@ def test_workbench_data_returns_per_status_counts(app_config):
     # Create an approved SC for USER1
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -433,7 +433,7 @@ def test_workbench_data_scopes_requester_to_own_scs(app_config):
     # USER1 creates and approves an SC
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -456,14 +456,14 @@ def test_workbench_data_admin_pending_shows_all(app_config):
     # USER1 creates a pending SC
     create_sc(
         app_config, USER,
-        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
     # USER2 creates a pending SC
     create_sc(
         app_config, OTHER_USER,
-        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
          "cost_center": 1002, "sc_amount": 500,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -492,7 +492,7 @@ def test_workbench_data_po_has_requester_name(app_config):
     })
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -530,7 +530,7 @@ class TestQueryServiceFcFilters:
         sc_regular = create_sc(app_config, USER, {
             "sc_no": "SC-REG",
             "requester_id": "U1",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 10000,
             "service_period_start": "2026-01-01",
@@ -564,6 +564,7 @@ class TestQueryServiceFcFilters:
         # Call-off SC under PO(FC)
         create_sc_draft(app_config, USER, {
             "requester_id": "U1",
+            "request_type": "call_off",
             "calloff_po_id": po_fc["po_id"],
         })
 
@@ -666,7 +667,7 @@ class TestQueryServiceFcFilters:
         from sc_gr_app.services.sc_service import submit_sc
         submit_sc(app_config, USER, calloff_sc_id, {
             "sc_no": "SC-CO-001",
-            "request_type": "material",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 30000,
             "service_period_start": "2026-01-01",
@@ -700,7 +701,7 @@ def test_workbench_denied_sc_visibility(app_config):
     # USER1 creates an SC
     sc1 = create_sc(
         app_config, USER,
-        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -709,7 +710,7 @@ def test_workbench_denied_sc_visibility(app_config):
     # USER2 creates an SC
     sc2 = create_sc(
         app_config, OTHER_USER,
-        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
          "cost_center": 1002, "sc_amount": 500,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -737,7 +738,7 @@ def test_workbench_denied_sc_hidden_from_other_requester(app_config):
     # USER2 creates and denies an SC
     sc = create_sc(
         app_config, OTHER_USER,
-        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
          "cost_center": 1002, "sc_amount": 500,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -757,7 +758,7 @@ def test_workbench_denied_gr_visibility(app_config):
     # Create and approve SC + PO so GRs can be created
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )

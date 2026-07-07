@@ -711,3 +711,36 @@ def test_migrate_skips_backup_when_no_pending_migrations(app_config):
 
     after_baks = set(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
     assert after_baks == existing_baks
+
+
+def test_migration_v35(fresh_db, app_config):
+    """v35: remaps request_type, renames service_scope values, adds service_scope column."""
+    conn = fresh_db
+    # Seed old-style data
+    conn.execute(
+        "INSERT INTO users (user_id, machine_id, user_name, role, created_at, updated_at) "
+        "VALUES ('U1', 'M1', 'Test', 'admin', '2026-01-01', '2026-01-01')"
+    )
+    conn.execute(
+        "INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) "
+        "VALUES ('V1', 'Test Vendor', 'engineering Service', 'U1', '2026-01-01', '2026-01-01')"
+    )
+    conn.execute(
+        "INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) "
+        "VALUES ('V2', 'Test Vendor 2', 'Maintenance', 'U1', '2026-01-01', '2026-01-01')"
+    )
+
+    from sc_gr_app.db.migrations import _migrate_v35
+    # Manually set version
+    conn.execute("DELETE FROM schema_migrations WHERE version = 35")
+    _migrate_v35(conn)
+
+    # Verify vendor service_scope renamed
+    row = conn.execute("SELECT service_scope FROM vendors WHERE vendor_id = 'V1'").fetchone()
+    assert row["service_scope"] == "Engineering Service"
+    row = conn.execute("SELECT service_scope FROM vendors WHERE vendor_id = 'V2'").fetchone()
+    assert row["service_scope"] == "Maintenance&Calibration"
+
+    # Verify service_scope column exists on sc_records
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sc_records)")}
+    assert "service_scope" in cols

@@ -82,7 +82,7 @@ def seed_approved_sc_vendor_po(
         {
             "sc_no": sc_no_for_approval,
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": sc_amount,
             "service_period_start": "2026-01-01",
@@ -232,7 +232,7 @@ def test_requester_cannot_approve_sc_or_gr(app_config):
         {
             "sc_no": "SC001",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -288,7 +288,7 @@ def test_backfill_sc_status_requires_admin(app_config):
             USER,
             {
                 "requester_id": "U1",
-                "request_type": "service",
+                "request_type": "new",
                 "cost_center": 1001,
                 "sc_amount": 1000,
                 "service_period_start": "2026-01-01",
@@ -309,7 +309,7 @@ def test_normal_sc_creation_ignores_supplied_status(app_config):
         {
             "sc_no": "SC001",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -351,7 +351,7 @@ def test_create_sc_rejects_non_finite_sc_amount(app_config, sc_amount):
             USER,
             {
                 "requester_id": "U1",
-                "request_type": "service",
+                "request_type": "new",
                 "cost_center": 1001,
                 "sc_amount": sc_amount,
                 "service_period_start": "2026-01-01",
@@ -370,7 +370,7 @@ def test_create_po_cannot_exceed_sc_amount(app_config):
         {
             "sc_no": "SC001",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 100,
             "service_period_start": "2026-01-01",
@@ -471,7 +471,7 @@ def test_create_po_requires_approved_sc(app_config):
         {
             "sc_no": "SC001",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -511,7 +511,7 @@ def test_create_gr_requires_approved_sc(app_config):
         {
             "sc_no": "SC001",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -869,7 +869,7 @@ def test_submit_draft_requires_business_fields_but_not_sc_no(app_config):
         USER,
         sc_id,
         {
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -901,7 +901,7 @@ def test_owner_can_edit_pending_sc(app_config):
         sc_id,
         {
             "sc_no": "SC-001",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -942,7 +942,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
         draft_sc_id,
         {
             "sc_no": "SC001",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -963,7 +963,7 @@ def test_admin_updates_pending_sc_then_approves_denies_and_closes(app_config):
         USER,
         {
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 100,
             "service_period_start": "2026-01-01",
@@ -992,7 +992,7 @@ def test_deny_sc_works_when_manager_confirm(app_config):
         app_config, USER, sc_id,
         {
             "sc_no": "SC-DENY-001",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -1193,7 +1193,7 @@ def test_update_sc_rejects_invalid_service_period_for_draft_and_admin(app_config
         USER,
         sc_id,
         {
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -1530,7 +1530,7 @@ def test_cross_sc_pending_gr_move_writes_audit_for_both_scs(app_config):
         {
             "sc_no": "SC002",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 2002,
             "sc_amount": 500,
             "service_period_start": "2026-01-01",
@@ -1758,7 +1758,7 @@ def test_submit_sc_allowed_with_draft_po(app_config):
     assert po["status"] == "draft"
 
     # submit_sc should succeed even with draft PO
-    sc_data = {"sc_no": "SC-CAS1", "requester_id": "U1", "request_type": "service",
+    sc_data = {"sc_no": "SC-CAS1", "requester_id": "U1", "request_type": "new",
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
                "vendor_ids": ["V1"]}
@@ -1788,7 +1788,7 @@ def test_approve_sc_succeeds_with_draft_po(app_config):
     )
 
     # Submit SC (draft→pending), PO stays draft
-    sc_data = {"sc_no": "SC-CAS2", "requester_id": "U1", "request_type": "service",
+    sc_data = {"sc_no": "SC-CAS2", "requester_id": "U1", "request_type": "new",
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
                "vendor_ids": ["V1"]}
@@ -1825,7 +1825,7 @@ def test_finish_sc_blocked_by_unfinished_pos(app_config):
         {"sc_id": sc_draft["sc_id"], "vendor_id": "V1", "po_amount": 500},
     )
     # Submit SC → submit PO → approve SC → approve PO
-    sc_data = {"sc_no": "SC-FIN1", "requester_id": "U1", "request_type": "service",
+    sc_data = {"sc_no": "SC-FIN1", "requester_id": "U1", "request_type": "new",
                "cost_center": 1001, "sc_amount": 2000,
                "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
                "vendor_ids": ["V1"]}
@@ -1868,7 +1868,7 @@ def test_manual_submit_po_with_budget_check(app_config):
     # Submit SC with sc_amount < po_amount
     submit_sc(
         app_config, USER, sc["sc_id"],
-        {"sc_no": "SC-CAS4", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-CAS4", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 400,  # SC amount < PO amount!
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
          "vendor_ids": ["V1"]},
@@ -1903,7 +1903,7 @@ def test_submit_gr_blocked_by_po_not_approved(app_config):
     # Submit SC + PO, approve SC (PO not yet approved)
     submit_sc(
         app_config, USER, sc["sc_id"],
-        {"sc_no": "SC-CAS6", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-CAS6", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 2000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
          "vendor_ids": ["V1"]},
@@ -2101,7 +2101,7 @@ def _create_and_approve_sc(app_config):
         {
             "sc_no": "SC-TRANSFER",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 2001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",

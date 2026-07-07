@@ -35,7 +35,7 @@ def sample_data(seeded_config: AppConfig) -> AppConfig:
         VALUES ('u1', 'M000001', 'Test User 1', 'admin', 'u1@test.com', 'active', '2026-01-01T00:00:00', '2026-01-01T00:00:00');
 
         INSERT OR IGNORE INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, service_period_start, service_period_end, status, description, created_by, created_at, updated_at)
-        VALUES ('sc-001', 'SC-2026-001', 'u1', 'service', 60473000, 100000, '2026-01-01', '2026-12-31', 'approved', 'Test SC', 'u1', '2026-01-01T00:00:00', '2026-01-01T00:00:00');
+        VALUES ('sc-001', 'SC-2026-001', 'u1', 'new', 60473000, 100000, '2026-01-01', '2026-12-31', 'approved', 'Test SC', 'u1', '2026-01-01T00:00:00', '2026-01-01T00:00:00');
 
         INSERT OR IGNORE INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at)
         VALUES ('v-001', 'Test Vendor', 'General Service', 'u1', '2026-01-01T00:00:00', '2026-01-01T00:00:00');
@@ -58,3 +58,13 @@ def sample_data(seeded_config: AppConfig) -> AppConfig:
     conn.commit()
     conn.close()
     return seeded_config
+
+
+@pytest.fixture()
+def fresh_db(seeded_config: AppConfig):
+    """Fresh database connection after full migration (for migration re-run tests)."""
+    import sqlite3
+    conn = sqlite3.connect(seeded_config.db_path)
+    conn.row_factory = sqlite3.Row
+    yield conn
+    conn.close()

@@ -25,7 +25,7 @@ def _seed_sc(conn, sc_id="SC-0000001-20260701-001"):
                sc_id, sc_no, requester_id, request_type, cost_center,
                sc_amount, service_period_start, service_period_end,
                status, description, asset, created_by, created_at, updated_at
-           ) VALUES (?, ?, 'U000001', 'service', 1000, 100000,
+           ) VALUES (?, ?, 'U000001', 'new', 1000, 100000,
                      '2026-01-01', '2026-12-31',
                      'approved', 'Test SC', 'N', 'U000001', ?, ?)""",
         (sc_id, f"SCNO-{sc_id}", _utc_now(), _utc_now()),
@@ -321,7 +321,7 @@ class TestConfirmImport:
             _seed_user(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
         rows = [{"sc_no": "SC-CONFIRM-NEW", "sc_amount": "50000", "status": "approved",
-                  "request_type": "service", "cost_center": "1000",
+                  "request_type": "new", "cost_center": "1000",
                   "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"}]
         result = import_service.import_scs(app_config, current_user, rows)
         assert result["ok"] is True
@@ -393,9 +393,9 @@ class TestScNoUniqueness:
                     sc_amount, service_period_start, service_period_end,
                     status, asset, created_by, created_at, updated_at
                 ) VALUES
-                ('SC-DUP-1', 'DUP-NO', 'U000001', 'service', 1000, 50000,
+                ('SC-DUP-1', 'DUP-NO', 'U000001', 'new', 1000, 50000,
                  '2026-01-01', '2026-12-31', 'approved', 'N', 'U000001', ?, ?),
-                ('SC-DUP-2', 'DUP-NO', 'U000001', 'service', 1000, 50000,
+                ('SC-DUP-2', 'DUP-NO', 'U000001', 'new', 1000, 50000,
                  '2026-01-01', '2026-12-31', 'approved', 'N', 'U000001', ?, ?)""",
                 (_utc_now(), _utc_now(), _utc_now(), _utc_now()),
             )

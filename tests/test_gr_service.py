@@ -46,7 +46,7 @@ def _setup_approved_sc_with_active_po(app_config):
     })
     sc = submit_sc(app_config, admin, sc["sc_id"], {
         "sc_no": "SC-TEST",
-        "request_type": "material",
+        "request_type": "new",
         "cost_center": 1000,
         "sc_amount": 100000,
         "service_period_start": "2026-01-01",

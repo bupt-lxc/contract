@@ -101,7 +101,7 @@ class TestPoVendorRestriction:
         add_sc_vendor(app_config, admin, sc["sc_id"], v["vendor_id"])
         submit_sc(app_config, admin, sc["sc_id"], {
             "sc_no": "SC-NO-001",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": "CC-001",
             "sc_amount": "500",
             "service_period_start": "2026-01-01",
@@ -179,11 +179,12 @@ class TestPoFcGuards:
         """Create a call-off SC under the given PO(FC). Returns the SC dict."""
         sc = create_sc_draft(app_config, admin, {
             "requester_id": admin["user_id"],
+            "request_type": "call_off",
             "calloff_po_id": po_fc_id,
         })
         submit_sc(app_config, admin, sc["sc_id"], {
             "sc_no": "SC-CO-001",
-            "request_type": "material",
+            "request_type": "call_off",
             "cost_center": "CC-001",
             "sc_amount": str(sc_amount),
             "service_period_start": "2026-01-01",
@@ -269,6 +270,7 @@ class TestPoFcGuards:
         # Create a draft call-off SC (not submitted)
         create_sc_draft(app_config, admin, {
             "requester_id": admin["user_id"],
+            "request_type": "call_off",
             "calloff_po_id": po_fc["po_id"],
         })
 
@@ -296,7 +298,7 @@ class TestPoFcGuards:
                 "insert into sc_records (sc_id, sc_no, requester_id, request_type, cost_center, "
                 "sc_amount, service_period_start, service_period_end, status, calloff_po_id, "
                 "created_by, created_at, updated_at) "
-                "values ('SC-DEL-TEST', 'SC-DEL-NO', ?, 'material', 1000, 10000, "
+                "values ('SC-DEL-TEST', 'SC-DEL-NO', ?, 'call_off', 1000, 10000, "
                 "'2026-01-01', '2026-12-31', 'draft', 'PO-FC-DEL', "
                 "?, '2026-05-19T00:00:00+00:00', '2026-05-19T00:00:00+00:00')",
                 (admin["user_id"], admin["user_id"]),
@@ -401,7 +403,7 @@ class TestPoSubmit:
         # sums allocated_po_amount (which already includes this PO) + po_amount
         submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-PO-SUB",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 100000,
             "service_period_start": "2026-01-01",
@@ -427,7 +429,7 @@ class TestPoFinishNonFc:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-PO-FIN",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -504,7 +506,7 @@ class TestPoRecallNonFc:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-PO-REC",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",

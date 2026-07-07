@@ -95,7 +95,7 @@ def test_full_fc_calloff_flow(app_config):
     calloff_sc = create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-001",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 50000,
         "service_period_start": "2026-01-01",
@@ -103,7 +103,7 @@ def test_full_fc_calloff_flow(app_config):
         "calloff_po_id": po_fc["po_id"],
     })
     assert calloff_sc["calloff_po_id"] == po_fc["po_id"]
-    assert calloff_sc["request_type"] == "material"
+    assert calloff_sc["request_type"] == "call_off"
 
     # 4. Approve call-off SC and link the same vendor
     calloff_sc = approve_sc(app_config, ADMIN, calloff_sc["sc_id"])
@@ -138,7 +138,7 @@ def test_cannot_create_calloff_under_non_fc_po(app_config):
     sc = create_sc(app_config, ADMIN, {
         "sc_no": "SC-REG-001",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "new",
         "cost_center": 1000,
         "sc_amount": 50000,
         "service_period_start": "2026-01-01",
@@ -156,7 +156,7 @@ def test_cannot_create_calloff_under_non_fc_po(app_config):
         create_sc(app_config, ADMIN, {
             "sc_no": "SC-CO-BAD",
             "requester_id": USER["user_id"],
-            "request_type": "material",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 10000,
             "service_period_start": "2026-01-01",
@@ -221,7 +221,7 @@ def test_calloff_sc_amount_exceeds_po_fc_budget(app_config):
     create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-FIRST",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 40000,
         "service_period_start": "2026-01-01",
@@ -234,7 +234,7 @@ def test_calloff_sc_amount_exceeds_po_fc_budget(app_config):
         create_sc(app_config, ADMIN, {
             "sc_no": "SC-CO-SECOND",
             "requester_id": USER["user_id"],
-            "request_type": "service",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 20000,
             "service_period_start": "2026-01-01",
@@ -267,7 +267,7 @@ def test_po_fc_finish_blocked_by_calloff_sc(app_config):
     create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-OPEN",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 30000,
         "service_period_start": "2026-01-01",
@@ -308,7 +308,7 @@ def test_mixed_calloff_statuses_budget(app_config):
     co_approved = create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-APPROVED",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 30000,
         "service_period_start": "2026-01-01",
@@ -321,7 +321,7 @@ def test_mixed_calloff_statuses_budget(app_config):
     co_denied = create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-DENIED",
         "requester_id": USER["user_id"],
-        "request_type": "service",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 40000,
         "service_period_start": "2026-01-01",
@@ -367,7 +367,7 @@ def test_denied_calloff_still_blocks_budget(app_config):
     co = create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-REL",
         "requester_id": USER["user_id"],
-        "request_type": "material",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 50000,
         "service_period_start": "2026-01-01",
@@ -386,7 +386,7 @@ def test_denied_calloff_still_blocks_budget(app_config):
         create_sc(app_config, ADMIN, {
             "sc_no": "SC-CO-EXCEED",
             "requester_id": USER["user_id"],
-            "request_type": "service",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 40000,
             "service_period_start": "2026-01-01",
@@ -398,7 +398,7 @@ def test_denied_calloff_still_blocks_budget(app_config):
     new_co = create_sc(app_config, ADMIN, {
         "sc_no": "SC-CO-VALID",
         "requester_id": USER["user_id"],
-        "request_type": "service",
+        "request_type": "call_off",
         "cost_center": 1000,
         "sc_amount": 30000,
         "service_period_start": "2026-01-01",

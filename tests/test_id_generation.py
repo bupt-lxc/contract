@@ -49,7 +49,7 @@ def test_generate_po_id_creates_sequential_ids(app_config):
         conn.execute(
             "INSERT INTO sc_records (sc_id, requester_id, request_type, cost_center, sc_amount, "
             "service_period_start, service_period_end, status, created_by, created_at, updated_at) "
-            "VALUES ('SC-001', 'U-001', 'service', 1001, 100, "
+            "VALUES ('SC-001', 'U-001', 'new', 1001, 100, "
             "'2026-01-01', '2026-12-31', 'approved', 'U-001', ?, ?)",
             (timestamp, timestamp),
         )
@@ -82,7 +82,7 @@ def test_generate_gr_id_creates_sequential_ids(app_config):
         conn.execute(
             "INSERT INTO sc_records (sc_id, requester_id, request_type, cost_center, sc_amount, "
             "service_period_start, service_period_end, status, created_by, created_at, updated_at) "
-            "VALUES ('SC-GR', 'U-001', 'service', 1001, 100, "
+            "VALUES ('SC-GR', 'U-001', 'new', 1001, 100, "
             "'2026-01-01', '2026-12-31', 'approved', 'U-001', ?, ?)",
             (timestamp, timestamp),
         )
