@@ -61,7 +61,7 @@ class TestScCreate:
         with pytest.raises(ValidationError, match="currency must be one of"):
             create_sc(seeded_config, admin, {
                 "requester_id": requester["user_id"],
-                "request_type": "material",
+                "request_type": "new",
                 "cost_center": 1000,
                 "sc_amount": 50000,
                 "service_period_start": "2026-01-01",
@@ -74,7 +74,7 @@ class TestScCreate:
         with pytest.raises(ValidationError, match="sc_amount must be positive"):
             create_sc(seeded_config, admin, {
                 "requester_id": requester["user_id"],
-                "request_type": "material",
+                "request_type": "new",
                 "cost_center": 1000,
                 "sc_amount": "0",
                 "service_period_start": "2026-01-01",
@@ -86,7 +86,7 @@ class TestScCreate:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-001",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -100,7 +100,7 @@ class TestScCreate:
         with pytest.raises(PermissionDenied):
             create_sc(seeded_config, requester, {
                 "requester_id": requester["user_id"],
-                "request_type": "material",
+                "request_type": "new",
                 "cost_center": 1000,
                 "sc_amount": 50000,
                 "service_period_start": "2026-01-01",
@@ -111,7 +111,7 @@ class TestScCreate:
         admin, requester = _resolve_users(seeded_config)
         sc = create_sc(seeded_config, admin, {
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -178,7 +178,7 @@ class TestScSubmit:
         })
         result = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-SUB-001",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -191,7 +191,7 @@ class TestScSubmit:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-DENY",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -200,7 +200,7 @@ class TestScSubmit:
         sc = deny_sc(seeded_config, admin, sc["sc_id"])
         result = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-RESUB",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -213,7 +213,7 @@ class TestScSubmit:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-APP",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -222,7 +222,7 @@ class TestScSubmit:
         with pytest.raises(ConflictError, match="SC must be draft or denied to submit"):
             submit_sc(seeded_config, admin, sc["sc_id"], {
                 "sc_no": "SC-RESUB",
-                "request_type": "material",
+                "request_type": "new",
                 "cost_center": 1000,
                 "sc_amount": 50000,
                 "service_period_start": "2026-01-01",
@@ -248,7 +248,7 @@ class TestScSubmit:
         with pytest.raises(PermissionDenied, match="Only the draft owner"):
             submit_sc(seeded_config, other, sc["sc_id"], {
                 "sc_no": "SC-SUB",
-                "request_type": "material",
+                "request_type": "new",
                 "cost_center": 1000,
                 "sc_amount": 50000,
                 "service_period_start": "2026-01-01",
@@ -264,7 +264,7 @@ class TestScConfirm:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-CONF",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -286,7 +286,7 @@ class TestScConfirm:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-NOAD",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -302,7 +302,7 @@ class TestScApprove:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-APPR",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -326,7 +326,7 @@ class TestScApprove:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-MC",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -340,7 +340,7 @@ class TestScApprove:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-NOAD2",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -378,7 +378,7 @@ class TestScUpdate:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-FIN",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -397,7 +397,7 @@ class TestScUpdate:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-PO-AMT",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -426,7 +426,7 @@ class TestScDeny:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-DENY",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -442,7 +442,7 @@ class TestScDeny:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-DENY2",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -464,7 +464,7 @@ class TestScDeny:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-DENY3",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -482,7 +482,7 @@ class TestScFinish:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-FINISH",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -509,7 +509,7 @@ class TestScFinish:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-WPO",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -540,7 +540,7 @@ class TestScRecall:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-RECALL",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -567,7 +567,7 @@ class TestScRecall:
         })
         sc = submit_sc(seeded_config, admin, sc["sc_id"], {
             "sc_no": "SC-REC2",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -594,7 +594,7 @@ class TestScDelete:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-DEL",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -627,7 +627,7 @@ class TestScTransfer:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-XFER",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -641,7 +641,7 @@ class TestScTransfer:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-SAME",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -655,7 +655,7 @@ class TestScTransfer:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-NOEX",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -724,7 +724,7 @@ class TestScDetail:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-DETAIL",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 1000,
             "sc_amount": 50000,
             "service_period_start": "2026-01-01",
@@ -760,7 +760,7 @@ class TestScDetail:
         co = create_sc(seeded_config, admin, {
             "sc_no": "SC-CO",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 30000,
             "service_period_start": "2026-01-01",
@@ -798,7 +798,7 @@ class TestScCallOff:
         sc = create_sc(seeded_config, admin, {
             "sc_no": "SC-CO-001",
             "requester_id": requester["user_id"],
-            "request_type": "material",
+            "request_type": "call_off",
             "cost_center": 1000,
             "sc_amount": 30000,
             "service_period_start": "2026-01-01",
@@ -834,7 +834,7 @@ class TestScCallOff:
             create_sc(seeded_config, admin, {
                 "sc_no": "SC-CO-BIG",
                 "requester_id": requester["user_id"],
-                "request_type": "material",
+                "request_type": "call_off",
                 "cost_center": 1000,
                 "sc_amount": 60000,
                 "service_period_start": "2026-01-01",

@@ -27,7 +27,7 @@ REQUIRED_FIELDS = (
     "service_period_start",
     "service_period_end",
 )
-SUPPORTED_REQUEST_TYPES = {"material", "service", "fixed_asset", "FC"}
+SUPPORTED_REQUEST_TYPES = {"FC", "call_off", "new"}
 SUPPORTED_CURRENCIES = {"CNY", "EUR", "USD"}
 SUPPORTED_STATUSES = {"manager_confirm", "pending", "approved", "denied", "finished"}
 OPTIONAL_UPDATE_FIELDS = (
@@ -43,6 +43,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "internal_system_number",
     "currency",
     "vendor_ids",
+    "service_scope",
 )
 _VENDOR_SNAPSHOT_FIELDS = (
     "vendor_id",
@@ -67,13 +68,16 @@ REQUIRED_BUSINESS_FIELDS = (
 
 def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | None, sc_amount, exclude_sc_id: str | None = None) -> None:
     """Validate call-off PO reference for call-off SC creation/submit."""
+    if request_type == "call_off":
+        if calloff_po_id is None:
+            raise ValidationError("call_off request_type requires calloff_po_id")
+    elif calloff_po_id is not None:
+        raise ValidationError("calloff_po_id is only valid for call_off request_type")
+
     if calloff_po_id is None:
         if request_type == "FC":
-            return  # top-level FC SC is fine without calloff_po_id
-        return  # regular SC without calloff_po_id is fine
-
-    if request_type == "FC":
-        raise ValidationError("Call-off SC cannot have request_type 'FC'")
+            return
+        return  # 'new' or 'call_off' without calloff_po_id handled above
 
     po_row = conn.execute(
         """select po.po_id, po.po_amount, po.status, sc.request_type as parent_sc_type,
@@ -87,7 +91,7 @@ def _validate_calloff_po(conn, calloff_po_id: str | None, request_type: str | No
         raise NotFound(f"PO not found: {calloff_po_id}")
     is_fc_po = (po_row["po_request_type"] == "FC" or po_row["parent_sc_type"] == "FC")
     if not is_fc_po:
-        raise ValidationError("Call-off PO must belong to an FC-type SC")
+        raise ValidationError("Call-off PO must belong to an FC-type SC or be an independent FC PO")
     if po_row["status"] != "active":
         raise ConflictError("Call-off PO must be active to create call-off SCs")
 
@@ -453,8 +457,6 @@ def create_sc(
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     calloff_po_id = data.get("calloff_po_id")
-    if calloff_po_id is not None and data["request_type"] == "FC":
-        raise ValidationError("Call-off SC cannot have request_type 'FC'")
     if data["request_type"] not in SUPPORTED_REQUEST_TYPES:
         raise ValidationError("request_type is invalid")
     currency = data.get("currency", "CNY")
@@ -479,8 +481,7 @@ def create_sc(
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                if calloff_po_id is not None:
-                    _validate_calloff_po(conn, calloff_po_id, data["request_type"], sc_amount)
+                _validate_calloff_po(conn, calloff_po_id, data["request_type"], sc_amount)
                 conn.execute(
                     """
                     insert into sc_records (
@@ -573,8 +574,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 calloff_po_id = data.get("calloff_po_id")
-                if calloff_po_id is not None:
-                    _validate_calloff_po(conn, calloff_po_id, data.get("request_type"), data.get("sc_amount"))
+                _validate_calloff_po(conn, calloff_po_id, data.get("request_type"), data.get("sc_amount"))
                 conn.execute(
                     """
                     insert into sc_records (
@@ -678,8 +678,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 _require_submit_fields(merged)
 
                 calloff_po_id = before.get("calloff_po_id")
-                if calloff_po_id is not None:
-                    _validate_calloff_po(conn, calloff_po_id, merged.get("request_type"), merged["sc_amount"], exclude_sc_id=sc_id)
+                _validate_calloff_po(conn, calloff_po_id, merged.get("request_type"), merged["sc_amount"], exclude_sc_id=sc_id)
 
                 timestamp = utc_now()
                 conn.execute(
