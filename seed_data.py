@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from sc_gr_app.config import default_config
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, approve_sc, close_sc
+from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, approve_sc, finish_sc
 from sc_gr_app.services.po_service import create_po, finish_po
 from sc_gr_app.services.user_service import seed_users
 from sc_gr_app.services.vendor_service import create_vendor
@@ -175,7 +175,7 @@ print(f"  {gr4['gr_id']} (approved)")
 po4 = finish_po(config, req2, po4["po_id"])
 print(f"  {po4['po_id']} (finished)")
 
-sc7 = close_sc(config, admin, sc7["sc_id"])
+sc7 = finish_sc(config, admin, sc7["sc_id"])
 _link_vendors(sc7["sc_id"], [v_ids[3]])
 print(f"  {sc7['sc_id']} (closed)")
 
