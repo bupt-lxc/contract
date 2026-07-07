@@ -14,7 +14,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 REQUIRED_FIELDS = ("vendor_name", "service_scope")
 SUPPORTED_SERVICE_SCOPES = {
     "Transportation",
-    "engineering Service",
+    "Engineering Service",
     "Equipment",
     "Parts",
     "Driver",
@@ -24,7 +24,7 @@ SUPPORTED_SERVICE_SCOPES = {
     "Import&Export&cusoms clearance",
     "Insurance",
     "Harness",
-    "Maintenance",
+    "Maintenance&Calibration",
     "Security",
     "Testing support",
     "Others",
@@ -446,8 +446,11 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
         warnings_list = []
         if not rec.get("vendor_name", "").strip():
             errors_list.append("vendor_name is required")
-        if not rec.get("service_scope", "").strip():
+        scope = rec.get("service_scope", "").strip()
+        if not scope:
             errors_list.append("service_scope is required")
+        elif scope not in SUPPORTED_SERVICE_SCOPES:
+            errors_list.append(f"service_scope '{scope}' is not a valid value")
 
         vid = rec.get("vendor_id", "").strip()
         if vid and vid in existing_ids:
@@ -514,6 +517,11 @@ def execute_import(
             if not vname or not scope:
                 skipped += 1
                 errors.append(f"Row {i + 1}: missing required fields, skipped")
+                continue
+
+            if scope and scope not in SUPPORTED_SERVICE_SCOPES:
+                skipped += 1
+                errors.append(f"Row {i + 1}: service_scope '{scope}' is invalid, skipped")
                 continue
 
             try:
