@@ -73,7 +73,9 @@ class TestScImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn)
-        rows = [{"sc_no": "SC-003", "sc_amount": "50000", "status": "approved"}]
+        rows = [{"sc_no": "SC-003", "sc_amount": "50000", "status": "approved",
+                 "request_type": "new", "cost_center": "60473000",
+                 "service_period_start": "2025-01-01", "service_period_end": "2025-12-31"}]
         preview = import_service.preview_sc_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -81,7 +83,9 @@ class TestScImportStatusRestrictions:
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn)
-        rows = [{"sc_no": "SC-004", "sc_amount": "50000", "status": "finished"}]
+        rows = [{"sc_no": "SC-004", "sc_amount": "50000", "status": "finished",
+                 "request_type": "new", "cost_center": "60473000",
+                 "service_period_start": "2025-01-01", "service_period_end": "2025-12-31"}]
         preview = import_service.preview_sc_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -103,7 +107,7 @@ class TestPoImportStatusRestrictions:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-002", "po_amount": "50000", "status": "active"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001", "po_no": "PO-002", "po_amount": "50000", "status": "active"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -113,7 +117,7 @@ class TestPoImportStatusRestrictions:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
-        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "po_no": "PO-003", "po_amount": "50000", "status": "finished"}]
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001", "po_no": "PO-003", "po_amount": "50000", "status": "finished"}]
         preview = import_service.preview_po_import(app_config, rows)
         assert preview[0]["_valid"] is True
 

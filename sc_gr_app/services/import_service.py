@@ -111,6 +111,8 @@ def parse_date(value: str) -> str | None:
     if not value or not str(value).strip():
         return None
     value = str(value).strip()
+    if value.upper() == "N/A":
+        return "N/A"
     for fmt in _DATE_FORMATS:
         try:
             dt = datetime.strptime(value, fmt)
@@ -195,6 +197,25 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
         status = str(row.get("status", "")).strip()
         if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+        # DB CHECK constraint: non-draft/non-manager_confirm statuses require full data
+        constraint_fields = ["request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end"]
+        if status not in ("draft", "manager_confirm", ""):
+            for field in constraint_fields:
+                val = row.get(field)
+                if val is None or str(val).strip() == "":
+                    errors.append({"row": i, "field": field, "message": f"{field} is required when status is '{status}'"})
+            # Validate date format for service_period fields
+            for date_field in ("service_period_start", "service_period_end"):
+                raw = str(row.get(date_field, "")).strip()
+                if raw and raw.upper() != "N/A" and parse_date(raw) is None:
+                    errors.append({"row": i, "field": date_field, "message": f"{date_field} has an unrecognized date format: '{raw}'"})
+            # Validate sc_amount is a valid number
+            try:
+                amt = row.get("sc_amount")
+                if amt is not None and str(amt).strip():
+                    float(amt)
+            except (ValueError, TypeError):
+                errors.append({"row": i, "field": "sc_amount", "message": f"sc_amount is not a valid number: '{amt}'"})
         # Validate request_type
         rt = str(row.get("request_type", "")).strip()
         if rt and rt not in ("FC", "call_off", "new"):
@@ -283,6 +304,15 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                     sc_id = str(row.get("sc_id") or "").strip()
                     if not sc_id:
                         sc_id = _generate_sc_id(conn, machine_id)
+                    # Resolve calloff_po_id: import data uses po_no, FK requires po_id
+                    calloff_po_raw = str(row.get("calloff_po_id", "")).strip()
+                    calloff_po_id = None
+                    if calloff_po_raw:
+                        po_row = conn.execute(
+                            "SELECT po_id FROM pos WHERE po_id = ? OR po_no = ?",
+                            (calloff_po_raw, calloff_po_raw),
+                        ).fetchone()
+                        calloff_po_id = po_row["po_id"] if po_row else calloff_po_raw
                     conn.execute(
                         """INSERT INTO sc_records (
                           sc_id, sc_no, requester_id, request_type, cost_center,
@@ -305,7 +335,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("currency", "CNY"),
                             row.get("service_scope"),
                             row.get("internal_system_number"),
-                            row.get("calloff_po_id"),
+                            calloff_po_id,
                             current_user["user_id"],
                             timestamp,
                             timestamp,
@@ -559,9 +589,28 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             for field in ["sc_no", "sc_amount", "status"]:
                 if not row.get(field):
                     errors_list.append(f"{field} is required")
-            status = row.get("status", "")
+            status = str(row.get("status", "")).strip()
             if status and status not in SC_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
+            # DB CHECK constraint: non-draft/non-manager_confirm statuses require full data
+            constraint_fields = ["request_type", "cost_center", "sc_amount", "service_period_start", "service_period_end"]
+            if status not in ("draft", "manager_confirm", ""):
+                for field in constraint_fields:
+                    val = row.get(field)
+                    if val is None or str(val).strip() == "":
+                        errors_list.append(f"{field} is required when status is '{status}'")
+                # Validate date format for service_period fields
+                for date_field in ("service_period_start", "service_period_end"):
+                    raw = str(row.get(date_field, "")).strip()
+                    if raw and raw.upper() != "N/A" and parse_date(raw) is None:
+                        errors_list.append(f"{date_field} has an unrecognized date format: '{raw}'")
+                # Validate sc_amount is a valid number
+                try:
+                    amt = row.get("sc_amount")
+                    if amt is not None and str(amt).strip():
+                        float(amt)
+                except (ValueError, TypeError):
+                    errors_list.append(f"sc_amount is not a valid number: '{amt}'")
             # Validate request_type and calloff_po_id
             rt = str(row.get("request_type", "")).strip()
             if rt and rt not in ("FC", "call_off", "new"):
