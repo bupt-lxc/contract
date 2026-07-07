@@ -119,5 +119,60 @@ export function useExport() {
     await exportRows(allRows, columns, filename)
   }
 
-  return { exportRows, exportAll, exportMultiSheet }
+  /**
+   * Escape a value for CSV output (handle commas, quotes, newlines).
+   */
+  function _escapeCSV(val) {
+    const s = String(val ?? '')
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"'
+    }
+    return s
+  }
+
+  /**
+   * Convert rows + columns definition to a CSV string.
+   * columns: [{ key, label, getValue? }]
+   */
+  function _toCSV(rows, columns) {
+    const header = columns.map(c => _escapeCSV(c.label)).join(',')
+    const body = rows.map(row =>
+      columns.map(col => {
+        const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
+        return _escapeCSV(raw)
+      }).join(',')
+    ).join('\n')
+    return header + '\n' + body
+  }
+
+  /**
+   * Export an in-memory array of rows as a .csv file.
+   */
+  async function exportCSV(rows, columns, filename) {
+    const csv = _toCSV(rows, columns)
+    const b64 = btoa(unescape(encodeURIComponent(csv)))
+    await callApi('save_file', { filename: `${filename}.csv`, data: b64 })
+  }
+
+  /**
+   * Paginate through ALL search results and export as .csv.
+   */
+  async function exportAllCSV(apiMethod, params, columns, filename) {
+    const allRows = []
+    const limit = 500
+    let offset = 0
+
+    while (true) {
+      const result = await callApi(apiMethod, { ...params, limit, offset })
+      const rows = Array.isArray(result) ? result : (result.items || result.rows || [])
+      if (!rows.length) break
+      allRows.push(...rows)
+      if (rows.length < limit) break
+      offset += limit
+    }
+
+    await exportCSV(allRows, columns, filename)
+  }
+
+  return { exportRows, exportAll, exportMultiSheet, exportCSV, exportAllCSV }
 }

@@ -7,6 +7,17 @@
     @close="handleClose"
   >
     <el-form label-position="top">
+      <!-- Format selector -->
+      <el-form-item :label="$t('export.format')">
+        <el-radio-group v-model="exportFormat">
+          <el-radio value="xlsx">{{ $t('export.xlsx') }}</el-radio>
+          <el-radio value="csv">{{ $t('export.csv') }}</el-radio>
+        </el-radio-group>
+        <div v-if="exportFormat === 'csv'" style="color:#909399;font-size:12px;margin-top:4px">
+          {{ $t('export.formatCSVHint') }}
+        </div>
+      </el-form-item>
+
       <!-- Cascade options -->
       <template v-if="entityType === 'sc'">
         <el-form-item :label="$t('export.cascadeOptions')">
@@ -64,7 +75,7 @@ import { useExport } from '@/composables/useExport.js'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
-const { exportMultiSheet } = useExport()
+const { exportMultiSheet, exportCSV } = useExport()
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -82,6 +93,7 @@ const emit = defineEmits(['update:visible', 'exported'])
 const cascadePo = ref(false)
 const cascadeGr = ref(false)
 const dataScope = ref(initScope())
+const exportFormat = ref('xlsx')
 const filename = ref(defaultFilename())
 const exporting = ref(false)
 
@@ -329,8 +341,12 @@ async function doExport() {
     const result = await callApi(apiMethod, payload)
     const { cascade_rows, statistics } = result
 
-    const sheets = buildSheets(cascade_rows, statistics)
-    await exportMultiSheet(sheets, filename.value)
+    if (exportFormat.value === 'csv') {
+      await exportCSV(cascade_rows, CASCADE_COLUMNS, filename.value)
+    } else {
+      const sheets = buildSheets(cascade_rows, statistics)
+      await exportMultiSheet(sheets, filename.value)
+    }
 
     ElMessage.success(t('export.exported'))
     emit('update:visible', false)
