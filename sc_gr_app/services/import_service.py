@@ -171,7 +171,7 @@ def _generate_gr_id(conn, machine_id: str) -> str:
 
 def _is_template_meta_row(row: dict, id_field: str) -> bool:
     """Check if this is a template meta row (hint or sample) that should be skipped."""
-    val = row.get(id_field, "").strip()
+    val = str(row.get(id_field, "")).strip()
     if val == "[EXAMPLE]":
         return True
     # Hint rows have ID values that look like instructions rather than real IDs.
@@ -205,12 +205,14 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "requester_id", "message": f"User {row['requester_id']} not found"})
-        calloff_po_id = row.get("calloff_po_id")
+        calloff_po_id = str(row.get("calloff_po_id", "")).strip()
+        if rt == "call_off" and not calloff_po_id:
+            errors.append({"row": i, "field": "calloff_po_id", "message": "calloff_po_id is required for call_off request_type"})
         if calloff_po_id:
             po_exists = conn.execute(
                 "select 1 from pos po left join sc_records sc on sc.sc_id = po.sc_id "
-                "where po.po_id = ? and (po.request_type = 'FC' or sc.request_type = 'FC')",
-                (calloff_po_id,),
+                "where (po.po_id = ? or po.po_no = ?) and (po.request_type = 'FC' or sc.request_type = 'FC')",
+                (calloff_po_id, calloff_po_id),
             ).fetchone()
             if not po_exists:
                 errors.append({"row": i, "field": "calloff_po_id", "message": f"calloff_po_id {calloff_po_id} is not a valid FC PO"})
@@ -231,7 +233,7 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
                         errors.append({"row": i, "field": "vendor_id", "message": f"Vendor {vid} not found"})
 
     # DB-level SC NO uniqueness check
-    sc_nos_in_file = [r["sc_no"].strip() for r in rows if r.get("sc_no") and not _is_template_meta_row(r, "sc_no")]
+    sc_nos_in_file = [str(r["sc_no"]).strip() for r in rows if r.get("sc_no") and not _is_template_meta_row(r, "sc_no")]
     if sc_nos_in_file:
         placeholders = ",".join(["?"] * len(sc_nos_in_file))
         dupes = conn.execute(
@@ -278,7 +280,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                     if exists:
                         skipped_duplicate += 1
                         continue
-                    sc_id = (row.get("sc_id") or "").strip()
+                    sc_id = str(row.get("sc_id") or "").strip()
                     if not sc_id:
                         sc_id = _generate_sc_id(conn, machine_id)
                     conn.execute(
@@ -354,7 +356,7 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
         sc_no = str(row.get("sc_no", "")).strip()
         # Required fields: po_no, po_amount, status are always required;
         # sc_no is required only for non-FC POs.
-        for field in ["po_no", "po_amount", "status"]:
+        for field in ["po_no", "vendor_id", "po_amount", "status"]:
             val = row.get(field)
             if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
@@ -393,7 +395,7 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
                 errors.append({"row": i, "field": "vendor_id", "message": f"Vendor {row['vendor_id']} not found"})
 
     # DB-level PO NO uniqueness check
-    po_nos_in_file = [r["po_no"].strip() for r in rows if r.get("po_no") and not _is_template_meta_row(r, "po_no")]
+    po_nos_in_file = [str(r["po_no"]).strip() for r in rows if r.get("po_no") and not _is_template_meta_row(r, "po_no")]
     if po_nos_in_file:
         placeholders = ",".join(["?"] * len(po_nos_in_file))
         dupes = conn.execute(
@@ -432,7 +434,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 for row in rows:
                     if _is_template_meta_row(row, "po_no"):
                         continue
-                    po_no = (row.get("po_no") or "").strip()
+                    po_no = str(row.get("po_no") or "").strip()
                     # Uniqueness check by po_no
                     exists = conn.execute(
                         "SELECT 1 FROM pos WHERE po_no = ?", (po_no,)
@@ -441,7 +443,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         skipped_duplicate += 1
                         continue
                     # Resolve sc_no → sc_id
-                    sc_no = (row.get("sc_no") or "").strip()
+                    sc_no = str(row.get("sc_no") or "").strip()
                     sc_id = None
                     if sc_no:
                         sc_row = conn.execute(
@@ -530,7 +532,7 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
                 )
 
     # DB-level GR NO uniqueness check
-    gr_nos_in_file = [r["gr_no"].strip() for r in rows if r.get("gr_no") and not _is_template_meta_row(r, "gr_no")]
+    gr_nos_in_file = [str(r["gr_no"]).strip() for r in rows if r.get("gr_no") and not _is_template_meta_row(r, "gr_no")]
     if gr_nos_in_file:
         placeholders = ",".join(["?"] * len(gr_nos_in_file))
         dupes = conn.execute(
@@ -560,6 +562,27 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             status = row.get("status", "")
             if status and status not in SC_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
+            # Validate request_type and calloff_po_id
+            rt = str(row.get("request_type", "")).strip()
+            if rt and rt not in ("FC", "call_off", "new"):
+                errors_list.append(f"Invalid request_type: {rt}")
+            calloff_po_id = str(row.get("calloff_po_id", "")).strip()
+            if rt == "call_off" and not calloff_po_id:
+                errors_list.append("calloff_po_id is required for call_off request_type")
+            if calloff_po_id:
+                po_exists = conn.execute(
+                    "select 1 from pos po left join sc_records sc on sc.sc_id = po.sc_id "
+                    "where (po.po_id = ? or po.po_no = ?) and (po.request_type = 'FC' or sc.request_type = 'FC')",
+                    (calloff_po_id, calloff_po_id),
+                ).fetchone()
+                if not po_exists:
+                    errors_list.append(f"calloff_po_id {calloff_po_id} is not a valid FC PO")
+            # Validate service_scope if provided
+            scope = str(row.get("service_scope", "")).strip()
+            if scope:
+                from sc_gr_app.services.vendor_service import SUPPORTED_SERVICE_SCOPES
+                if scope not in SUPPORTED_SERVICE_SCOPES:
+                    errors_list.append(f"Invalid service_scope: {scope}")
             if row.get("requester_id"):
                 exists = conn.execute(
                     "SELECT 1 FROM users WHERE user_id = ?", (row["requester_id"],)
@@ -584,11 +607,11 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
         # File-level SC NO duplicate detection
         sc_no_counts = {}
         for r in preview:
-            sc_no = (r.get("sc_no") or "").strip()
+            sc_no = str(r.get("sc_no") or "").strip()
             if sc_no:
                 sc_no_counts[sc_no] = sc_no_counts.get(sc_no, 0) + 1
         for r in preview:
-            sc_no = (r.get("sc_no") or "").strip()
+            sc_no = str(r.get("sc_no") or "").strip()
             if sc_no and sc_no_counts.get(sc_no, 0) > 1:
                 r["_errors"].append(f"SC NO '{sc_no}' appears {sc_no_counts[sc_no]} times in this file")
                 r["_valid"] = False
@@ -607,9 +630,9 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             errors_list = []
             request_type = str(row.get("request_type", "")).strip()
             sc_no = str(row.get("sc_no", "")).strip()
-            # Required fields: po_no, po_amount, status are always required;
+            # Required fields: po_no, vendor_id, po_amount, status are always required;
             # sc_no is required only for non-FC POs.
-            for field in ["po_no", "po_amount", "status"]:
+            for field in ["po_no", "vendor_id", "po_amount", "status"]:
                 val = row.get(field)
                 if val is None or str(val).strip() == "":
                     errors_list.append(f"{field} is required")
@@ -650,11 +673,11 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
         # File-level PO NO duplicate detection
         po_no_counts = {}
         for r in preview:
-            po_no = (r.get("po_no") or "").strip()
+            po_no = str(r.get("po_no") or "").strip()
             if po_no:
                 po_no_counts[po_no] = po_no_counts.get(po_no, 0) + 1
         for r in preview:
-            po_no = (r.get("po_no") or "").strip()
+            po_no = str(r.get("po_no") or "").strip()
             if po_no and po_no_counts.get(po_no, 0) > 1:
                 r["_errors"].append(f"PO NO '{po_no}' appears {po_no_counts[po_no]} times in this file")
                 r["_valid"] = False
@@ -696,11 +719,11 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
         # File-level GR NO duplicate detection
         gr_no_counts = {}
         for r in preview:
-            gr_no = (r.get("gr_no") or "").strip()
+            gr_no = str(r.get("gr_no") or "").strip()
             if gr_no:
                 gr_no_counts[gr_no] = gr_no_counts.get(gr_no, 0) + 1
         for r in preview:
-            gr_no = (r.get("gr_no") or "").strip()
+            gr_no = str(r.get("gr_no") or "").strip()
             if gr_no and gr_no_counts.get(gr_no, 0) > 1:
                 r["_errors"].append(f"GR NO '{gr_no}' appears {gr_no_counts[gr_no]} times in this file")
                 r["_valid"] = False
@@ -731,7 +754,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 for row in rows:
                     if _is_template_meta_row(row, "gr_no"):
                         continue
-                    gr_no = (row.get("gr_no") or "").strip()
+                    gr_no = str(row.get("gr_no") or "").strip()
                     exists = conn.execute(
                         "SELECT 1 FROM gr_requests WHERE gr_no = ?", (gr_no,)
                     ).fetchone()
@@ -739,7 +762,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         skipped_duplicate += 1
                         continue
                     # Resolve po_no → po_id
-                    po_no = row.get("po_no", "").strip()
+                    po_no = str(row.get("po_no", "")).strip()
                     po_row = conn.execute(
                         "SELECT po_id FROM pos WHERE po_no = ?", (po_no,)
                     ).fetchone()

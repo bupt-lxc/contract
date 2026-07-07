@@ -27,6 +27,8 @@ SUPPORTED_SERVICE_SCOPES = {
     "Maintenance&Calibration",
     "Security",
     "Testing support",
+    "Fix asset",
+    "Materials",
     "Others",
 }
 OPTIONAL_FIELDS = (

@@ -341,6 +341,8 @@ const scImportColumns = [
   { prop: 'vendor_id', label: t('vendor.vendorId'), width: '120' },
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
   { prop: 'request_type', label: t('sc.requestType'), width: '100' },
+  { prop: 'calloff_po_id', label: t('sc.calloffPoId'), width: '130' },
+  { prop: 'service_scope', label: t('sc.serviceScope'), width: '120' },
   { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },
   { prop: 'sc_amount', label: t('sc.scAmount'), width: '100' },
   { prop: 'currency', label: t('sc.currency'), width: '70' },

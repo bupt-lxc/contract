@@ -1918,7 +1918,7 @@ class ApiBridge:
                  "approved/finished", "Optional",
                  "CNY/EUR/USD", "Optional (see service scope list)",
                  "Optional (FC only)",
-                 "Optional (FC call-off only)",
+                 "Required for call_off request_type",
                  "Y/N (default N)", "Optional"]
         sample = ["[EXAMPLE]", "", current_user["user_id"], "new", "12345",
                   "50000", "2026-01-01", "2026-12-31", "approved",

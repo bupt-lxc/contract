@@ -177,7 +177,7 @@ async function handleFileSelect(uploadFile) {
     const data = isCSV ? await file.text() : await file.arrayBuffer()
     const wb = XLSX.read(data, { type: isCSV ? 'string' : 'array' })
     const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
     const entity = props.entityType.toLowerCase()
     const result = await callApi(`preview_${entity}_import`, { rows })
     preview.value = result.rows
