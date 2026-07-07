@@ -220,6 +220,7 @@ def search_scs(
         text_columns=(
             "sc.sc_no",
             "sc.description",
+            "sc.service_scope",
             "sc.request_type",
             "cast(sc.cost_center as text)",
             "requester.user_name",
@@ -243,6 +244,7 @@ def search_scs(
             "sc_no": "sc.sc_no",
             "requester_id": "sc.requester_id",
             "request_type": "sc.request_type",
+            "service_scope": "sc.service_scope",
             "cost_center": "sc.cost_center",
             "status": "sc.status",
             "created_by": "sc.created_by",
@@ -287,6 +289,7 @@ def search_scs(
             "requester_id": "sc.requester_id",
             "requester_name": "requester.user_name",
             "request_type": "sc.request_type",
+            "service_scope": "sc.service_scope",
             "cost_center": "sc.cost_center",
             "sc_amount": "sc.sc_amount",
             "status": "sc.status",
