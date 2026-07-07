@@ -1908,20 +1908,21 @@ class ApiBridge:
 
         headers = ["sc_no", "vendor_id", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "internal_system_number", "calloff_po_id",
+                   "description", "currency", "service_scope", "internal_system_number", "calloff_po_id",
                    "asset", "asset_nums"]
         hints = ["Required (business NO, must be unique)",
                  "Optional (comma-separated, e.g. V000001,V000002)",
                  "Optional (defaults to importer)",
-                 "material/service/fixed_asset/FC", "Cost center number",
+                 "FC/call_off/new", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY",
                  "approved/finished", "Optional",
-                 "CNY/EUR/USD", "Optional (FC only)",
+                 "CNY/EUR/USD", "Optional (see service scope list)",
+                 "Optional (FC only)",
                  "Optional (FC call-off only)",
                  "Y/N (default N)", "Optional"]
-        sample = ["[EXAMPLE]", "", current_user["user_id"], "material", "12345",
+        sample = ["[EXAMPLE]", "", current_user["user_id"], "new", "12345",
                   "50000", "2026-01-01", "2026-12-31", "approved",
-                  "Sample SC description", "CNY", "", "",
+                  "Sample SC description", "CNY", "", "", "",
                   "N", ""]
 
         def _col_letter(i):
