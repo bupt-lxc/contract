@@ -271,6 +271,9 @@ home: {
     unallocated: 'Unallocated',
     downstreamCalloff: 'Downstream Call-off SCs',
     pendingCalloff: 'Pending Call-off SCs',
+    assignees: 'Assignees',
+    assigneesPlaceholder: 'Select assignees',
+    transferAssigneesNote: 'Assignees will remain unchanged',
   },
 
   po: {

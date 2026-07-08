@@ -133,7 +133,7 @@
     <ScFormDialog
       v-model:visible="editDialogVisible"
       mode="edit"
-      :record="{ ...detail.sc, vendors: detail.vendors }"
+      :record="{ ...detail.sc, vendors: detail.vendors, assignees: detail.assignees }"
       :users="activeUsers"
       :vendors="vendors"
       @save-submit="handleEditSave"
@@ -160,6 +160,9 @@
                    :value="u.user_id"
                    :disabled="u.user_id === detail.sc?.requester_id" />
       </el-select>
+      <p style="color: #909399; font-size: 13px; margin-top: 8px;">
+        {{ $t('sc.transferAssigneesNote') }}
+      </p>
       <template #footer>
         <el-button @click="transferDialogVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" :disabled="!selectedNewOwner" @click="handleTransferOwner">

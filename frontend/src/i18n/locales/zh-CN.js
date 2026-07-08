@@ -271,6 +271,9 @@ home: {
     unallocated: '未分配金额',
     downstreamCalloff: '下游外委 SC',
     pendingCalloff: '进行中外委 SC',
+    assignees: '协作者',
+    assigneesPlaceholder: '选择协作者',
+    transferAssigneesNote: '协作者将保持不变',
   },
 
   po: {

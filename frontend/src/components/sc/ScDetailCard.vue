@@ -3,6 +3,9 @@
     <el-descriptions-item :label="$t('sc.scId')">{{ sc.sc_id }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.scNo')">{{ sc.sc_no || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.requester')">{{ sc.requester_name || sc.requester_id }}</el-descriptions-item>
+    <el-descriptions-item v-if="sc.assignees && sc.assignees.length" :label="$t('sc.assignees')">
+      {{ sc.assignees.map(a => a.user_name).join(', ') }}
+    </el-descriptions-item>
     <el-descriptions-item :label="$t('sc.requestType')">{{ sc.request_type }}</el-descriptions-item>
     <el-descriptions-item v-if="sc.service_scope" :label="$t('vendor.serviceScope')">
       {{ sc.service_scope }}
