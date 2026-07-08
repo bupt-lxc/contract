@@ -1965,17 +1965,17 @@ class ApiBridge:
         headers = ["gr_id", "po_id", "gr_no", "requester_id",
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
-                   "delivery_from", "delivery_to", "last_delivery"]
+                   "last_delivery"]
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional", "Optional (defaults to importer)",
-                 "Required", "Optional",
+                 "Optional", "Optional",
                  "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "Required (YYYY-MM-DD)", "Required (YYYY-MM-DD)", "YYYY-MM-DD"]
+                 "YYYY-MM-DD"]
         sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
                   "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
-                  "2026-01-01", "2026-12-31", ""]
+                  ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -2000,7 +2000,7 @@ class ApiBridge:
         last_col = _col_letter(len(headers) - 1)
         info_text = (
             "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
-            "Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
+            "Required fields: PO ID, GR NO, Con Value, Status. "
             "Leave GR ID empty to auto-generate."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
