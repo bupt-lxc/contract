@@ -128,7 +128,7 @@ class TestGrImportStatusRestrictions:
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "draft"}]
+                  "con_value": "10000", "status": "draft"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
 
@@ -137,7 +137,7 @@ class TestGrImportStatusRestrictions:
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "pending"}]
+                  "con_value": "10000", "status": "pending"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
 
@@ -146,7 +146,7 @@ class TestGrImportStatusRestrictions:
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "manager_confirm"}]
+                  "con_value": "10000", "status": "manager_confirm"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
 
@@ -155,7 +155,7 @@ class TestGrImportStatusRestrictions:
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
+                  "con_value": "10000", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -164,7 +164,16 @@ class TestGrImportStatusRestrictions:
         with connect(app_config) as conn:
             self._seed_gr_deps(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "finished"}]
+                  "con_value": "10000", "status": "finished"}]
+        preview = import_service.preview_gr_import(app_config, rows)
+        assert preview[0]["_valid"] is True
+
+    def test_gr_allows_missing_estimated_amount(self, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            self._seed_gr_deps(conn)
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-OPT-001",
+                  "con_value": "10000", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is True
 
@@ -207,7 +216,7 @@ class TestRequiredFields:
             _seed_vendor(conn)
             _seed_po(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "estimated_amount": "10000", "con_value": "10000",
-                  "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
+                  "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
         assert any("gr_no is required" in e for e in preview[0]["_errors"])
@@ -220,36 +229,10 @@ class TestRequiredFields:
             _seed_vendor(conn)
             _seed_po(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
+                  "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert preview[0]["_valid"] is False
         assert any("con_value is required" in e for e in preview[0]["_errors"])
-
-    def test_gr_fails_without_delivery_from(self, app_config):
-        migrate(app_config)
-        with connect(app_config) as conn:
-            _seed_user(conn)
-            _seed_sc(conn)
-            _seed_vendor(conn)
-            _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_to": "2026-12-31", "status": "approved"}]
-        preview = import_service.preview_gr_import(app_config, rows)
-        assert preview[0]["_valid"] is False
-        assert any("delivery_from is required" in e for e in preview[0]["_errors"])
-
-    def test_gr_fails_without_delivery_to(self, app_config):
-        migrate(app_config)
-        with connect(app_config) as conn:
-            _seed_user(conn)
-            _seed_sc(conn)
-            _seed_vendor(conn)
-            _seed_po(conn)
-        rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "status": "approved"}]
-        preview = import_service.preview_gr_import(app_config, rows)
-        assert preview[0]["_valid"] is False
-        assert any("delivery_to is required" in e for e in preview[0]["_errors"])
 
 
 class TestPreviewAnnotations:
@@ -305,7 +288,7 @@ class TestPreviewAnnotations:
             _seed_vendor(conn)
             _seed_po(conn)
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
+                  "con_value": "10000", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
         assert len(preview) == 1
         assert "_errors" in preview[0]
@@ -346,7 +329,7 @@ class TestConfirmImport:
             _seed_po(conn)
         current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
         rows = [{"po_id": "PO-0000001-20260701-001", "gr_no": "GR-CONFIRM", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "delivery_to": "2026-12-31", "status": "approved"}]
+                  "con_value": "10000", "status": "approved"}]
         result = import_service.import_grs(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
