@@ -37,41 +37,53 @@ The primary requester is NOT automatically stored in `sc_assignees` — they alr
 | Function | Change |
 |---|---|
 | `_assert_can_view_sc` | Also allow if user_id is in `sc_assignees` for this SC |
-| `_sc_permissions` | Assignees get `can_view = true`; all operational permissions (`can_edit_sc`, `can_submit_sc`, etc.) remain `false` |
+| `_sc_permissions` | No change. Assignees naturally get `false` for all operational permissions (`can_edit_sc`, `can_submit_sc`, etc.) because `is_owner = user.user_id == sc.requester_id` is false for them. No need to add a `can_view` key — view is gated by `_assert_can_view_sc`, not `_sc_permissions`. |
 | `create_sc_draft` | Accept `assignee_ids` in data, call `_sync_sc_assignees` after insert |
-| `update_sc` | Accept `assignee_ids` in data, call `_sync_sc_assignees` |
-| `submit_sc` | Accept `assignee_ids` in merged data, call `_sync_sc_assignees` |
-| `_sync_sc_assignees(conn, sc_id, assignee_ids)` | New helper — DELETE all existing, INSERT new list (same pattern as `_sync_sc_vendors`) |
-| `get_sc_detail` | Return `assignees` list (user_id, user_name from users table) |
-| `transfer_sc` | No change — only primary requester is transferred |
+| `update_sc` | Accept `assignee_ids` in data, call `_sync_sc_assignees`. Add `"assignee_ids"` to `OPTIONAL_UPDATE_FIELDS` tuple. |
+| `submit_sc` | Accept `assignee_ids` in merged data, call `_sync_sc_assignees` (same pattern as `_sync_sc_vendors`) |
+| `create_sc` (direct submit) | No change. `assignee_ids` in data is silently ignored — the INSERT only picks named columns. This is intentional: direct submit path does not support assignees. |
+| `_sync_sc_assignees(conn, sc_id, assignee_ids)` | New helper — DELETE all existing rows for this sc_id, INSERT new list from `assignee_ids`. Same pattern as `_sync_sc_vendors`. |
+| `get_sc_detail` | Return `assignees` list (user_id, user_name from users table by joining `sc_assignees`) |
+| `transfer_sc` | No change — only primary requester is transferred. Assignees stay with the SC. |
+| `delete_sc` | Add explicit `DELETE FROM sc_assignees WHERE sc_id = ?` before deleting from `sc_records`, matching the `sc_vendors` pattern. |
+| `recall_sc` | Permission unchanged (only requester can recall). Notification will CC assignees as a natural consequence of the notification update — desired behavior. |
 
 ### query_service.py
 
-Non-admin workbench and search WHERE clauses change from:
+**Single point of change: `_sc_visibility_clauses`.** Update this one function to include the `sc_assignees` subquery. This automatically fixes all four call sites:
 
+- `search_scs`
+- `search_pos` — assignees will see POs under their assigned SCs
+- `search_grs` — assignees will see GRs under their assigned SCs
+- `workbench_data` — must be refactored to call `_sc_visibility_clauses` instead of its current hardcoded `sc.requester_id = ?` checks (at lines ~693, ~718, ~760 for SC/PO/GR status columns respectively)
+
+Change from:
 ```
 sc.requester_id = ?
 ```
-
 to:
-
 ```
 (sc.requester_id = ? OR sc.sc_id IN (SELECT sc_id FROM sc_assignees WHERE user_id = ?))
 ```
 
 ### notification_service.py
 
-Status-change notifications include assignees as additional recipients (CC, not To — the primary requester remains the To recipient).
+**Mechanism: inline query in `queue_status_change`.** When `entity_type == 'sc'`, after resolving existing CC recipients, also query:
+```sql
+SELECT user_id FROM sc_assignees WHERE sc_id = ?
+```
+and merge those IDs into the CC list. This is simpler than writing assignee IDs into `notification_config.cc_user_ids` on every create/update/submit, and keeps notification config as a separate concern.
+
+The primary requester remains the To recipient; assignees are added as CC.
+
+Recall notifications also CC assignees — desired behavior since assignees should know about status changes.
 
 ### API bridge (bridge.py)
 
-- `create_sc_draft`, `update_sc`, `submit_sc`: extract `assignee_ids` from payload data
+- `create_sc_draft`, `update_sc`, `submit_sc`: extract `assignee_ids` from payload data (already passed through, same as `vendor_ids`)
 - `get_sc_detail`: return assignees in response
-- New endpoint: none needed (assignees are managed through existing create/update/submit endpoints)
-
-### schemas.py (OPTIONAL_UPDATE_FIELDS)
-
-Add `"assignee_ids"` to the list of optional update fields.
+- **`open_entity_email`**: for SC entities, also query `sc_assignees` and merge into CC list, consistent with `queue_status_change`
+- New endpoint: none needed
 
 ## Frontend Changes
 
@@ -79,7 +91,17 @@ Add `"assignee_ids"` to the list of optional update fields.
 
 - Add `<el-select multiple>` for assignee selection below the requester dropdown
 - Label: "协作者" / "Assignees"
-- Data binding: `form.assignee_ids`
+- Data binding: `form.assignee_ids` (initialized as `[]`)
+- **Exclude requester**: filter user options with `users.filter(u => u.user_id !== form.requester_id)`, or use `:disabled` on the currently selected requester's option. Re-filter when requester changes.
+- **Edit mode**: populate `form.assignee_ids` from `props.record.assignees` (requires `ScDetailView.vue` to pass assignees in the record prop — see below)
+
+### ScDetailView.vue
+
+- When opening edit dialog, pass `assignees` in the record prop:
+  ```
+  { ...detail.sc, vendors: detail.vendors, assignees: detail.assignees }
+  ```
+- **Transfer dialog**: add a note "协作者将保持不变" / "Assignees will remain unchanged" below the user selector (minor UX improvement)
 
 ### ScDetailCard.vue
 
@@ -89,19 +111,19 @@ Add `"assignee_ids"` to the list of optional update fields.
 ### ScTable.vue
 
 - No required change (requester_name column stays as the primary owner)
-- Optional: could show an indicator if assignees exist
 
 ## What Does NOT Change
 
-- `create_sc` (direct submit flow)
-- `approve_sc`, `deny_sc`, `finish_sc`, `confirm_sc`, `recall_sc`, `delete_sc`
+- `create_sc` (direct submit flow) — assignee_ids silently ignored
+- `approve_sc`, `deny_sc`, `finish_sc`, `confirm_sc` — permission checks unchanged
 - Import/export templates and logic
-- The `transfer_sc` function
+- `transfer_sc` — only primary requester is transferred; assignees persist
 - All existing `requester_id`-based permission checks for write operations
 
 ## Edge Cases
 
-1. **Primary requester also listed as assignee**: harmless no-op — the requester already has full access; UI should prevent selection of the requester in the assignee picker.
-2. **Assignee is disabled**: still shows in the list; view permissions still granted (consistent with how disabled requester works).
-3. **Assignee deleted from users table**: FK constraint prevents deletion while rows exist in `sc_assignees`. Admin must remove the assignee from SCs first, or we cascade on user disable.
-4. **Transfer SC**: assignees stay unchanged after transfer. The new requester inherits the same assignee list.
+1. **Primary requester also listed as assignee**: UI prevents it by filtering out the requester from the assignee picker. DB UNIQUE constraint is a safety net.
+2. **Assignee is disabled**: disabled users keep their `sc_assignees` rows and continue to appear in assignee lists (consistent with how a disabled requester still owns the SC). `disable_user` does NOT clean up `sc_assignees`.
+3. **Assignee deleted from users table**: FK constraint prevents deletion while rows exist in `sc_assignees`. Admin must remove the assignee from all SCs first. This is expected — deletion is a destructive operation; disabling the user (edge case 2) is the normal flow.
+4. **Transfer SC**: assignees stay unchanged. The new requester inherits the same assignee list.
+5. **Draft SC visibility**: assignees can see draft SCs (same as the requester). Non-assignee non-admin users cannot see drafts.
