@@ -291,7 +291,15 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "gr_id"):
             continue
-        for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+        # Resolve po_no to po_id if po_id is not provided directly
+        if not row.get("po_id") and row.get("po_no"):
+            po_row = conn.execute(
+                "SELECT po_id FROM pos WHERE po_no = ?",
+                (row["po_no"],),
+            ).fetchone()
+            if po_row:
+                row["po_id"] = po_row["po_id"]
+        for field in ["po_id", "gr_no", "con_value", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -374,7 +382,15 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             if _is_template_meta_row(row, "gr_id"):
                 continue
             errors_list = []
-            for field in ["po_id", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+            # Resolve po_no to po_id if po_id is not provided directly
+            if not row.get("po_id") and row.get("po_no"):
+                po_row = conn.execute(
+                    "SELECT po_id FROM pos WHERE po_no = ?",
+                    (row["po_no"],),
+                ).fetchone()
+                if po_row:
+                    row["po_id"] = po_row["po_id"]
+            for field in ["po_id", "gr_no", "con_value", "status"]:
                 if not row.get(field):
                     errors_list.append(f"{field} is required")
             status = row.get("status", "")
