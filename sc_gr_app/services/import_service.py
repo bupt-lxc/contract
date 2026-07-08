@@ -63,6 +63,7 @@ _GR_COLUMN_ALIASES: dict[str, list[str]] = {
     "goods_service_description": ["Goods/Service Description", "goods_service_description", "商品/服务描述", "货物/服务描述"],
     "confirmation_name":         ["Confirmation Name", "confirmation_name", "确认人", "确认人"],
     "last_delivery":             ["Last Delivery", "last_delivery", "最后交付"],
+    "is_cancellation":          ["Is Cancellation", "is_cancellation", "是否取消类型"],
 }
 
 
@@ -559,6 +560,36 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
                     f"Please resolve duplicates before importing."
                 )
 
+        # --- is_cancellation cross-validation ---
+        is_canc = str(row.get("is_cancellation", "")).strip().upper()
+        if is_canc not in ("", "Y", "N"):
+            errors.append({"row": i, "field": "is_cancellation", "message": f"is_cancellation must be 'Y' or 'N', got: {row.get('is_cancellation')}"})
+        else:
+            is_canc = is_canc or "N"  # default to N
+            est_raw = row.get("estimated_amount")
+            if est_raw is not None:
+                try:
+                    est_val = float(est_raw)
+                    if is_canc == "Y" and est_val >= 0:
+                        errors.append({"row": i, "field": "estimated_amount", "message": f"Cancellation GR estimated_amount must be negative, got {est_val}"})
+                    if is_canc == "N" and est_val <= 0:
+                        errors.append({"row": i, "field": "estimated_amount", "message": f"estimated_amount must be positive, got {est_val}"})
+                except (ValueError, TypeError):
+                    pass
+
+            con_raw = row.get("con_value")
+            if con_raw is not None:
+                try:
+                    con_val = float(con_raw)
+                    if is_canc == "Y" and con_val > 0:
+                        errors.append({"row": i, "field": "con_value", "message": f"Cancellation GR con_value must be <= 0, got {con_val}"})
+                    if is_canc == "N" and con_val < 0:
+                        errors.append({"row": i, "field": "con_value", "message": f"con_value must be >= 0, got {con_val}"})
+                except (ValueError, TypeError):
+                    pass
+
+            row["is_cancellation"] = is_canc
+
     # DB-level GR NO uniqueness check
     gr_nos_in_file = [str(r["gr_no"]).strip() for r in rows if r.get("gr_no") and not _is_template_meta_row(r, "gr_no")]
     if gr_nos_in_file:
@@ -758,6 +789,36 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
                     errors_list.append(f"PO with PO NO '{po_no}' not found")
                 elif len(po_rows) > 1:
                     errors_list.append(f"PO NO '{po_no}' matches {len(po_rows)} records in DB (duplicate NO)")
+            # --- is_cancellation cross-validation ---
+            is_canc = str(row.get("is_cancellation", "")).strip().upper()
+            if is_canc not in ("", "Y", "N"):
+                errors_list.append(f"is_cancellation must be 'Y' or 'N', got: {row.get('is_cancellation')}")
+            else:
+                is_canc = is_canc or "N"  # default to N
+                est_raw = row.get("estimated_amount")
+                if est_raw is not None:
+                    try:
+                        est_val = float(est_raw)
+                        if is_canc == "Y" and est_val >= 0:
+                            errors_list.append(f"Cancellation GR estimated_amount must be negative, got {est_val}")
+                        if is_canc == "N" and est_val <= 0:
+                            errors_list.append(f"estimated_amount must be positive, got {est_val}")
+                    except (ValueError, TypeError):
+                        pass
+
+                con_raw = row.get("con_value")
+                if con_raw is not None:
+                    try:
+                        con_val = float(con_raw)
+                        if is_canc == "Y" and con_val > 0:
+                            errors_list.append(f"Cancellation GR con_value must be <= 0, got {con_val}")
+                        if is_canc == "N" and con_val < 0:
+                            errors_list.append(f"con_value must be >= 0, got {con_val}")
+                    except (ValueError, TypeError):
+                        pass
+
+                row["is_cancellation"] = is_canc
+
             annotated = dict(row)
             annotated["_errors"] = errors_list
             annotated["_valid"] = len(errors_list) == 0
@@ -820,9 +881,9 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           gr_id, po_id, gr_no, requester_id,
                           estimated_amount, con_value, status, remark, tax_rate,
                           gross_cost, goods_service_description, confirmation_name,
-                          last_delivery,
+                          last_delivery, is_cancellation,
                           created_by, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             gr_id,
                             po_id,
@@ -837,6 +898,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("goods_service_description"),
                             row.get("confirmation_name"),
                             row.get("last_delivery"),
+                            row.get("is_cancellation", "N"),
                             current_user["user_id"],
                             timestamp,
                         ),
