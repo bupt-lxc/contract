@@ -1214,6 +1214,17 @@ class ApiBridge:
                     extra_cc = json.loads(config_row["cc_user_ids"])
                     cc_ids.extend(extra_cc or [])
 
+                # Include SC assignees as CC
+                if entity_type == "sc":
+                    assignee_rows = conn.execute(
+                        "SELECT user_id FROM sc_assignees WHERE sc_id = ?",
+                        (entity_id,),
+                    ).fetchall()
+                    for row in assignee_rows:
+                        uid = row["user_id"]
+                        if uid not in cc_ids and uid not in to_ids:
+                            cc_ids.append(uid)
+
                 # Deduplicate and remove To recipients from CC
                 seen = set()
                 unique_cc = []
