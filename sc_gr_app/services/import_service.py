@@ -62,8 +62,6 @@ _GR_COLUMN_ALIASES: dict[str, list[str]] = {
     "gross_cost":                ["Gross Cost", "gross_cost", "总成本"],
     "goods_service_description": ["Goods/Service Description", "goods_service_description", "商品/服务描述", "货物/服务描述"],
     "confirmation_name":         ["Confirmation Name", "confirmation_name", "确认人", "确认人"],
-    "delivery_from":             ["Delivery From", "delivery_from", "交付开始", "开始日期"],
-    "delivery_to":               ["Delivery To", "delivery_to", "交付结束", "结束日期"],
     "last_delivery":             ["Last Delivery", "last_delivery", "最后交付"],
 }
 
@@ -540,7 +538,7 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "gr_no"):
             continue
-        for field in ["po_no", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+        for field in ["po_no", "gr_no", "con_value", "status"]:
             val = row.get(field)
             if val is None or str(val).strip() == "":
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
@@ -743,7 +741,7 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             if _is_template_meta_row(row, "gr_no"):
                 continue
             errors_list = []
-            for field in ["po_no", "gr_no", "estimated_amount", "con_value", "delivery_from", "delivery_to", "status"]:
+            for field in ["po_no", "gr_no", "con_value", "status"]:
                 val = row.get(field)
                 if val is None or str(val).strip() == "":
                     errors_list.append(f"{field} is required")
@@ -822,9 +820,9 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           gr_id, po_id, gr_no, requester_id,
                           estimated_amount, con_value, status, remark, tax_rate,
                           gross_cost, goods_service_description, confirmation_name,
-                          delivery_from, delivery_to, last_delivery,
+                          last_delivery,
                           created_by, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             gr_id,
                             po_id,
@@ -838,8 +836,6 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             float(row["gross_cost"]) if row.get("gross_cost") else None,
                             row.get("goods_service_description"),
                             row.get("confirmation_name"),
-                            parse_date(row.get("delivery_from")),
-                            parse_date(row.get("delivery_to")),
                             row.get("last_delivery"),
                             current_user["user_id"],
                             timestamp,
