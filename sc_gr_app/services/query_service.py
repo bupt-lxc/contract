@@ -696,8 +696,9 @@ def workbench_data(
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
 
-            # Own-only statuses: even admin sees only their own records
-            if _is_own_only(st) and user_id:
+            # Own-only statuses: admin sees only their own drafts;
+            # requesters already scoped by _sc_visibility_clauses
+            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
                 clauses.append("sc.requester_id = ?")
                 params.append(current_user["user_id"])
 
@@ -728,8 +729,9 @@ def workbench_data(
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
 
-            # Own-only statuses: even admin sees only their own records
-            if _is_own_only(st) and user_id:
+            # Own-only statuses: admin sees only their own drafts;
+            # requesters already scoped by _sc_visibility_clauses
+            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
                 clauses.append("po.requester_id = ?")
                 params.append(current_user["user_id"])
 
@@ -777,8 +779,9 @@ def workbench_data(
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
 
-            # Own-only statuses: even admin sees only their own records
-            if _is_own_only(st) and user_id:
+            # Own-only statuses: admin sees only their own drafts;
+            # requesters already scoped by _sc_visibility_clauses
+            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
                 clauses.append("gr.requester_id = ?")
                 params.append(current_user["user_id"])
 
