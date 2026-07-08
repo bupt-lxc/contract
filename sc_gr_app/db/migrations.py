@@ -1,4 +1,5 @@
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -6,7 +7,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -1996,8 +1997,41 @@ def _migrate_v36(conn) -> None:
     _record(conn, 36)
 
 
+def _migrate_v37(conn) -> None:
+    """Create sc_assignees junction table for SC multi-assignee support."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sc_assignees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(user_id),
+            UNIQUE(sc_id, user_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_assignees_sc ON sc_assignees(sc_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_assignees_user ON sc_assignees(user_id)"
+    )
+    _record(conn, 37)
+
+
+def _get_initial_db_path() -> Path:
+    """Path to the seed database, works in dev and PyInstaller frozen builds."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "sc_gr_app" / "db" / "initial.sqlite3"
+    return Path(__file__).parent / "initial.sqlite3"
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
+
+    # Seed from initial template DB if no DB exists yet
+    if not db_path.exists():
+        initial_db = _get_initial_db_path()
+        if initial_db.exists():
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(initial_db, db_path)
 
     # Auto-backup before running any pending migrations
     if db_path.exists():
@@ -2194,6 +2228,10 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v36(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 37 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v37(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")
