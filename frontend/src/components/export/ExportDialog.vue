@@ -170,6 +170,7 @@ const CASCADE_COLUMNS = [
   { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
   { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
   { key: 'last_delivery', label: t('gr.lastDelivery') },
+  { key: 'is_cancellation', label: t('gr.isCancellation') },
   // Common timestamps
   { key: 'created_at', label: t('export.created'), getValue: r => {
     if (r.created_at && r.created_at.includes('T')) {
