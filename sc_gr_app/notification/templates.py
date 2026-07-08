@@ -61,12 +61,6 @@ _STATUS_LABELS: dict[str, str] = {
     "po_approved": "PO Approved",
 }
 
-_REQUEST_TYPE_LABELS: dict[str, str] = {
-    "FC": "FC",
-    "call_off": "Call Off",
-    "new": "",
-}
-
 _TRANSITION_LABELS: dict[str, str] = {
     "create": "Created",
     "submit": "Submitted",
@@ -118,7 +112,7 @@ _PO_ORDER = ["po_id", "po_no", "sc_id", "requester_id", "vendor_id", "vendor_nam
 _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "estimated_amount", "gross_cost", "tax_rate", "con_value",
              "goods_service_description", "remark", "confirmation_name",
-             "delivery_from", "delivery_to", "last_delivery"]
+             "last_delivery"]
 
 # ---------------------------------------------------------------
 # Helper functions
@@ -273,16 +267,13 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                        "sc_available_amount", "pending_total", "pending_total_incl_tax"):
                 val = _fmt_amount(val)
             elif key in ("service_period_start", "service_period_end",
-                        "contract_from", "contract_to", "delivery_from",
-                        "delivery_to"):
+                        "contract_from", "contract_to", "last_delivery"):
                 val = _fmt_datetime(val)
             elif key == "status":
                 if val == "manager_confirm":
                     val = "To be confirm"
                 else:
                     val = _STATUS_LABELS.get(val, val)
-            elif key == "request_type":
-                val = _REQUEST_TYPE_LABELS.get(val, val)
             result.append((label, val))
 
     for key, value in entity_info.items():
@@ -295,8 +286,6 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                 value = "To be confirm"
             else:
                 value = _STATUS_LABELS.get(value, value)
-        elif key == "request_type":
-            value = _REQUEST_TYPE_LABELS.get(value, value)
         result.append((label, value))
 
     return result
@@ -387,14 +376,8 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     attachments = entity_info.get("_attachments", [])
     attachment_str = ", ".join(attachments) if attachments else "None"
 
-    # Greeting
-    short_id = _short_entity_id(entity_id)
-    operator = _abbreviate_name(actor_name) if actor_name else "System"
-    action = _describe_event(event_type, event_key)
-    greeting = f"<p style=\"margin:0 0 16px 0;font-family:Arial,sans-serif;font-size:14px;color:#333\">{operator} performed {action} on {short_id}. Details below:</p>"
-
     # Table 1: Notification Info
-    lines = [greeting]
+    lines = []
     lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-bottom:20px">')
     lines.append('<tr><th colspan="2" style="background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd">Notification Info</th></tr>')
     for label, value in [

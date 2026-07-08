@@ -428,8 +428,6 @@ home: {
     activeDate: 'Active Date',
     goodsServiceDescription: 'Goods/Service Description',
     confirmationName: 'Confirmation Name',
-    deliveryFrom: 'Delivery From',
-    deliveryTo: 'Delivery To',
     lastDelivery: 'Last Delivery',
     confirmSubmit: 'Submit this GR for confirmation?',
     grSubmitted: 'GR submitted',

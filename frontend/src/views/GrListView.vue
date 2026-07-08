@@ -67,12 +67,6 @@
       <el-table-column prop="confirmation_name" :label="$t('gr.confirmationName')" width="130" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.confirmation_name || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="delivery_from" :label="$t('gr.deliveryFrom')" width="110" sortable>
-        <template #default="{ row }">{{ (row.delivery_from || '').slice(0, 10) || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="delivery_to" :label="$t('gr.deliveryTo')" width="110" sortable>
-        <template #default="{ row }">{{ (row.delivery_to || '').slice(0, 10) || '-' }}</template>
-      </el-table-column>
       <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="100" sortable>
         <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
       </el-table-column>
@@ -280,8 +274,6 @@ const grFilterConfig = [
   { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
   { name: 'goods_service_description', label: t('gr.goodsServiceDescription'), type: 'input' },
   { name: 'confirmation_name', label: t('gr.confirmationName'), type: 'input' },
-  { name: 'delivery_from', label: t('gr.deliveryFrom'), type: 'date-range' },
-  { name: 'delivery_to', label: t('gr.deliveryTo'), type: 'date-range' },
   { name: 'last_delivery', label: t('gr.lastDelivery'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
@@ -519,8 +511,6 @@ const grImportColumns = [
   { prop: 'gross_cost', label: t('gr.grossCost'), width: '100' },
   { prop: 'goods_service_description', label: t('gr.goodsServiceDescription'), minWidth: '140' },
   { prop: 'confirmation_name', label: t('gr.confirmationName'), width: '120' },
-  { prop: 'delivery_from', label: t('gr.deliveryFrom'), width: '110' },
-  { prop: 'delivery_to', label: t('gr.deliveryTo'), width: '110' },
   { prop: 'last_delivery', label: t('gr.lastDelivery'), width: '110' },
 ]
 

@@ -18,10 +18,6 @@ def _require_payload_field(payload: dict, field: str):
     return value
 
 
-def _row_to_dict(row):
-    return dict(row)
-
-
 def _attachment_sc_id(entity_type: str, entity_id: str,
                       parent_sc_id: str = None, parent_po_id: str = None) -> str | None:
     """Resolve the sc_id that an attachment belongs to."""
@@ -269,7 +265,8 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             sc_id = _require_payload_field(payload, "sc_id")
-            result = sc_service.approve_sc(self.config, current_user, sc_id)
+            cascade_pos = payload.get("cascade_pos", False)
+            result = sc_service.approve_sc(self.config, current_user, sc_id, cascade_pos=cascade_pos)
             self._auto_open_outlook_draft("sc", sc_id, "approve")
             return ok(_format_entity_timestamps(result))
         except Exception as exc:
@@ -408,79 +405,6 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
-    def get_po(self, payload) -> dict:
-        """Return basic PO info (for deep-link navigation)."""
-        try:
-            payload = self._required_payload(payload)
-            self._require_current_user()
-            po_id = _require_payload_field(payload, "po_id")
-            from sc_gr_app.db.connection import connect
-            from sc_gr_app.errors import NotFound
-            with connect(self.config) as conn:
-                po = conn.execute(
-                    "select po_id, sc_id, request_type, vendor_id, status, po_amount, "
-                    "requester_id, po_no from pos where po_id = ?",
-                    (po_id,),
-                ).fetchone()
-                if po is None:
-                    raise NotFound(f"PO not found: {po_id}")
-                return ok(_row_to_dict(po))
-        except Exception as exc:
-            return fail(exc)
-
-    def get_po_detail(self, payload) -> dict:
-        """Return full PO detail including operations, call-off SCs, permissions."""
-        try:
-            payload = self._required_payload(payload)
-            current_user = self._require_current_user()
-            po_id = _require_payload_field(payload, "po_id")
-            from sc_gr_app.db.connection import connect
-            from sc_gr_app.errors import NotFound
-            with connect(self.config) as conn:
-                po = conn.execute(
-                    """select po.*, v.vendor_name,
-                       coalesce(po.request_type, sc.request_type) as sc_request_type,
-                       sc.sc_no
-                       from pos po
-                       left join sc_records sc on sc.sc_id = po.sc_id
-                       join vendors v on v.vendor_id = po.vendor_id
-                       where po.po_id = ?""",
-                    (po_id,),
-                ).fetchone()
-                if po is None:
-                    raise NotFound(f"PO not found: {po_id}")
-                po = _row_to_dict(po)
-
-                ops = conn.execute(
-                    "select * from operation_records where object_type = 'po' "
-                    "and object_id = ? order by created_at desc",
-                    (po_id,),
-                ).fetchall()
-
-                calloff_scs = []
-                if po.get("sc_request_type") == "FC":
-                    calloff_scs = conn.execute(
-                        "select * from sc_records where calloff_po_id = ?", (po_id,)
-                    ).fetchall()
-
-                user_id = current_user["user_id"]
-                is_owner = po.get("requester_id") == user_id
-                is_admin = current_user.get("role") == "admin"
-                permissions = {
-                    "can_manage_po": is_owner or is_admin,
-                    "can_manage_gr": False if po.get("sc_request_type") == "FC" else (is_owner or is_admin),
-                    "can_delete_po": is_owner or is_admin,
-                }
-
-                return ok({
-                    "po": po,
-                    "calloff_scs": [_row_to_dict(s) for s in calloff_scs],
-                    "operation_records": [_row_to_dict(o) for o in ops],
-                    "permissions": permissions,
-                })
-        except Exception as exc:
-            return fail(exc)
-
     def create_gr(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)
@@ -539,22 +463,9 @@ class ApiBridge:
             payload = self._required_payload(payload)
             current_user = self._require_current_user()
             gr_id = _require_payload_field(payload, "gr_id")
-            confirm_cascade = payload.get("confirm_cascade", False)
-            result = gr_service.finish_gr(self.config, current_user, gr_id, confirm_cascade)
-
-            if isinstance(result, dict) and "needs_cascade" in result:
-                # LD GR needs cascade confirmation — return directly (ok:true, data has needs_cascade)
-                return ok(result)
-            elif isinstance(result, dict) and "gr" in result:
-                # Cascade executed successfully
-                primary_gr = _format_entity_timestamps(result["gr"])
-                self._auto_open_outlook_draft("gr", gr_id, "finish")
-                self._auto_open_outlook_draft("po", result["po_finished"], "finish")
-                return ok(primary_gr)
-            else:
-                # Normal finish: result is the GR dict
-                self._auto_open_outlook_draft("gr", gr_id, "finish")
-                return ok(_format_entity_timestamps(result))
+            result = gr_service.finish_gr(self.config, current_user, gr_id)
+            self._auto_open_outlook_draft("gr", gr_id, "finish")
+            return ok(_format_entity_timestamps(result))
         except Exception as exc:
             return fail(exc)
 
@@ -846,16 +757,13 @@ class ApiBridge:
             from sc_gr_app.errors import PermissionDenied, NotFound
             with connect(self.config) as conn:
                 po = conn.execute(
-                    """SELECT po.requester_id as po_requester, sc.requester_id as sc_requester
-                       FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
-                       WHERE po.po_id = ?""",
+                    "SELECT sc.requester_id FROM pos po JOIN sc_records sc ON sc.sc_id = po.sc_id WHERE po.po_id = ?",
                     (po_id,),
                 ).fetchone()
             if not po:
                 raise NotFound("PO not found")
-            requester_id = po["sc_requester"] or po["po_requester"]
-            if current_user.get("role") != "admin" and current_user.get("user_id") != requester_id:
-                raise PermissionDenied("Only the owner or admin can modify notification settings")
+            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
+                raise PermissionDenied("Only the SC owner or admin can modify notification settings")
             notification_service.save_po_notification_config(self.config, po_id, data)
             return ok()
         except Exception as exc:
@@ -880,28 +788,16 @@ class ApiBridge:
             from sc_gr_app.errors import PermissionDenied, NotFound
             with connect(self.config) as conn:
                 po = conn.execute(
-                    """SELECT po.requester_id as po_requester, sc.requester_id as sc_requester
-                       FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
+                    """SELECT sc.requester_id FROM pos po
+                       JOIN sc_records sc ON sc.sc_id = po.sc_id
                        WHERE po.po_id = ?""", (po_id,),
                 ).fetchone()
             if not po:
                 raise NotFound("PO not found")
-            requester_id = po["sc_requester"] or po["po_requester"]
-            if current_user.get("role") != "admin" and current_user.get("user_id") != requester_id:
-                raise PermissionDenied("Only the owner or admin can modify custom schedules")
+            if current_user.get("role") != "admin" and current_user.get("user_id") != po["requester_id"]:
+                raise PermissionDenied("Only the SC owner or admin can modify custom schedules")
             notification_service.save_po_custom_schedules(self.config, po_id, schedules)
             return ok()
-        except Exception as exc:
-            return fail(exc)
-
-    def get_po_fc_budget(self, payload) -> dict:
-        """Return FC budget for a given PO (FC)."""
-        try:
-            payload = self._required_payload(payload)
-            self._require_current_user()
-            po_id = _require_payload_field(payload, "po_id")
-            from sc_gr_app.services.budget_service import compute_po_fc_budget
-            return ok(compute_po_fc_budget(self.config, po_id))
         except Exception as exc:
             return fail(exc)
 
@@ -995,19 +891,6 @@ class ApiBridge:
                 self.config, {"GR"}, filters, selected_ids,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
-        except Exception as exc:
-            return fail(exc)
-
-    def get_gr_annual_report(self, payload=None) -> dict:
-        try:
-            payload = self._payload(payload)
-            current_user = self._require_current_user()
-            year = payload.get("year", "")
-            if not year:
-                from datetime import datetime
-                year = str(datetime.now().year)
-            rows = gr_service.get_annual_report_data(self.config, year, current_user)
-            return ok({"rows": _format_list_timestamps(rows)})
         except Exception as exc:
             return fail(exc)
 
@@ -1214,17 +1097,6 @@ class ApiBridge:
                     extra_cc = json.loads(config_row["cc_user_ids"])
                     cc_ids.extend(extra_cc or [])
 
-                # Include SC assignees as CC
-                if entity_type == "sc":
-                    assignee_rows = conn.execute(
-                        "SELECT user_id FROM sc_assignees WHERE sc_id = ?",
-                        (entity_id,),
-                    ).fetchall()
-                    for row in assignee_rows:
-                        uid = row["user_id"]
-                        if uid not in cc_ids and uid not in to_ids:
-                            cc_ids.append(uid)
-
                 # Deduplicate and remove To recipients from CC
                 seen = set()
                 unique_cc = []
@@ -1378,39 +1250,6 @@ class ApiBridge:
                 )
                 conn.commit()
             return ok({"path": str(target)})
-        except Exception as exc:
-            return fail(exc)
-
-    def get_sender_email(self, _payload=None) -> dict:
-        """Return the configured notification sender email address."""
-        try:
-            from sc_gr_app.db.connection import connect
-            with connect(self.config) as conn:
-                row = conn.execute(
-                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
-                ).fetchone()
-                return ok({"email": row["setting_value"] if row else ""})
-        except Exception as exc:
-            return fail(exc)
-
-    def set_sender_email(self, payload) -> dict:
-        """Set the notification sender email address."""
-        try:
-            from sc_gr_app.db.connection import connect
-            from datetime import datetime, timezone
-            payload = self._required_payload(payload)
-            current_user = self._require_current_user()
-            from sc_gr_app.rbac import require_admin
-            require_admin(current_user)
-            email = _require_payload_field(payload, "email")
-            timestamp = datetime.now(timezone.utc).isoformat()
-            with connect(self.config) as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
-                    ("notify.sender_email", email.strip(), timestamp),
-                )
-                conn.commit()
-            return ok({"email": email.strip()})
         except Exception as exc:
             return fail(exc)
 
@@ -1599,10 +1438,8 @@ class ApiBridge:
         if entity_type == "sc":
             target_dir = base / "sc" / entity_id
         elif entity_type == "po":
-            if parent_sc_id:
-                target_dir = base / "sc" / parent_sc_id / "po" / entity_id
-            else:
-                target_dir = base / "po" / entity_id
+            pid = parent_sc_id or "unknown-sc"
+            target_dir = base / "sc" / pid / "po" / entity_id
         elif entity_type == "gr":
             sid = parent_sc_id or "unknown-sc"
             pid = parent_po_id or "unknown-po"
@@ -1915,26 +1752,18 @@ class ApiBridge:
         import base64
         import zipfile
 
-        current_user = self._require_current_user()
-
-        headers = ["sc_no", "vendor_id", "requester_id", "request_type", "cost_center",
+        headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "service_scope", "internal_system_number", "calloff_po_id",
-                   "asset", "asset_nums"]
-        hints = ["Required (business NO, must be unique)",
-                 "Optional (comma-separated, e.g. V000001,V000002)",
+                   "description", "currency", "internal_system_number"]
+        hints = ["Optional (auto-generated if empty)", "Optional",
                  "Optional (defaults to importer)",
-                 "FC/call_off/new", "Cost center number",
-                 "Required (e.g. 50000)", "YYYY-MM-DD or MM/DD/YYYY", "YYYY-MM-DD or MM/DD/YYYY",
+                 "material/service/fixed_asset/FC", "Cost center number",
+                 "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "approved/finished", "Optional",
-                 "CNY/EUR/USD", "Optional (see service scope list)",
-                 "Optional (FC only)",
-                 "Required for call_off request_type",
-                 "Y/N (default N)", "Optional"]
-        sample = ["[EXAMPLE]", "", current_user["user_id"], "new", "12345",
-                  "50000", "2026-01-01", "2026-12-31", "approved",
-                  "Sample SC description", "CNY", "", "", "",
-                  "N", ""]
+                 "CNY/EUR/USD", "Optional (FC only)"]
+        sample = ["[EXAMPLE]", "", "", "material", "12345",
+                  "50000", "2026-01-01", "2026-12-31", "draft",
+                  "Sample SC description", "CNY", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -1961,20 +1790,19 @@ class ApiBridge:
         info_text = (
             "Import Rules: Only SC records with status \"approved\" or \"finished\" can be imported. "
             "Required fields: SC NO, SC Amount, Status. "
-            "Linking: Records are identified by SC NO (not system ID). "
-            "Duplicate SC NOs in database will cause import errors."
+            "Leave SC ID empty to auto-generate."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
   </sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()
@@ -2029,28 +1857,19 @@ class ApiBridge:
         import base64
         import zipfile
 
-        current_user = self._require_current_user()
-
-        headers = ["po_id", "sc_no", "vendor_id", "po_no", "requester_id",
-                   "request_type", "po_amount", "status", "contract_from", "contract_to",
-                   "contract_no", "payment_frequency", "contract_pos", "contract_type",
-                   "cost_center", "purchaser"]
-        hints = ["Optional (auto-generated if empty)",
-                 "Required for regular PO; leave empty for independent FC PO",
+        headers = ["po_id", "sc_id", "vendor_id", "po_no", "requester_id",
+                   "po_amount", "status", "contract_from", "contract_to", "contract_no",
+                   "payment_frequency", "contract_pos", "contract_type", "cost_center",
+                   "purchaser"]
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional (must exist if provided)",
-                 "Optional", "Optional (defaults to importer)",
-                 "FC or empty (only set 'FC' for independent FC PO without SC)",
-                 "Required",
-                 "active/finished (draft also allowed for FC PO)",
-                 "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
+                 "Optional", "Optional (defaults to importer)", "Required",
+                 "active/finished", "YYYY-MM-DD", "YYYY-MM-DD", "Optional",
                  "monthly/quarterly/yearly", "Optional", "Optional", "Optional",
                  "Optional"]
-        sample = ["", "", "", "[EXAMPLE]", current_user["user_id"],
-                  "", "50000", "active", "", "",
-                  "", "monthly", "", "", "",
-                  ""]
-        sample2 = ["[EXAMPLE]", "", "V-000001", "", "", "FC",
-                   "100000", "draft", "2026-01-01", "2026-12-31", "", "monthly", "", "", "", ""]
+        sample = ["[EXAMPLE]", "SC-0000000-20260601-001", "V-000001", "", "",
+                  "50000", "draft", "2026-01-01", "2026-12-31", "",
+                  "monthly", "", "", "", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -2071,28 +1890,24 @@ class ApiBridge:
         header_cells = "".join(_inline_str_cell(i, 2, h) for i, h in enumerate(headers))
         hint_cells = "".join(_inline_str_cell(i, 3, h) for i, h in enumerate(hints))
         sample_cells = "".join(_inline_str_cell(i, 4, v) for i, v in enumerate(sample))
-        sample2_cells = "".join(_inline_str_cell(i, 5, v) for i, v in enumerate(sample2))
 
         last_col = _col_letter(len(headers) - 1)
         info_text = (
-            "Import Rules: PO records with status \"active\" or \"finished\" can be imported. "
-            "Independent FC POs (request_type='FC', sc_no empty) also allow \"draft\" status. "
-            "Required fields: SC NO (for non-FC POs), PO NO, PO Amount, Status. "
-            "Linking: PO is linked to SC via SC NO (not SC ID). "
-            "Duplicate PO NOs in database will cause import errors."
+            "Import Rules: Only PO records with status \"active\" or \"finished\" can be imported. "
+            "Required fields: SC ID, PO NO, PO Amount, Status. "
+            "Leave PO ID empty to auto-generate."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
-    <row r="5">{sample2_cells}</row>
   </sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()
@@ -2147,23 +1962,20 @@ class ApiBridge:
         import base64
         import zipfile
 
-        current_user = self._require_current_user()
-
-        headers = ["po_no", "gr_no", "requester_id",
+        headers = ["gr_id", "po_id", "gr_no", "requester_id",
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
-                   "delivery_from", "delivery_to", "last_delivery"]
-        hints = ["Required (PO NO, must exist in DB)",
-                 "Required (business NO, must be unique)",
-                 "Optional (defaults to importer)",
-                 "Required", "Required",
+                   "last_delivery"]
+        hints = ["Optional (auto-generated if empty)", "Required (must exist)",
+                 "Optional", "Optional (defaults to importer)",
+                 "Optional", "Optional",
                  "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "Required (YYYY-MM-DD or MM/DD/YYYY)", "Required (YYYY-MM-DD or MM/DD/YYYY)", "Optional (YYYY-MM-DD or MM/DD/YYYY)"]
-        sample = ["", "[EXAMPLE]", current_user["user_id"],
+                 "YYYY-MM-DD"]
+        sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
                   "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
-                  "2026-01-01", "2026-12-31", ""]
+                  ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -2188,21 +2000,20 @@ class ApiBridge:
         last_col = _col_letter(len(headers) - 1)
         info_text = (
             "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
-            "Required fields: PO NO, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
-            "Linking: GR is linked to PO via PO NO (not PO ID). "
-            "Duplicate GR NOs in database will cause import errors."
+            "Required fields: PO ID, GR NO, Con Value, Status. "
+            "Leave GR ID empty to auto-generate."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
         sheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
   <sheetData>
     <row r="1">{info_cell}</row>
     <row r="2">{header_cells}</row>
     <row r="3">{hint_cells}</row>
     <row r="4">{sample_cells}</row>
   </sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:{last_col}1"/></mergeCells>
 </worksheet>"""
 
         buf = io.BytesIO()

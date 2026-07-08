@@ -297,12 +297,12 @@ def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decima
         gr_totals = conn.execute(
             """
             select
-              coalesce(sum(case when status in ('pending', 'manager_confirm') then estimated_amount else 0 end), 0)
+              coalesce(sum(case when status in ('pending', 'manager_confirm') then coalesce(estimated_amount, 0) else 0 end), 0)
                 as pending_total,
               coalesce(sum(case when status = 'approved' then con_value else 0 end), 0)
                 as con_value_total,
               coalesce(sum(case when status in ('pending', 'manager_confirm')
-                then coalesce(gross_cost, estimated_amount) else 0 end), 0)
+                then coalesce(gross_cost, estimated_amount, 0) else 0 end), 0)
                 as pending_total_incl_tax
             from gr_requests
             where po_id = ?
