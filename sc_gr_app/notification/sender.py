@@ -53,11 +53,11 @@ def _attach_budget_info(
             """
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
+                                 THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
               COALESCE(SUM(CASE WHEN status = 'approved'
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN COALESCE(gross_cost, estimated_amount)
+                                 THEN COALESCE(gross_cost, estimated_amount, 0)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
@@ -136,11 +136,11 @@ def _attach_child_pos(
             """
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
+                                 THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
               COALESCE(SUM(CASE WHEN status = 'approved'
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN COALESCE(gross_cost, estimated_amount)
+                                 THEN COALESCE(gross_cost, estimated_amount, 0)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?

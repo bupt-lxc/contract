@@ -391,7 +391,7 @@ def _validate_sc_amount_not_below_usage(config: AppConfig, sc_id: str, sc_amount
 
     gr_usage = sum(
         (
-            Decimal(str(row["estimated_amount"]))
+            Decimal(str(row["estimated_amount"] or 0))
             if row["status"] in ("pending", "manager_confirm")
             else Decimal(str(row["con_value"]))
         )

@@ -436,7 +436,7 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     raise ConflictError("PO must be active before submitting GR")
 
                 # Budget check at submission time
-                estimated_amount = Decimal(str(before["estimated_amount"]))
+                estimated_amount = Decimal(str(before["estimated_amount"] or 0))
                 sc_budget = compute_sc_budget_decimal(config, sc_id)
                 po_budget = compute_po_budget_decimal(config, before["po_id"])
                 if sc_budget["sc_available_amount"] < estimated_amount:
@@ -562,7 +562,7 @@ def approve_gr(
                     )
 
                 extra_amount = con_value_amount - Decimal(
-                    str(before["estimated_amount"])
+                    str(before["estimated_amount"] or 0)
                 )
                 if extra_amount > 0:
                     sc_budget = compute_sc_budget_decimal(config, sc_id)
@@ -777,7 +777,7 @@ def update_gr(
                     # Recalculate gross_cost when tax_rate changes on approved GR
                     if "tax_rate" in allowed:
                         merged["gross_cost"] = _compute_incl_tax(
-                            Decimal(str(before["estimated_amount"])),
+                            Decimal(str(before["estimated_amount"] or 0)),
                             merged.get("tax_rate"),
                         )
                     if merged.get("con_value") is None:
