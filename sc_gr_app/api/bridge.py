@@ -2141,18 +2141,18 @@ class ApiBridge:
         headers = ["po_no", "gr_no", "requester_id",
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
-                   "delivery_from", "delivery_to", "last_delivery"]
+                   "delivery_from", "delivery_to", "last_delivery", "is_cancellation"]
         hints = ["Required (PO NO, must exist in DB)",
                  "Required (business NO, must be unique)",
                  "Optional (defaults to importer)",
                  "Required", "Required",
                  "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "Required (YYYY-MM-DD or MM/DD/YYYY)", "Required (YYYY-MM-DD or MM/DD/YYYY)", "Optional (YYYY-MM-DD or MM/DD/YYYY)"]
+                 "Required (YYYY-MM-DD or MM/DD/YYYY)", "Required (YYYY-MM-DD or MM/DD/YYYY)", "Optional (YYYY-MM-DD or MM/DD/YYYY)", "Optional (Y/N, default N)"]
         sample = ["", "[EXAMPLE]", current_user["user_id"],
                   "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
-                  "2026-01-01", "2026-12-31", ""]
+                  "2026-01-01", "2026-12-31", "", "N"]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -2179,7 +2179,8 @@ class ApiBridge:
             "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
             "Required fields: PO NO, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
             "Linking: GR is linked to PO via PO NO (not PO ID). "
-            "Duplicate GR NOs in database will cause import errors."
+            "Duplicate GR NOs in database will cause import errors. "
+            "is_cancellation: set \"Y\" for Cancellation GR (negative amounts), default \"N\"."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 
