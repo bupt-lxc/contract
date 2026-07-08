@@ -428,6 +428,7 @@ home: {
     deliveryFrom: 'Delivery From',
     deliveryTo: 'Delivery To',
     lastDelivery: 'Last Delivery',
+    isCancellation: 'Cancellation GR',
     confirmSubmit: 'Submit this GR for confirmation?',
     grSubmitted: 'GR submitted',
     importRules: 'Only GR records with status "Approved" or "Finished" can be imported. Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. Leave GR ID empty to auto-generate.',

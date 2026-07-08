@@ -424,6 +424,7 @@ home: {
     deliveryFrom: '交付从',
     deliveryTo: '交付至',
     lastDelivery: '最后交付',
+    isCancellation: '是否取消类型',
     confirmSubmit: '确认提交此验收申请？',
     grSubmitted: '验收申请已提交',
     importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的GR记录。必填字段：PO ID（关联PO编号）、GR NO（GR编号）、Estimated Amount（预估金额）、Con Value（合同金额）、Delivery From（交付开始日期）、Delivery To（交付结束日期）、Status（状态）。GR ID留空将自动生成。',
