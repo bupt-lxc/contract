@@ -102,6 +102,7 @@ _GR_RENAMES = {
     "estimated_amount": "GR Application Amount (Net)",
     "gross_cost": "GR Application Amount (Gross)",
     "con_value": "GR Value",
+    "is_cancellation": "Cancellation GR",
 }
 _PO_RENAMES = {
     "pending_total": "Pending GR amount (Net)",
@@ -118,7 +119,8 @@ _PO_ORDER = ["po_id", "po_no", "sc_id", "requester_id", "vendor_id", "vendor_nam
 _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "estimated_amount", "gross_cost", "tax_rate", "con_value",
              "goods_service_description", "remark", "confirmation_name",
-             "delivery_from", "delivery_to", "last_delivery"]
+             "delivery_from", "delivery_to", "last_delivery",
+             "is_cancellation"]
 
 # ---------------------------------------------------------------
 # Helper functions
@@ -338,12 +340,13 @@ def _html_shell(*, title: str, subtitle: str, body: str) -> str:
 def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     """Build email subject line.
 
-    Format: [POMP] <action> <short_entity_id> from <name>
-    Example: [POMP] Submitted SC 0629-002 from LiXingchen
+    Format: [POMP] <action> <type_label> <short_entity_id> from <name>
+    For Cancellation GR: [POMP] <action> (Cancellation) GR <short_entity_id> from <name>
     """
     entity_id = _short_entity_id(entry.get("entity_id", ""))
     event_type = entry.get("event_type", "")
     event_key = entry.get("event_key", "")
+    entity_type = entry.get("entity_type", "")
 
     if event_type == "status_change":
         action = _TRANSITION_LABELS.get(event_key, event_key)
@@ -358,8 +361,13 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     else:
         action = event_key
 
+    # Build entity type label — now included in ALL subject lines
+    type_label = entity_type.upper()
+    if entity_type == "gr" and entity_info.get("is_cancellation") == "Y":
+        type_label = "(Cancellation) GR"
+
     abbr = _abbreviate_name(actor_name) if actor_name else "System"
-    return f"[POMP] {action} {entity_id} from {abbr}"
+    return f"[POMP] {action} {type_label} {entity_id} from {abbr}"
 
 
 def build_body(entry: dict, entity_info: dict, user_emails: dict,
