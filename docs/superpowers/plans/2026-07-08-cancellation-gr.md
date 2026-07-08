@@ -248,7 +248,7 @@ In the INSERT statement (lines ~294-319), add `is_cancellation` to the column li
           goods_service_description, confirmation_name,
           delivery_from, delivery_to, last_delivery,
           is_cancellation
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             gr_id,
@@ -382,7 +382,7 @@ git commit -m "feat: add is_cancellation support to GR create/update/approve/sub
 **Files:**
 - Modify: `sc_gr_app/services/import_service.py`
 
-- [ ] **Step 1: Add `is_cancellation` to `_GR_COLUMN_ALIASES` (after line ~64)**
+- [ ] **Step 1: Add `is_cancellation` to `_GR_COLUMN_ALIASES` (before the closing `}` at line ~66)**
 
 ```python
     "is_cancellation":          ["Is Cancellation", "is_cancellation", "是否取消类型"],
@@ -432,11 +432,9 @@ Find `preview_gr_import` (line ~737). This function also has inline field valida
 
 Find the INSERT statement in `import_grs` (around line ~823). Add `is_cancellation` to the column list and `row.get("is_cancellation", "N")` to the VALUES tuple.
 
-- [ ] **Step 5: Add `is_cancellation` to INSERT in `import_grs_without_linking`**
+> **Note:** `import_grs` is the only GR import function (there is no `import_grs_without_linking`). Only one INSERT needs updating.
 
-Find the INSERT statement in `import_grs_without_linking`. Add `is_cancellation` to the column list and VALUES — same as Step 4.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add sc_gr_app/services/import_service.py
@@ -521,9 +519,9 @@ _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "is_cancellation"]
 ```
 
-- [ ] **Step 2: Update `build_subject` to add "(Cancellation)" prefix for Cancellation GRs**
+- [ ] **Step 2: Update `build_subject` to add entity type to subject, with "(Cancellation)" prefix for Cancellation GRs**
 
-Modify `build_subject` (line ~338). After determining the `action` string and before building the return, add logic to insert `(Cancellation)` before the entity type:
+Modify `build_subject` (line ~338). This change has **two effects**: (1) all subjects now include entity type (e.g., `GR`, `SC`, `PO`) — previously absent; (2) Cancellation GRs get `(Cancellation) GR` instead of plain `GR`.
 
 ```python
 def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
@@ -707,7 +705,7 @@ git commit -m "feat: display is_cancellation field in GrDetailView"
 
 - [ ] **Step 1: Add `is_cancellation` column to the table**
 
-After an existing column (e.g., after `last_delivery` column, around line ~65), add:
+After the `last_delivery` column (line ~78), add:
 
 ```html
       <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
@@ -738,7 +736,7 @@ git commit -m "feat: add is_cancellation column and filter to GrListView"
 
 - [ ] **Step 1: Add `is_cancellation` column to the PO detail GR sub-table**
 
-After an existing column (e.g., after `last_delivery`), add:
+After the existing `remark` column (GrTable.vue line ~29), add:
 
 ```html
     <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
