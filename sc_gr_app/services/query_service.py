@@ -691,10 +691,16 @@ def workbench_data(
         for st in sc_statuses:
             clauses = ["sc.status = ?"]
             params = [st]
-            if _is_own_only(st) and user_id:
+            if user_id:
                 visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
+
+            # Own-only statuses: even admin sees only their own records
+            if _is_own_only(st) and user_id:
+                clauses.append("sc.requester_id = ?")
+                params.append(current_user["user_id"])
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
@@ -717,10 +723,16 @@ def workbench_data(
         for st in po_statuses:
             clauses = ["po.status = ?"]
             params = [st]
-            if _is_own_only(st) and user_id:
+            if user_id:
                 visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
+
+            # Own-only statuses: even admin sees only their own records
+            if _is_own_only(st) and user_id:
+                clauses.append("po.requester_id = ?")
+                params.append(current_user["user_id"])
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
@@ -760,10 +772,16 @@ def workbench_data(
         for st in gr_statuses:
             clauses = ["gr.status = ?"]
             params = [st]
-            if _is_own_only(st) and user_id:
+            if user_id:
                 visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
+
+            # Own-only statuses: even admin sees only their own records
+            if _is_own_only(st) and user_id:
+                clauses.append("gr.requester_id = ?")
+                params.append(current_user["user_id"])
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
