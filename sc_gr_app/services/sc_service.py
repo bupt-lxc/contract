@@ -44,6 +44,7 @@ OPTIONAL_UPDATE_FIELDS = (
     "currency",
     "vendor_ids",
     "service_scope",
+    "assignee_ids",
 )
 _VENDOR_SNAPSHOT_FIELDS = (
     "vendor_id",
@@ -175,7 +176,7 @@ def _require_submit_fields(data: dict) -> None:
     _validate_service_period(data)
 
 
-def _assert_can_view_sc(user: dict, sc: dict) -> None:
+def _assert_can_view_sc(user: dict, sc: dict, conn=None) -> None:
     if user.get("role") == "admin":
         return
     if sc["status"] == "draft":
@@ -184,6 +185,14 @@ def _assert_can_view_sc(user: dict, sc: dict) -> None:
         raise PermissionDenied("SC is not visible")
     if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
         return
+    # Allow assignees to view
+    if conn is not None:
+        assignee_row = conn.execute(
+            "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
+            (sc["sc_id"], user["user_id"]),
+        ).fetchone()
+        if assignee_row is not None:
+            return
     raise PermissionDenied("SC is not visible")
 
 
@@ -232,6 +241,18 @@ def _validate_service_period(data: dict) -> None:
     end = data.get("service_period_end")
     if start not in (None, "") and end not in (None, "") and start > end:
         raise ValidationError("service period is invalid")
+
+
+def _sync_sc_assignees(conn, sc_id: str, assignee_ids: list[str] | None) -> None:
+    """Replace the assignee associations for an SC with the given list."""
+    if assignee_ids is None:
+        return
+    conn.execute("DELETE FROM sc_assignees WHERE sc_id = ?", (sc_id,))
+    for uid in assignee_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO sc_assignees (sc_id, user_id) VALUES (?, ?)",
+            (sc_id, uid),
+        )
 
 
 def _sync_sc_vendors(conn, sc_id: str, vendor_ids: list[str] | None) -> None:
@@ -635,6 +656,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                 )
                 created = _get_sc(conn, sc_id)
                 _sync_sc_vendors(conn, sc_id, data.get("vendor_ids"))
+                _sync_sc_assignees(conn, sc_id, data.get("assignee_ids"))
                 write_operation_record(
                     conn,
                     action_type="create_sc_draft",
@@ -717,6 +739,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 )
                 after = _get_sc(conn, sc_id)
                 _sync_sc_vendors(conn, sc_id, merged.get("vendor_ids"))
+                _sync_sc_assignees(conn, sc_id, merged.get("assignee_ids"))
 
                 write_operation_record(
                     conn,
@@ -877,6 +900,8 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                 after = _get_sc(conn, sc_id)
                 if "vendor_ids" in allowed:
                     _sync_sc_vendors(conn, sc_id, allowed["vendor_ids"])
+                if "assignee_ids" in allowed:
+                    _sync_sc_assignees(conn, sc_id, allowed["assignee_ids"])
                 write_operation_record(
                     conn,
                     action_type="update_sc",
@@ -1172,6 +1197,7 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                     conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
                     conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
                 conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
+                conn.execute("DELETE FROM sc_assignees WHERE sc_id = ?", (sc_id,))
                 conn.execute("DELETE FROM sc_records WHERE sc_id = ?", (sc_id,))
 
                 write_operation_record(
@@ -1203,7 +1229,7 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
 def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
     with connect(config) as conn:
         sc = _get_sc(conn, sc_id)
-        _assert_can_view_sc(current_user, sc)
+        _assert_can_view_sc(current_user, sc, conn)
         pos = [
             _row_to_dict(row)
             for row in conn.execute(
@@ -1255,6 +1281,15 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 parent_po = _row_to_dict(parent_po_row)
 
         vendors = _fetch_sc_vendors(conn, sc_id)
+        assignee_rows = conn.execute(
+            """SELECT u.user_id, u.user_name
+               FROM sc_assignees sa
+               JOIN users u ON u.user_id = sa.user_id
+               WHERE sa.sc_id = ?
+               ORDER BY u.user_name""",
+            (sc_id,),
+        ).fetchall()
+        assignees = [_row_to_dict(r) for r in assignee_rows]
 
     if parent_po is not None:
         parent_po["fc_budget"] = compute_po_fc_budget(config, sc["calloff_po_id"])
@@ -1291,6 +1326,7 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
         "operation_records": records,
         "permissions": _sc_permissions(current_user, sc),
         "vendors": vendors,
+        "assignees": assignees,
         "parent_po": parent_po,
     }
 
