@@ -176,7 +176,7 @@ def _require_submit_fields(data: dict) -> None:
     _validate_service_period(data)
 
 
-def _assert_can_view_sc(user: dict, sc: dict, conn=None) -> None:
+def _assert_can_view_sc(user: dict, sc: dict, conn) -> None:
     if user.get("role") == "admin":
         return
     if sc["status"] == "draft":
@@ -186,13 +186,12 @@ def _assert_can_view_sc(user: dict, sc: dict, conn=None) -> None:
     if user.get("role") == "requester" and user.get("user_id") == sc["requester_id"]:
         return
     # Allow assignees to view
-    if conn is not None:
-        assignee_row = conn.execute(
-            "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
-            (sc["sc_id"], user["user_id"]),
-        ).fetchone()
-        if assignee_row is not None:
-            return
+    assignee_row = conn.execute(
+        "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
+        (sc["sc_id"], user["user_id"]),
+    ).fetchone()
+    if assignee_row is not None:
+        return
     raise PermissionDenied("SC is not visible")
 
 
