@@ -76,6 +76,9 @@
       <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="100" sortable>
         <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
       </el-table-column>
+      <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
+        <template #default="{ row }">{{ row.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</template>
+      </el-table-column>
       <el-table-column prop="remark" :label="$t('gr.remark')" width="120" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.remark || '-' }}</template>
       </el-table-column>
@@ -283,6 +286,7 @@ const grFilterConfig = [
   { name: 'delivery_from', label: t('gr.deliveryFrom'), type: 'date-range' },
   { name: 'delivery_to', label: t('gr.deliveryTo'), type: 'date-range' },
   { name: 'last_delivery', label: t('gr.lastDelivery'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
+  { name: 'is_cancellation', label: t('gr.isCancellation'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
