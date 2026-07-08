@@ -25,7 +25,7 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('gr.estimatedAmount')">
-            <el-input-number v-model="form.estimated_amount" :precision="2" :min="0" controls-position="right" style="width:100%" :disabled="isReadOnly" @change="calcInclTax" />
+            <el-input-number v-model="form.estimated_amount" :precision="2" :min="estimatedAmountMin" :max="estimatedAmountMax" controls-position="right" style="width:100%" :disabled="isReadOnly" @change="calcInclTax" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -37,12 +37,12 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item :label="$t('gr.grossCost')">
-            <el-input-number :model-value="computedInclTax" :precision="2" :min="0" controls-position="right" style="width:100%" disabled />
+            <el-input-number :model-value="computedInclTax" :precision="2" :min="grossCostMin" :max="grossCostMax" controls-position="right" style="width:100%" disabled />
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item :label="$t('gr.conValue')">
-            <el-input-number v-model="form.con_value" :precision="2" :min="0" controls-position="right" style="width:100%" />
+            <el-input-number v-model="form.con_value" :precision="2" :min="conValueMin" :max="conValueMax" controls-position="right" style="width:100%" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -64,6 +64,16 @@
             <el-select v-model="form.last_delivery" style="width:100%">
               <el-option :label="$t('common.yes')" value="Y" />
               <el-option :label="$t('common.no')" value="N" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('gr.isCancellation')">
+            <el-select v-model="form.is_cancellation" style="width:100%" @change="onIsCancellationChange">
+              <el-option :label="$t('common.no')" value="N" />
+              <el-option :label="$t('common.yes')" value="Y" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -166,7 +176,7 @@ const pickedFiles = ref([])
 const emptyForm = () => ({
   gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, gross_cost: null, remark: '',
   pending_date: null, approved_date: null,
-  goods_service_description: '', confirmation_name: '', delivery_from: null, delivery_to: null, last_delivery: 'N'
+  goods_service_description: '', confirmation_name: '', delivery_from: null, delivery_to: null, last_delivery: 'N', is_cancellation: 'N'
 })
 
 const form = reactive(emptyForm())
@@ -184,6 +194,30 @@ const computedInclTax = computed(() => {
   if (isNaN(r)) return Math.round(a * 100) / 100
   return Math.round((a * (1 + r / 100)) * 100) / 100
 })
+
+const isCancellation = computed(() => form.is_cancellation === 'Y')
+
+const estimatedAmountMin = computed(() => isCancellation.value ? undefined : 0)
+const estimatedAmountMax = computed(() => isCancellation.value ? 0 : undefined)
+const conValueMin = computed(() => isCancellation.value ? undefined : 0)
+const conValueMax = computed(() => isCancellation.value ? 0 : undefined)
+const grossCostMin = computed(() => isCancellation.value ? undefined : 0)
+const grossCostMax = computed(() => isCancellation.value ? 0 : undefined)
+
+function onIsCancellationChange() {
+  // When switching to cancellation, clear positive amounts
+  if (isCancellation.value && form.estimated_amount > 0) {
+    form.estimated_amount = null
+    form.con_value = null
+    form.gross_cost = null
+  }
+  // When switching back to normal, clear negative amounts
+  if (!isCancellation.value && form.estimated_amount < 0) {
+    form.estimated_amount = null
+    form.con_value = null
+    form.gross_cost = null
+  }
+}
 
 function calcInclTax() {
   form.gross_cost = computedInclTax.value
