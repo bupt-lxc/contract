@@ -169,7 +169,7 @@ def _attach_child_grs(
     rows = conn.execute(
         """
         SELECT gr_id, gr_no, estimated_amount, con_value, gross_cost, status,
-               goods_service_description, delivery_from, delivery_to
+               goods_service_description
         FROM gr_requests
         WHERE po_id = ?
         ORDER BY gr_no

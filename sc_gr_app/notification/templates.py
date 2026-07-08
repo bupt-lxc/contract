@@ -112,7 +112,7 @@ _PO_ORDER = ["po_id", "po_no", "sc_id", "requester_id", "vendor_id", "vendor_nam
 _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "estimated_amount", "gross_cost", "tax_rate", "con_value",
              "goods_service_description", "remark", "confirmation_name",
-             "delivery_from", "delivery_to", "last_delivery"]
+             "last_delivery"]
 
 # ---------------------------------------------------------------
 # Helper functions
@@ -267,8 +267,7 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                        "sc_available_amount", "pending_total", "pending_total_incl_tax"):
                 val = _fmt_amount(val)
             elif key in ("service_period_start", "service_period_end",
-                        "contract_from", "contract_to", "delivery_from",
-                        "delivery_to", "last_delivery"):
+                        "contract_from", "contract_to", "last_delivery"):
                 val = _fmt_datetime(val)
             elif key == "status":
                 if val == "manager_confirm":
