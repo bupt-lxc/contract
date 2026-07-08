@@ -153,8 +153,6 @@ const CASCADE_COLUMNS = [
   { key: 'tax_rate', label: t('gr.taxRate') },
   { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
   { key: 'confirmation_name', label: t('gr.confirmationName') },
-  { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
-  { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
   { key: 'last_delivery', label: t('gr.lastDelivery') },
   // Common timestamps
   { key: 'created_at', label: t('export.created'), getValue: r => {

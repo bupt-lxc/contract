@@ -68,18 +68,6 @@
           </el-form-item>
         </el-col>
       </el-row>
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item :label="$t('gr.deliveryFrom')">
-            <el-date-picker v-model="form.delivery_from" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item :label="$t('gr.deliveryTo')">
-            <el-date-picker v-model="form.delivery_to" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:100%" />
-          </el-form-item>
-        </el-col>
-      </el-row>
       <el-form-item :label="$t('gr.remark')">
         <el-input v-model="form.remark" type="textarea" :rows="3" />
       </el-form-item>
@@ -166,7 +154,7 @@ const pickedFiles = ref([])
 const emptyForm = () => ({
   gr_no: null, requester_id: '', estimated_amount: null, tax_rate: null, con_value: null, gross_cost: null, remark: '',
   pending_date: null, approved_date: null,
-  goods_service_description: '', confirmation_name: '', delivery_from: null, delivery_to: null, last_delivery: 'N'
+  goods_service_description: '', confirmation_name: '', last_delivery: 'N'
 })
 
 const form = reactive(emptyForm())
