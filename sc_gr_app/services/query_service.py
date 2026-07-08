@@ -130,11 +130,13 @@ def _sc_visibility_clauses(
         return [], []
     if role == "requester":
         if include_own_drafts:
-            return [f"{sc_alias}.requester_id = ?"], [current_user["user_id"]]
+            return [
+                f"({sc_alias}.requester_id = ? OR {sc_alias}.sc_id IN (SELECT sa.sc_id FROM sc_assignees sa WHERE sa.user_id = ?))"
+            ], [current_user["user_id"], current_user["user_id"]]
         return [
             f"{sc_alias}.status != 'draft'",
-            f"{sc_alias}.requester_id = ?",
-        ], [current_user["user_id"]]
+            f"({sc_alias}.requester_id = ? OR {sc_alias}.sc_id IN (SELECT sa.sc_id FROM sc_assignees sa WHERE sa.user_id = ?))",
+        ], [current_user["user_id"], current_user["user_id"]]
     raise ValidationError("current_user is invalid")
 
 
@@ -690,8 +692,9 @@ def workbench_data(
             clauses = ["sc.status = ?"]
             params = [st]
             if _is_own_only(st) and user_id:
-                clauses.append("sc.requester_id = ?")
-                params.append(user_id)
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
@@ -715,12 +718,13 @@ def workbench_data(
             clauses = ["po.status = ?"]
             params = [st]
             if _is_own_only(st) and user_id:
-                clauses.append("po.requester_id = ?")
-                params.append(user_id)
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM pos po {where}", params
+                f"SELECT COUNT(*) FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id {where}", params
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
@@ -757,13 +761,15 @@ def workbench_data(
             clauses = ["gr.status = ?"]
             params = [st]
             if _is_own_only(st) and user_id:
-                clauses.append("gr.requester_id = ?")
-                params.append(user_id)
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
                 f"SELECT COUNT(*) FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"{where}", params
             ).fetchone()[0]
             rows = conn.execute(
@@ -773,6 +779,7 @@ def workbench_data(
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"JOIN users u ON u.user_id = gr.requester_id "
                 f"{where} ORDER BY gr.created_at ASC LIMIT 6",
                 params,
