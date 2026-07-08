@@ -362,12 +362,11 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
         action = event_key
 
     # Build entity type label — now included in ALL subject lines
-    type_label = entity_type.upper()
     if entity_type == "gr" and entity_info.get("is_cancellation") == "Y":
-        type_label = "(Cancellation) GR"
+        entity_id = entity_id.replace("GR", "(Cancellation) GR", 1)
 
     abbr = _abbreviate_name(actor_name) if actor_name else "System"
-    return f"[POMP] {action} {type_label} {entity_id} from {abbr}"
+    return f"[POMP] {action} {entity_id} from {abbr}"
 
 
 def build_body(entry: dict, entity_info: dict, user_emails: dict,
