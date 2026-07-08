@@ -46,6 +46,7 @@
           <el-descriptions-item :label="$t('gr.goodsServiceDescription')" :span="2">{{ gr.goods_service_description || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmationName')">{{ gr.confirmation_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.lastDelivery')">{{ gr.last_delivery === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.isCancellation')">{{ gr.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>

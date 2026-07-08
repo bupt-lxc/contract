@@ -27,6 +27,9 @@
       <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
     </el-table-column>
     <el-table-column prop="remark" :label="$t('gr.remark')" min-width="140" show-overflow-tooltip sortable />
+    <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
+      <template #default="{ row }">{{ row.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</template>
+    </el-table-column>
     <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
       <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
     </el-table-column>

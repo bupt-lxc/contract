@@ -65,6 +65,28 @@ def _non_negative_number(value, field: str) -> Decimal:
     return number
 
 
+def _negative_number(value, field: str) -> Decimal:
+    """Validate that a numeric value is strictly negative (for Cancellation GR)."""
+    try:
+        number = Decimal(str(value))
+    except Exception:
+        raise ValidationError(f"{field} must be negative") from None
+    if not number.is_finite() or number >= 0:
+        raise ValidationError(f"{field} must be negative")
+    return number
+
+
+def _non_positive_number(value, field: str) -> Decimal:
+    """Validate that a numeric value is non-positive (<= 0, for Cancellation GR con_value)."""
+    try:
+        number = Decimal(str(value))
+    except Exception:
+        raise ValidationError(f"{field} must be non-positive") from None
+    if not number.is_finite() or number > 0:
+        raise ValidationError(f"{field} must be non-positive")
+    return number
+
+
 def _row_to_dict(row) -> dict:
     return dict(row)
 
@@ -142,11 +164,13 @@ def _validate_gr_creation_context(
     po_sc,
     amount: Decimal,
     gr_status: str = "pending",
+    is_cancellation: str = "N",
 ) -> None:
     """Validate that a GR can be created in the given PO/SC context.
 
     - draft PO under draft SC → only draft GR allowed, no budget check
     - active PO under approved SC → only pending / manager_confirm GR allowed, full budget check
+    - Cancellation GR (is_cancellation='Y') skips budget checks
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
@@ -160,12 +184,13 @@ def _validate_gr_creation_context(
     if po_status == "active" and sc_status == "approved":
         if gr_status not in ("draft", "pending", "manager_confirm"):
             raise ConflictError("Active PO only allows draft, pending or manager_confirm GR")
-        sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
-        po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
-        if sc_budget["sc_available_amount"] < amount:
-            raise ConflictError("SC available amount is insufficient")
-        if po_budget["open_po_amount"] < amount:
-            raise ConflictError("PO open amount is insufficient")
+        if is_cancellation != "Y":
+            sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
+            po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
+            if sc_budget["sc_available_amount"] < amount:
+                raise ConflictError("SC available amount is insufficient")
+            if po_budget["open_po_amount"] < amount:
+                raise ConflictError("PO open amount is insufficient")
         return
 
     raise ConflictError("SC must be draft or approved to add GR")
@@ -174,10 +199,11 @@ def _validate_gr_creation_context(
 def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
-    estimated_amount = _positive_number(
-        data["estimated_amount"],
-        "estimated_amount",
-    )
+    is_cancellation = data.get("is_cancellation", "N")
+    if is_cancellation == "Y":
+        estimated_amount = _negative_number(data["estimated_amount"], "estimated_amount")
+    else:
+        estimated_amount = _positive_number(data["estimated_amount"], "estimated_amount")
     po_id = data["po_id"]
     requester_id = data["requester_id"]
 
@@ -211,7 +237,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                 elif gr_status not in SUPPORTED_STATUSES:
                     raise ValidationError(f"Invalid GR status: {gr_status}")
 
-                _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
+                _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status, is_cancellation)
 
                 is_draft = gr_status == "draft"
                 gross_cost = _compute_incl_tax(estimated_amount, data.get("tax_rate"))
@@ -238,7 +264,8 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       approved_date,
                       goods_service_description,
                       confirmation_name,
-                      last_delivery
+                      last_delivery,
+                      is_cancellation
                     ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -263,6 +290,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("goods_service_description"),
                         data.get("confirmation_name"),
                         data.get("last_delivery"),
+                        is_cancellation,
                     ),
                 )
                 created = _get_gr(conn, gr_id)
@@ -431,14 +459,15 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 if po["status"] != "active":
                     raise ConflictError("PO must be active before submitting GR")
 
-                # Budget check at submission time
-                estimated_amount = Decimal(str(before["estimated_amount"] or 0))
-                sc_budget = compute_sc_budget_decimal(config, sc_id)
-                po_budget = compute_po_budget_decimal(config, before["po_id"])
-                if sc_budget["sc_available_amount"] < estimated_amount:
-                    raise ConflictError("SC available amount is insufficient")
-                if po_budget["open_po_amount"] < estimated_amount:
-                    raise ConflictError("PO open amount is insufficient")
+                # Budget check at submission time (skip for Cancellation GR)
+                estimated_amount = Decimal(str(before["estimated_amount"]))
+                if before.get("is_cancellation") != "Y":
+                    sc_budget = compute_sc_budget_decimal(config, sc_id)
+                    po_budget = compute_po_budget_decimal(config, before["po_id"])
+                    if sc_budget["sc_available_amount"] < estimated_amount:
+                        raise ConflictError("SC available amount is insufficient")
+                    if po_budget["open_po_amount"] < estimated_amount:
+                        raise ConflictError("PO open amount is insufficient")
 
                 timestamp = utc_now()
                 _submit_gr_drafts(conn, [gr_id], timestamp)
@@ -547,9 +576,14 @@ def approve_gr(
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
 
+                is_canc = before.get("is_cancellation", "N")
+
                 # Resolve con_value: explicit value → auto-fill from gross_cost
                 if con_value is not None:
-                    con_value_amount = _non_negative_number(con_value, "con_value")
+                    if is_canc == "Y":
+                        con_value_amount = _non_positive_number(con_value, "con_value")
+                    else:
+                        con_value_amount = _non_negative_number(con_value, "con_value")
                 elif before.get("gross_cost") is not None:
                     con_value_amount = Decimal(str(before["gross_cost"]))
                 else:
@@ -560,7 +594,7 @@ def approve_gr(
                 extra_amount = con_value_amount - Decimal(
                     str(before["estimated_amount"] or 0)
                 )
-                if extra_amount > 0:
+                if extra_amount > 0 and is_canc != "Y":
                     sc_budget = compute_sc_budget_decimal(config, sc_id)
                     po_budget = compute_po_budget_decimal(config, before["po_id"])
                     if sc_budget["sc_available_amount"] < extra_amount:
@@ -663,6 +697,7 @@ def update_gr(
                             "goods_service_description",
                             "confirmation_name",
                             "last_delivery",
+                            "is_cancellation",
                         )
                         if key in updates
                     }
@@ -672,10 +707,11 @@ def update_gr(
                     merged = {**before, **allowed}
                     if "requester_id" in allowed:
                         _validate_user_exists(conn, merged["requester_id"])
-                    amount = _positive_number(
-                        merged["estimated_amount"],
-                        "estimated_amount",
-                    )
+                    is_canc = merged.get("is_cancellation", "N")
+                    if is_canc == "Y":
+                        amount = _negative_number(merged["estimated_amount"], "estimated_amount")
+                    else:
+                        amount = _positive_number(merged["estimated_amount"], "estimated_amount")
                     po_sc = _get_po_sc(conn, merged["po_id"])
                     is_draft_gr = before["status"] == "draft"
                     if is_draft_gr:
@@ -697,7 +733,7 @@ def update_gr(
                             merged.get("tax_rate"),
                         )
 
-                    if not is_draft_gr:
+                    if not is_draft_gr and is_canc != "Y":
                         old_amount = Decimal(str(before["estimated_amount"]))
                         if po_sc["sc_id"] == sc_id:
                             sc_budget_amount = amount - old_amount
@@ -733,7 +769,8 @@ def update_gr(
                             approved_date = ?,
                             goods_service_description = ?,
                             confirmation_name = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            is_cancellation = ?
                         where gr_id = ?
                         """,
                         (
@@ -749,6 +786,7 @@ def update_gr(
                             merged.get("goods_service_description"),
                             merged.get("confirmation_name"),
                             merged.get("last_delivery"),
+                            is_canc,
                             gr_id,
                         ),
                     )
@@ -757,7 +795,7 @@ def update_gr(
                         key: updates[key]
                         for key in ("con_value", "tax_rate", "remark", "gr_no",
                                     "goods_service_description", "confirmation_name",
-                                    "last_delivery")
+                                    "last_delivery", "is_cancellation")
                         if key in updates
                     }
                     if not allowed:
@@ -772,12 +810,13 @@ def update_gr(
                         )
                     if merged.get("con_value") is None:
                         raise ValidationError("con_value is required for approved GR")
-                    con_value = _non_negative_number(
-                        merged["con_value"],
-                        "con_value",
-                    )
+                    is_canc = merged.get("is_cancellation", before.get("is_cancellation", "N"))
+                    if is_canc == "Y":
+                        con_value = _non_positive_number(merged["con_value"], "con_value")
+                    else:
+                        con_value = _non_negative_number(merged["con_value"], "con_value")
                     extra_amount = con_value - Decimal(str(before["con_value"]))
-                    if extra_amount > 0:
+                    if extra_amount > 0 and is_canc != "Y":
                         sc_budget = compute_sc_budget_decimal(config, sc_id)
                         po_budget = compute_po_budget_decimal(config, before["po_id"])
                         if sc_budget["sc_available_amount"] < extra_amount:
@@ -797,14 +836,15 @@ def update_gr(
                             gr_no = ?,
                             goods_service_description = ?,
                             confirmation_name = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            is_cancellation = ?
                         where gr_id = ?
                         """,
                         (float(con_value),
                          float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
                          merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
                          merged.get("goods_service_description"), merged.get("confirmation_name"),
-                         merged.get("last_delivery"),
+                         merged.get("last_delivery"), is_canc,
                          gr_id),
                     )
 

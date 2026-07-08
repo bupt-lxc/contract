@@ -1,4 +1,5 @@
 """Bulk import service for SC, PO, GR records with direct status writes."""
+import re
 from datetime import datetime, timezone
 
 from sc_gr_app.config import AppConfig
@@ -284,6 +285,104 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
 
 GR_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
 
+# Column header aliases for bilingual (EN/CN) import templates
+_SC_COLUMN_ALIASES = {
+    "sc_id": ["SC ID", "sc_id"],
+    "sc_no": ["SC NO", "sc_no"],
+    "requester_id": ["Requester ID", "requester_id"],
+    "request_type": ["Request Type", "request_type"],
+    "cost_center": ["Cost Center", "cost_center"],
+    "sc_amount": ["SC Amount", "sc_amount"],
+    "service_period_start": ["Service Period Start", "service_period_start"],
+    "service_period_end": ["Service Period End", "service_period_end"],
+    "status": ["Status", "status"],
+    "description": ["Description", "description"],
+    "currency": ["Currency", "currency"],
+    "internal_system_number": ["Internal System Number", "internal_system_number"],
+}
+
+_PO_COLUMN_ALIASES = {
+    "po_id": ["PO ID", "po_id"],
+    "sc_id": ["SC ID", "sc_id"],
+    "vendor_id": ["Vendor ID", "vendor_id"],
+    "po_no": ["PO NO", "po_no"],
+    "requester_id": ["Requester ID", "requester_id"],
+    "po_amount": ["PO Amount", "po_amount"],
+    "status": ["Status", "status"],
+    "contract_from": ["Contract From", "contract_from"],
+    "contract_to": ["Contract To", "contract_to"],
+    "contract_no": ["Contract NO", "contract_no"],
+    "payment_frequency": ["Payment Frequency", "payment_frequency"],
+    "contract_pos": ["Contract POs", "contract_pos"],
+    "contract_type": ["Contract Type", "contract_type"],
+    "cost_center": ["Cost Center", "cost_center"],
+    "purchaser": ["Purchaser", "purchaser"],
+}
+
+_GR_COLUMN_ALIASES = {
+    "gr_id": ["GR ID", "gr_id"],
+    "po_id": ["PO ID", "po_id"],
+    "po_no": ["PO NO", "po_no"],
+    "gr_no": ["GR NO", "gr_no"],
+    "requester_id": ["Requester ID", "requester_id"],
+    "estimated_amount": ["Estimated Amount", "estimated_amount"],
+    "con_value": ["Con Value", "con_value"],
+    "status": ["Status", "status"],
+    "remark": ["Remark", "remark"],
+    "tax_rate": ["Tax Rate", "tax_rate"],
+    "gross_cost": ["Gross Cost", "gross_cost"],
+    "goods_service_description": ["Goods/Service Description", "goods_service_description"],
+    "confirmation_name": ["Confirmation Name", "confirmation_name"],
+    "last_delivery": ["Last Delivery", "last_delivery"],
+    "is_cancellation": ["Is Cancellation", "is_cancellation", "是否取消类型"],
+}
+
+_DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%d.%m.%Y",
+    "%m/%d/%Y",
+]
+
+
+def parse_date(value: str) -> str | None:
+    """Parse a date string into ISO format (YYYY-MM-DD). Returns None if unparseable."""
+    if not value:
+        return None
+    value = str(value).strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_import_header(header: str) -> str | None:
+    """Map a raw header name to its canonical key, or None if unrecognized."""
+    h = header.strip()
+    # Direct match against all aliases
+    for canonical, aliases in {**_SC_COLUMN_ALIASES, **_PO_COLUMN_ALIASES, **_GR_COLUMN_ALIASES}.items():
+        if h in aliases:
+            return canonical
+    # Fuzzy match: remove spaces/underscores and compare case-insensitively
+    normalized = re.sub(r"[ _-]", "", h).lower()
+    for canonical, aliases in {**_SC_COLUMN_ALIASES, **_PO_COLUMN_ALIASES, **_GR_COLUMN_ALIASES}.items():
+        for alias in aliases:
+            if re.sub(r"[ _-]", "", alias).lower() == normalized:
+                return canonical
+    return None
+
+
+def _map_import_columns(raw_headers: list[str], entity_aliases: dict) -> dict[str, int]:
+    """Map raw header names to (canonical_key, column_index) using alias lookup."""
+    mapping: dict[str, int] = {}
+    for i, header in enumerate(raw_headers):
+        canonical = _normalize_import_header(header)
+        if canonical and canonical in entity_aliases:
+            mapping[canonical] = i
+    return mapping
+
 
 def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     """Validate all GR rows. Returns list of error dicts."""
@@ -311,6 +410,32 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
             ).fetchone()
             if not exists:
                 errors.append({"row": i, "field": "po_id", "message": f"PO {row['po_id']} not found"})
+        # Validate is_cancellation
+        is_canc = (row.get("is_cancellation") or "N").strip().upper()
+        if is_canc not in ("Y", "N"):
+            errors.append({"row": i, "field": "is_cancellation", "message": "is_cancellation must be Y or N"})
+        # Cross-validate amounts against is_cancellation
+        if is_canc == "Y":
+            try:
+                est = float(row["estimated_amount"]) if row.get("estimated_amount") else None
+                if est is not None and est >= 0:
+                    errors.append({"row": i, "field": "estimated_amount", "message": "Cancellation GR estimated_amount must be negative"})
+            except (ValueError, TypeError):
+                pass
+            try:
+                cv = float(row["con_value"]) if row.get("con_value") else None
+                if cv is not None and cv > 0:
+                    errors.append({"row": i, "field": "con_value", "message": "Cancellation GR con_value must be non-positive"})
+            except (ValueError, TypeError):
+                pass
+        # Check GR NO uniqueness in DB
+        gr_no = (row.get("gr_no") or "").strip()
+        if gr_no:
+            exists = conn.execute(
+                "SELECT 1 FROM gr_requests WHERE gr_no = ?", (gr_no,)
+            ).fetchone()
+            if exists:
+                errors.append({"row": i, "field": "gr_no", "message": f"GR NO {gr_no} already exists"})
     return errors
 
 
@@ -402,6 +527,31 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
                 ).fetchone()
                 if not exists:
                     errors_list.append(f"PO {row['po_id']} not found")
+            # Validate is_cancellation
+            is_canc = (row.get("is_cancellation") or "N").strip().upper()
+            if is_canc not in ("Y", "N"):
+                errors_list.append("is_cancellation must be Y or N")
+            if is_canc == "Y":
+                try:
+                    est = float(row["estimated_amount"]) if row.get("estimated_amount") else None
+                    if est is not None and est >= 0:
+                        errors_list.append("Cancellation GR estimated_amount must be negative")
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    cv = float(row["con_value"]) if row.get("con_value") else None
+                    if cv is not None and cv > 0:
+                        errors_list.append("Cancellation GR con_value must be non-positive")
+                except (ValueError, TypeError):
+                    pass
+            # Check GR NO uniqueness in DB
+            gr_no = (row.get("gr_no") or "").strip()
+            if gr_no:
+                exists = conn.execute(
+                    "SELECT 1 FROM gr_requests WHERE gr_no = ?", (gr_no,)
+                ).fetchone()
+                if exists:
+                    errors_list.append(f"GR NO {gr_no} already exists")
             annotated = dict(row)
             annotated["_errors"] = errors_list
             annotated["_valid"] = len(errors_list) == 0
@@ -446,9 +596,9 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           gr_id, po_id, gr_no, requester_id,
                           estimated_amount, con_value, status, remark, tax_rate,
                           gross_cost, goods_service_description, confirmation_name,
-                          delivery_from, delivery_to, last_delivery,
+                          last_delivery, is_cancellation,
                           created_by, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             gr_id,
                             row["po_id"],
@@ -462,9 +612,8 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             float(row["gross_cost"]) if row.get("gross_cost") else None,
                             row.get("goods_service_description"),
                             row.get("confirmation_name"),
-                            row.get("delivery_from"),
-                            row.get("delivery_to"),
                             row.get("last_delivery"),
+                            row.get("is_cancellation", "N"),
                             current_user["user_id"],
                             timestamp,
                         ),

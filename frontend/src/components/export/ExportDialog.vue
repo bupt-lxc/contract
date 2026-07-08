@@ -168,6 +168,7 @@ const CASCADE_COLUMNS = [
   { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
   { key: 'confirmation_name', label: t('gr.confirmationName') },
   { key: 'last_delivery', label: t('gr.lastDelivery') },
+  { key: 'is_cancellation', label: t('gr.isCancellation') },
   // Common timestamps
   { key: 'created_at', label: t('export.created'), getValue: r => {
     if (r.created_at && r.created_at.includes('T')) {

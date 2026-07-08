@@ -719,11 +719,10 @@ def workbench_data(
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
 
-            # Own-only statuses: admin sees only their own drafts;
-            # requesters already scoped by _sc_visibility_clauses
-            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
+            # _is_own_only restricts requester users to their own POs/GRs
+            if _is_own_only(st) and user_id:
                 clauses.append("po.requester_id = ?")
-                params.append(current_user["user_id"])
+                params.append(user_id)
 
             where = "WHERE " + " AND ".join(clauses)
 
@@ -769,11 +768,10 @@ def workbench_data(
                 clauses.extend(visibility_clause)
                 params.extend(visibility_params)
 
-            # Own-only statuses: admin sees only their own drafts;
-            # requesters already scoped by _sc_visibility_clauses
-            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
+            # _is_own_only restricts requester users to their own POs/GRs
+            if _is_own_only(st) and user_id:
                 clauses.append("gr.requester_id = ?")
-                params.append(current_user["user_id"])
+                params.append(user_id)
 
             where = "WHERE " + " AND ".join(clauses)
 

@@ -96,6 +96,7 @@ _GR_RENAMES = {
     "estimated_amount": "GR Application Amount (Net)",
     "gross_cost": "GR Application Amount (Gross)",
     "con_value": "GR Value",
+    "is_cancellation": "Cancellation GR",
 }
 _PO_RENAMES = {
     "pending_total": "Pending GR amount (Net)",
@@ -112,7 +113,7 @@ _PO_ORDER = ["po_id", "po_no", "sc_id", "requester_id", "vendor_id", "vendor_nam
 _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "estimated_amount", "gross_cost", "tax_rate", "con_value",
              "goods_service_description", "remark", "confirmation_name",
-             "last_delivery"]
+             "last_delivery", "is_cancellation"]
 
 # ---------------------------------------------------------------
 # Helper functions
@@ -331,6 +332,8 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     Example: [POMP] Submitted SC 0629-002 from LiXingchen
     """
     entity_id = _short_entity_id(entry.get("entity_id", ""))
+    if entry.get("entity_type") == "gr" and entity_info.get("is_cancellation") == "Y":
+        entity_id = entity_id.replace("GR", "(Cancellation) GR", 1)
     event_type = entry.get("event_type", "")
     event_key = entry.get("event_key", "")
 
