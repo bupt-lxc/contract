@@ -90,8 +90,15 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   gr_no TEXT,
   po_id TEXT NOT NULL REFERENCES pos(po_id),
   requester_id TEXT NOT NULL REFERENCES users(user_id),
-  estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
-  con_value REAL CHECK (con_value >= 0),
+  estimated_amount REAL NOT NULL CHECK (
+    (is_cancellation = 'N' AND estimated_amount > 0) OR
+    (is_cancellation = 'Y' AND estimated_amount < 0)
+  ),
+  con_value REAL CHECK (
+    con_value IS NULL OR
+    (is_cancellation = 'N' AND con_value >= 0) OR
+    (is_cancellation = 'Y' AND con_value <= 0)
+  ),
   gross_cost REAL,
   tax_rate REAL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied', 'finished')),
@@ -111,7 +118,8 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   confirmation_name TEXT,
   delivery_from TEXT,
   delivery_to TEXT,
-  last_delivery TEXT
+  last_delivery TEXT,
+  is_cancellation TEXT NOT NULL DEFAULT 'N' CHECK (is_cancellation IN ('N', 'Y'))
 );
 
 CREATE TABLE IF NOT EXISTS operation_records (
