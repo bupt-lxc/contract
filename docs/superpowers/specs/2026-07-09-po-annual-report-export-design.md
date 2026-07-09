@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add an admin-only annual report export button to the PO List page. The report exports all active and finished POs in the standard annual-report layout represented by `docs/2025 C_EG-V GR_25.09.25_update.xlsx`, excluding the template total row.
+Add an admin-only annual report export button to the PO List page. The report exports PO rows selected by annual-report inclusion rules, in the standard annual-report layout represented by `docs/2025 C_EG-V GR_25.09.25_update.xlsx`, excluding the template total row.
 
 The GR annual report export already has the intended UI pattern, but the current worktree has a broken backend gap: `GrListView.vue` calls `get_gr_annual_report`, while the backend service/API methods are missing. This work will also repair that GR path so the copied pattern is usable.
 
@@ -12,7 +12,20 @@ On PO List, admins see an annual-report export button near the existing export c
 
 Clicking the button opens a compact year-picker dialog, matching the GR annual report interaction. The selected year defaults to the current year. Confirming the dialog generates an Excel file named like `PO_Annual_Report_2025.xlsx`.
 
-The export includes all POs whose status is `active` or `finished`, regardless of whether they have GRs in the selected year.
+The export is intentionally broader than "POs with GR this year" but narrower than "all finished POs". A PO is included when it matches at least one annual-report inclusion condition in the Data Scope section.
+
+## Data Scope
+
+The backend includes a PO when any of these conditions is true:
+
+1. The PO belongs to an SC whose status is `approved`.
+2. The PO has at least one approved/finished GR whose report year equals the selected year.
+3. The PO status is currently `active`.
+4. The PO status is `finished` and `pos.finished_at` is in the selected year.
+
+This means historical finished POs are not included just because they are finished. A historical finished PO still appears if it belongs to an approved SC or has selected-year GR activity.
+
+Independent FC POs do not have a parent SC, so they enter the report through conditions 2, 3, or 4.
 
 ## Report Columns
 
@@ -67,7 +80,7 @@ Only GR statuses `approved` and `finished` are included in any annual GR totals.
 
 Backend adds `po_service.get_annual_report_data(config, year, current_user)`.
 
-The service validates that `year` is a four-digit string, requires admin access, and returns rows already shaped for report export. The query joins PO, SC, user, and aggregated GR totals so the frontend does not implement financial logic.
+The service validates that `year` is a four-digit string, requires admin access, applies the Data Scope OR conditions, and returns rows already shaped for report export. The query joins PO, SC, user, and aggregated GR totals so the frontend does not implement financial logic.
 
 Backend adds `ApiBridge.get_po_annual_report(payload)` beside the existing export endpoints. It defaults to the current year when omitted, calls the PO service, formats timestamps through existing helpers where relevant, and returns `{ rows }`.
 
@@ -111,8 +124,11 @@ Backend tests cover:
 
 - PO annual report rejects invalid years.
 - Non-admin users cannot fetch PO annual report data.
-- All active/finished POs are included even when selected-year GR is empty.
-- Draft POs are excluded.
+- POs under approved SCs are included even when selected-year GR is empty.
+- POs with selected-year GRs are included even when their parent SC is not approved.
+- Active POs are included.
+- Finished POs are included only when finished in the selected year, unless included by another rule.
+- Historical finished POs are excluded when they do not match any other inclusion condition.
 - Previous-year and selected-year GR totals include only approved/finished GRs.
 - FC GR total appears only for effectively FC POs.
 - Blank columns are present in the returned row shape.
