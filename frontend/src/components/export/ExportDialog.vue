@@ -80,6 +80,7 @@ const { exportMultiSheet, exportCSV } = useExport()
 const props = defineProps({
   visible: { type: Boolean, default: false },
   entityType: { type: String, required: true },
+  text: { type: String, default: '' },
   filters: { type: Object, default: () => ({}) },
   sort: { type: String, default: 'created_at' },
   direction: { type: String, default: 'desc' },
@@ -99,7 +100,7 @@ const exporting = ref(false)
 
 function initScope() {
   if (props.selectedIds.length) return 'selected'
-  if (Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null)) return 'filtered'
+  if (hasActiveCriteria()) return 'filtered'
   return 'all'
 }
 
@@ -111,7 +112,10 @@ function defaultFilename() {
 
 const dialogTitle = computed(() => t('export.dialogTitle', { type: { sc: 'SC', po: 'PO', gr: 'GR' }[props.entityType] }))
 const selectedCount = computed(() => props.selectedIds.length)
-const hasFilters = computed(() => Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null))
+function hasActiveCriteria() {
+  return Boolean(props.text) || Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null)
+}
+const hasFilters = computed(() => hasActiveCriteria())
 
 function onCascadePoChange(val) {
   if (!val) cascadeGr.value = false
@@ -331,7 +335,8 @@ async function doExport() {
     }
 
     const payload = {
-      filters: dataScope.value === 'all' ? {} : props.filters,
+      text: dataScope.value === 'selected' ? null : (props.text || null),
+      filters: dataScope.value === 'selected' ? {} : props.filters,
       sort: props.sort,
       direction: props.direction,
       cascade: { po: cascadePo.value, gr: cascadeGr.value },
