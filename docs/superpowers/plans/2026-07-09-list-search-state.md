@@ -1,4 +1,4 @@
-# List Search State Implementation Plan
+﻿# List Search State Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -14,51 +14,67 @@
 
 Create:
 
-- `frontend/src/composables/useListSearch.js`  
+- `frontend/src/composables/useListSearch.js`
   Owns list state, route-query sync, page/sort/filter transitions, backend search calls, and compatibility `search()` behavior.
-- `frontend/src/utils/listQuery.js`  
+- `frontend/src/utils/listSearchCore.js`
+  Framework-free list search state core used by `useListSearch`; covered by Node tests without Vue or Vite aliases.
+- `frontend/src/utils/listQuery.js`
   Pure helpers for URL query parsing/serialization, page/pageSize normalization, sort/direction validation, reserved query filtering, and list-state query objects.
-- `frontend/src/utils/date.js`  
+- `frontend/src/utils/date.js`
   Pure local-date helpers: local `YYYY-MM-DD`, add months/years, and deadline shortcut conversion.
-- `tests/web_list_query.test.mjs`  
+- `frontend/src/utils/exportPaging.js`
+  Pure helper for paginating through every row from search-style APIs for Vendor all-matching export.
+- `tests/web_list_query.test.mjs`
   Node test coverage for pure list-query helper behavior.
-- `tests/web_date_helpers.test.mjs`  
+- `tests/web_date_helpers.test.mjs`
   Node test coverage for local date/deadline behavior.
+- `tests/web_use_list_search.test.mjs`
+  Node test coverage for `listSearchCore`: route sync, paging/sorting payloads, reset, export criteria, stale response protection, and route-query restore.
+- `tests/web_export_all.test.mjs`
+  Node test coverage for Vendor-style paginated `exportAll` criteria forwarding.
 
 Modify:
 
-- `frontend/src/components/common/AdvancedFilterBar.vue`  
+- `frontend/src/components/common/AdvancedFilterBar.vue`
   Convert to controlled `v-model:text` and `v-model:filters`, keep existing layout and slots.
 - `frontend/src/composables/usePo.js`
 - `frontend/src/composables/useSc.js`
 - `frontend/src/composables/useGr.js`
-- `frontend/src/composables/useVendor.js`  
+- `frontend/src/composables/useVendor.js`
   Rebuild list state around `useListSearch`; preserve existing mutation/detail methods.
 - `frontend/src/views/PoListView.vue`
 - `frontend/src/views/ScListView.vue`
 - `frontend/src/views/GrListView.vue`
-- `frontend/src/views/VendorListView.vue`  
+- `frontend/src/views/VendorListView.vue`
   Wire controlled filter bar, route initialization, pagination/sort transitions, reloads, selection clearing, export criteria, and detail `returnTo`.
 - `frontend/src/components/po/PoTable.vue`
-- `frontend/src/components/sc/ScTable.vue`  
+- `frontend/src/components/sc/ScTable.vue`
   Ensure server-side sortable columns use `sortable="custom"` and emit sort events.
-- `frontend/src/components/export/ExportDialog.vue`  
+- `frontend/src/components/export/ExportDialog.vue`
   Accept `text`, use it in data-scope decisions, pass it to backend export APIs, and omit pagination for all matching rows.
-- `frontend/src/composables/useExport.js`  
+- `frontend/src/composables/useExport.js`
   Keep `exportAll` available for Vendor export and ensure params include text/filter/sort/direction only.
-- `frontend/src/views/LoginView.vue`  
+- `frontend/src/views/LoginView.vue`
   Guard redirect handling so full list query state survives login redirects safely.
-- `sc_gr_app/services/query_service.py`  
+- `sc_gr_app/services/query_service.py`
   Add escaped, case-insensitive LIKE matching for advanced text filters and update per-entity `like_fields`.
-- `sc_gr_app/services/export_service.py`  
+- `sc_gr_app/services/export_service.py`
   Add `text` to cascade row fetches and statistics; compute export statistics from the same matching root rows.
-- `sc_gr_app/api/bridge.py`  
+- `sc_gr_app/api/bridge.py`
   Thread `text` through SC/PO/GR export bridge methods.
 - `tests/test_query_service.py`
 - `tests/test_export_service.py`
-- `tests/web_auth_state.test.mjs` or a new pure auth helper test if a helper is extracted.
+- `tests/test_api_bridge.py`
+- `tests/web_navigation_state.test.mjs`
 
 Do not modify Operation Logs or Email Logs search behavior in this plan.
+
+Email and log scope clarification:
+- Do not migrate `/logs`, `/emails`, or `/emails/logs` to `useListSearch`.
+- Do not change `EmailLogsView.vue` filtering, pagination, or export behavior.
+- Do not change `open_entity_email`, Outlook draft generation, or email notification APIs.
+- Do not change `window.__protocolNavigate`; email/protocol deep links continue to open details directly without `returnTo`.
+- `action`, `highlight`, `redirect`, and `returnTo` are reserved query keys only so list query parsing never forwards them as backend filters.
 
 ---
 
@@ -208,7 +224,7 @@ Run:
 node --test tests\web_list_query.test.mjs tests\web_date_helpers.test.mjs
 ```
 
-Expected: FAIL because `frontend/src/utils/listQuery.js` and `frontend/src/utils/date.js` do not exist.
+Expected: FAIL because the new helper modules or exports are missing. If the command fails for syntax or test-runner setup errors instead, fix the test setup before implementing the helpers.
 
 - [ ] **Step 4: Implement `listQuery.js`**
 
@@ -413,6 +429,12 @@ def test_advanced_like_filters_treat_sql_wildcards_as_literals(app_config):
 
     assert search_pos(app_config, filters={"po_no": "%"}, current_user=ADMIN)["rows"] == []
     assert search_vendors(app_config, filters={"vendor_name": "_"})["rows"] == []
+
+
+def test_gr_is_cancellation_filter_is_supported(app_config):
+    _sc_id, _po_id, gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_grs(app_config, filters={"is_cancellation": "N"}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id
 ```
 
 - [ ] **Step 2: Run query tests and verify fuzzy tests fail**
@@ -444,7 +466,37 @@ def _contains_param(value) -> str:
     return f"%{_escape_like(value).lower()}%"
 ```
 
-Then update `_append_text_search` and `_append_filters` LIKE branches to use `lower(...) like ? escape '\\'` and `_contains_param(value)`.
+Replace `_append_text_search` with:
+
+```python
+def _append_text_search(
+    clauses: list[str],
+    params: list,
+    text: str | None,
+    columns: tuple[str, ...],
+) -> None:
+    if not text:
+        return
+    search_clauses = (
+        f"lower(coalesce({column}, '')) like ? escape '\\\\'"
+        for column in columns
+    )
+    clauses.append("(" + " or ".join(search_clauses) + ")")
+    params.extend([_contains_param(text)] * len(columns))
+```
+
+In `_append_filters`, replace only the `elif field in like_fields:` branch with:
+
+```python
+        elif field in like_fields:
+            column = allowed_filters.get(field)
+            if column is None:
+                raise ValidationError("filter field is invalid")
+            clauses.append(f"lower(coalesce({column}, '')) like ? escape '\\\\'")
+            params.append(_contains_param(value))
+```
+
+Leave `_from`, `_to`, `_min`, `_max`, and exact-match branches unchanged.
 
 - [ ] **Step 4: Expand per-entity `like_fields`**
 
@@ -490,6 +542,12 @@ like_fields={
 }
 ```
 
+Also add GR cancellation to `search_grs` `allowed_filters` so the existing GR list filter remains valid:
+
+```python
+"is_cancellation": "gr.is_cancellation",
+```
+
 - [ ] **Step 5: Run fuzzy query tests**
 
 Run:
@@ -527,6 +585,7 @@ git commit -m "feat(search): fuzzy match advanced text filters"
 - Modify: `sc_gr_app/services/export_service.py`
 - Modify: `sc_gr_app/api/bridge.py`
 - Modify: `tests/test_export_service.py`
+- Modify: `tests/test_api_bridge.py`
 
 - [ ] **Step 1: Add failing export text/statistics tests**
 
@@ -565,10 +624,17 @@ def test_export_statistics_use_same_text_criteria_as_rows(app_config):
     conn.commit()
     conn.close()
 
+    rows = export_service.build_cascade_rows(
+        app_config, "sc", {}, "created_at", "desc",
+        cascade_options={"po": False, "gr": False},
+        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
+        text="alpha",
+    )
     stats = export_service.compute_statistics(
         app_config,
         {"SC"},
         {},
+        export_rows=rows,
         text="alpha",
         sort="created_at",
         direction="desc",
@@ -577,6 +643,73 @@ def test_export_statistics_use_same_text_criteria_as_rows(app_config):
 
     assert stats["overview"]["sc"]["total_count"] == 1
     assert stats["overview"]["sc"]["total_amount"] == 50000
+
+
+def test_cascade_statistics_are_based_on_exported_child_rows(app_config):
+    migrate(app_config)
+    import sqlite3
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U1', 'M001', 'Alice', 'admin', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U2', 'M002', 'Bob', 'requester', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO vendors (vendor_id, vendor_name, created_at, updated_at) VALUES ('V1', 'Alpha Vendor', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-alpha', 'SC-ALPHA', 'U2', 'new', 1000, 50000, 'CNY', '2026-01-01', '2026-06-30', 'approved', 'Alpha service', 'U2', '2026-01-15', '2026-01-15')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-beta', 'SC-BETA', 'U2', 'new', 2000, 30000, 'CNY', '2026-02-01', '2026-07-31', 'approved', 'Beta service', 'U2', '2026-02-01', '2026-02-01')")
+    conn.execute("INSERT INTO pos (po_id, po_no, sc_id, vendor_id, po_amount, currency, status, created_at, updated_at) VALUES ('po-alpha', 'PO-ALPHA', 'sc-alpha', 'V1', 700, 'CNY', 'active', '2026-01-20', '2026-01-20')")
+    conn.execute("INSERT INTO pos (po_id, po_no, sc_id, vendor_id, po_amount, currency, status, created_at, updated_at) VALUES ('po-beta', 'PO-BETA', 'sc-beta', 'V1', 900, 'CNY', 'active', '2026-02-10', '2026-02-10')")
+    conn.commit()
+    conn.close()
+
+    rows = export_service.build_cascade_rows(
+        app_config, "sc", {}, "created_at", "desc",
+        cascade_options={"po": True, "gr": False},
+        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
+        text="alpha",
+    )
+    stats = export_service.compute_statistics(app_config, {"SC", "PO"}, {}, export_rows=rows)
+
+    assert stats["overview"]["sc"]["total_count"] == 1
+    assert stats["overview"]["po"]["total_count"] == 1
+    assert stats["overview"]["po"]["total_amount"] == 700
+```
+
+Append to `tests/test_api_bridge.py`:
+
+```python
+def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    calls = []
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda _config, _machine_id: {"user_id": "U1", "machine_id": "1234567", "user_name": "Alice", "role": "admin"},
+    )
+    monkeypatch.setattr(bridge, "save_workbook_dialog", lambda *_args, **_kwargs: "ok.xlsx")
+
+    def fake_rows(*args, **kwargs):
+        calls.append(("rows", args, kwargs))
+        return [{"_type": "SC", "sc_id": "sc-alpha"}]
+
+    def fake_stats(*args, **kwargs):
+        calls.append(("stats", args, kwargs))
+        return {"overview": {}}
+
+    monkeypatch.setattr(bridge.export_service, "build_cascade_rows", fake_rows)
+    monkeypatch.setattr(bridge.export_service, "compute_statistics", fake_stats)
+    monkeypatch.setattr(bridge.export_service, "build_export_workbook", lambda *_args, **_kwargs: object())
+
+    api = bridge.ApiBridge(app_config)
+    api.export_scs_cascade({"text": "alpha", "filters": {"status": "approved"}, "sort": "created_at", "direction": "desc"})
+
+    row_kwargs = calls[0][2]
+    stats_kwargs = calls[1][2]
+    assert row_kwargs["text"] == "alpha"
+    assert row_kwargs["current_user"]["user_id"] == "U1"
+    assert stats_kwargs["text"] == "alpha"
+    assert stats_kwargs["current_user"]["user_id"] == "U1"
+    assert "export_rows" in stats_kwargs
 ```
 
 - [ ] **Step 2: Run export tests and verify they fail**
@@ -591,7 +724,9 @@ Expected: FAIL because export service does not accept `text`.
 
 - [ ] **Step 3: Thread `text` through export row fetching**
 
-Modify `build_cascade_rows`, `_build_sc_cascade`, `_build_po_cascade`, `_build_gr_rows`, and `_fetch_all_search` to accept `text=None`. In `_fetch_all_search`, pass `text=text` into the query service call:
+Modify `build_cascade_rows`, `_build_sc_cascade`, `_build_po_cascade`, `_build_gr_rows`, and `_fetch_all_search` to accept `text=None`. Selected-id export still takes priority over text/filters, but it must not bypass visibility rules: for `selected_ids`, fetch rows through the same query service used for normal search by calling `_fetch_all_search(entity_type, config, {id_col: selected_id}, sort, direction, current_user, None, text=None)` for each selected ID, then keep the original `selected_ids` order.
+
+In `_fetch_all_search`, pass `text=text` into the query service call:
 
 ```python
 kwargs = {
@@ -605,9 +740,7 @@ kwargs = {
 }
 ```
 
-Keep selected-id behavior taking priority over filters/text.
-
-- [ ] **Step 4: Make statistics use matching root rows**
+- [ ] **Step 4: Make statistics use exported row IDs**
 
 Modify `compute_statistics` signature:
 
@@ -618,6 +751,7 @@ def compute_statistics(
     filters: dict,
     selected_ids: list[str] | None = None,
     *,
+    export_rows: list[dict] | None = None,
     text: str | None = None,
     sort: str = "created_at",
     direction: str = "desc",
@@ -625,21 +759,27 @@ def compute_statistics(
 ) -> dict:
 ```
 
-Inside it, derive root selected IDs when `text` is provided or when filters include fields not supported by `_build_where`:
+Inside it, prefer `export_rows` when provided and derive IDs per entity type from the actual rows that will be written to the workbook:
 
 ```python
-root_type = "sc" if "SC" in entity_types else ("po" if "PO" in entity_types else "gr")
-root_id_col = {"sc": "sc_id", "po": "po_id", "gr": "gr_id"}[root_type]
-if selected_ids:
-    effective_ids = selected_ids
-elif text:
-    root_rows = _fetch_all_search(root_type, config, filters, sort, direction, current_user, None, text=text)
-    effective_ids = [row[root_id_col] for row in root_rows]
-else:
-    effective_ids = None
+def _ids_by_entity_from_export_rows(rows):
+    ids = {"SC": [], "PO": [], "GR": []}
+    for row in rows or []:
+        row_type = row.get("_type")
+        if row_type == "SC" and row.get("sc_id"):
+            ids["SC"].append(row["sc_id"])
+        elif row_type == "PO" and row.get("po_id"):
+            ids["PO"].append(row["po_id"])
+        elif row_type == "GR" and row.get("gr_id"):
+            ids["GR"].append(row["gr_id"])
+    return ids
+
+ids_by_entity = _ids_by_entity_from_export_rows(export_rows) if export_rows is not None else None
 ```
 
-Pass `effective_ids` to `_sc_overview`, `_po_overview`, `_gr_overview`, `_financial_summary`, `_processing_time`, `_by_requester`, and `_budget_health`. Preserve existing behavior when no text is provided.
+Pass entity-specific IDs to each statistics helper: SC helpers receive `ids_by_entity["SC"]`, PO helpers receive `ids_by_entity["PO"]`, and GR helpers receive `ids_by_entity["GR"]`. Do not reuse SC IDs for PO or GR statistics.
+
+When `export_rows` is not supplied, preserve existing behavior for legacy callers. When `text` is supplied without `export_rows`, compute root rows using `_fetch_all_search(...)`, derive `ids_by_entity` from those root rows, and use those IDs only for the matching root entity.
 
 - [ ] **Step 5: Thread text through bridge export methods**
 
@@ -649,14 +789,14 @@ In `sc_gr_app/api/bridge.py`, update `export_scs_cascade`, `export_pos_cascade`,
 text = payload.get("text")
 ```
 
-Pass `text=text` to `export_service.build_cascade_rows(...)` and `export_service.compute_statistics(...)`.
+Pass `text=text` to `export_service.build_cascade_rows(...)`. Store the returned rows in a local variable and pass the same rows to `export_service.compute_statistics(..., export_rows=rows, text=text, ...)` so statistics are computed from the workbook row set.
 
 - [ ] **Step 6: Run export tests**
 
 Run:
 
 ```powershell
-uv run pytest tests\test_export_service.py -q
+uv run pytest tests\test_export_service.py tests\test_api_bridge.py -q
 ```
 
 Expected: PASS.
@@ -666,7 +806,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-uv run pytest tests\test_query_service.py tests\test_query_filters.py tests\test_export_service.py -q
+uv run pytest tests\test_query_service.py tests\test_query_filters.py tests\test_export_service.py tests\test_api_bridge.py -q
 ```
 
 Expected: PASS.
@@ -676,7 +816,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-git add sc_gr_app/services/export_service.py sc_gr_app/api/bridge.py tests/test_export_service.py
+git add sc_gr_app/services/export_service.py sc_gr_app/api/bridge.py tests/test_export_service.py tests/test_api_bridge.py
 git commit -m "fix(export): honor list text criteria"
 ```
 
@@ -685,27 +825,155 @@ git commit -m "fix(export): honor list text criteria"
 ### Task 4: Shared Frontend List Search Composable
 
 **Files:**
+- Create: `frontend/src/utils/listSearchCore.js`
 - Create: `frontend/src/composables/useListSearch.js`
+- Create: `tests/web_use_list_search.test.mjs`
 - Modify: `frontend/src/composables/usePo.js`
 - Modify: `frontend/src/composables/useSc.js`
 - Modify: `frontend/src/composables/useGr.js`
 - Modify: `frontend/src/composables/useVendor.js`
 
-- [ ] **Step 1: Create `useListSearch.js` with the shared API**
+- [ ] **Step 1: Write failing list-search core tests**
 
-Create `frontend/src/composables/useListSearch.js`:
+Create `tests/web_use_list_search.test.mjs`:
 
 ```js
-import { reactive, readonly } from 'vue'
-import { callApi } from '@/api/bridge.js'
-import { buildQueryFromListState, criteriaFromState, parseListQuery } from '@/utils/listQuery.js'
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-function cloneFilters(filters) {
-  return { ...(filters || {}) }
+import { createListSearchCore } from "../frontend/src/utils/listSearchCore.js";
+
+function config(overrides = {}) {
+  return {
+    apiMethod: "search_things",
+    defaultSort: "created_at",
+    defaultDirection: "desc",
+    defaultPageSize: 10,
+    allowedFilterKeys: new Set(["status", "vendor_name"]),
+    allowedSortKeys: new Set(["created_at", "vendor_name"]),
+    ...overrides,
+  };
 }
 
-export function useListSearch(config) {
-  const state = reactive({
+function fakeRouter() {
+  const calls = [];
+  return {
+    calls,
+    async replace(location) { calls.push(location); },
+  };
+}
+
+test("initializeFromRoute parses query syncs normalized query and reloads", async () => {
+  const calls = [];
+  const router = fakeRouter();
+  const core = createListSearchCore(config(), async (_method, payload) => {
+    calls.push(payload);
+    return { rows: [{ id: 1 }], total: 1 };
+  });
+
+  await core.initializeFromRoute({ query: { q: "alpha", status: "approved", page: "2", pageSize: "25", sort: "vendor_name", direction: "asc" } }, router);
+
+  assert.equal(core.state.text, "alpha");
+  assert.deepEqual(core.state.filters, { status: "approved" });
+  assert.equal(calls[0].limit, 25);
+  assert.equal(calls[0].offset, 25);
+  assert.deepEqual(router.calls.at(-1).query, { q: "alpha", status: "approved", page: "2", pageSize: "25", sort: "vendor_name", direction: "asc" });
+});
+
+test("applyFilter resets to first page and exports matching criteria", async () => {
+  const calls = [];
+  const router = fakeRouter();
+  const core = createListSearchCore(config(), async (_method, payload) => {
+    calls.push(payload);
+    return { rows: [], total: 0 };
+  });
+
+  core.state.currentPage = 4;
+  await core.applyFilter({ text: "beta", filters: { status: "pending" } }, router);
+
+  assert.equal(core.state.currentPage, 1);
+  assert.equal(calls.at(-1).offset, 0);
+  assert.deepEqual(core.exportCriteria(), { text: "beta", filters: { status: "pending" }, sort: "created_at", direction: "desc" });
+});
+
+test("changeSort normalizes element-plus order and ignores unsupported prop", async () => {
+  const calls = [];
+  const core = createListSearchCore(config(), async (_method, payload) => {
+    calls.push(payload);
+    return { rows: [], total: 0 };
+  });
+
+  await core.changeSort({ prop: "vendor_name", order: "ascending" });
+  assert.equal(core.state.sort, "vendor_name");
+  assert.equal(core.state.direction, "asc");
+  await core.changeSort({ prop: "bad", order: "descending" });
+  assert.equal(core.state.sort, "created_at");
+  assert.equal(core.state.direction, "desc");
+});
+
+test("restoreFromRoute handles browser back forward without writing router", async () => {
+  const calls = [];
+  const router = fakeRouter();
+  const core = createListSearchCore(config(), async (_method, payload) => {
+    calls.push(payload);
+    return { rows: [], total: 0 };
+  });
+
+  await core.restoreFromRoute({ query: { q: "back", page: "3", pageSize: "10" } });
+
+  assert.equal(core.state.text, "back");
+  assert.equal(core.state.currentPage, 3);
+  assert.equal(calls.at(-1).offset, 20);
+  assert.deepEqual(router.calls, []);
+});
+
+test("reload ignores stale slower responses", async () => {
+  let resolveFirst;
+  const first = new Promise(resolve => { resolveFirst = resolve; });
+  let callCount = 0;
+  const core = createListSearchCore(config(), async () => {
+    callCount += 1;
+    if (callCount === 1) return first;
+    return { rows: [{ id: "second" }], total: 1 };
+  });
+
+  const slow = core.reload();
+  await core.reload();
+  resolveFirst({ rows: [{ id: "first" }], total: 1 });
+  await slow;
+
+  assert.deepEqual(core.state.rows, [{ id: "second" }]);
+});
+```
+
+- [ ] **Step 2: Run list-search core tests and verify they fail**
+
+Run:
+
+```powershell
+node --test tests\web_use_list_search.test.mjs
+```
+
+Expected: FAIL because `frontend/src/utils/listSearchCore.js` does not exist.
+
+- [ ] **Step 3: Implement framework-free `listSearchCore.js`**
+
+Create `frontend/src/utils/listSearchCore.js`. It must import only relative pure helpers, not Vue and not `@/...` aliases:
+
+```js
+import { buildQueryFromListState, criteriaFromState, parseListQuery } from "./listQuery.js";
+
+function cloneFilters(filters) {
+  return { ...(filters || {}) };
+}
+
+function sameQuery(a, b) {
+  return JSON.stringify(a || {}) === JSON.stringify(b || {});
+}
+
+export function createListSearchCore(config, callApi) {
+  let requestSeq = 0;
+  const state = {
     rows: [],
     total: 0,
     loading: false,
@@ -716,20 +984,26 @@ export function useListSearch(config) {
     direction: config.defaultDirection,
     pageSize: config.defaultPageSize,
     currentPage: 1,
-  })
+  };
 
   function assignListState(next) {
-    state.text = next.text || null
-    state.filters = cloneFilters(next.filters)
-    state.sort = next.sort
-    state.direction = next.direction
-    state.pageSize = next.pageSize
-    state.currentPage = next.currentPage
+    state.text = next.text || null;
+    state.filters = cloneFilters(next.filters);
+    state.sort = next.sort;
+    state.direction = next.direction;
+    state.pageSize = next.pageSize;
+    state.currentPage = next.currentPage;
   }
 
-  function syncRoute(router) {
-    if (!router) return
-    router.replace({ query: buildQueryFromListState(state) })
+  function currentQuery() {
+    return buildQueryFromListState(state);
+  }
+
+  async function syncRoute(router) {
+    if (!router) return;
+    const query = currentQuery();
+    if (sameQuery(router.currentRoute?.value?.query, query)) return;
+    await router.replace({ query });
   }
 
   function payload(extra = {}) {
@@ -741,96 +1015,121 @@ export function useListSearch(config) {
       limit: state.pageSize,
       offset: (state.currentPage - 1) * state.pageSize,
       ...extra,
-    }
+    };
   }
 
   async function reload(extra = {}) {
-    state.loading = true
-    state.error = null
+    const seq = ++requestSeq;
+    state.loading = true;
+    state.error = null;
     try {
-      const result = await callApi(config.apiMethod, payload(extra))
-      state.rows = result.rows || result
-      state.total = result.total || state.rows.length
+      const result = await callApi(config.apiMethod, payload(extra));
+      if (seq !== requestSeq) return;
+      state.rows = result.rows || result.items || result || [];
+      state.total = result.total ?? state.rows.length;
     } catch (e) {
-      state.error = e.message
-      state.rows = []
-      state.total = 0
+      if (seq !== requestSeq) return;
+      state.error = e.message || String(e);
+      state.rows = [];
+      state.total = 0;
     } finally {
-      state.loading = false
+      if (seq === requestSeq) state.loading = false;
     }
   }
 
   async function initializeFromRoute(route, router) {
-    assignListState(parseListQuery(route?.query || {}, config))
-    syncRoute(router)
-    await reload()
+    assignListState(parseListQuery(route?.query || {}, config));
+    await syncRoute(router);
+    await reload();
+  }
+
+  async function restoreFromRoute(route) {
+    assignListState(parseListQuery(route?.query || {}, config));
+    await reload();
   }
 
   async function applyFilter({ text, filters }, router) {
-    state.text = text || null
-    state.filters = cloneFilters(config.transformFilters ? config.transformFilters(filters || {}) : filters)
-    state.currentPage = 1
-    syncRoute(router)
-    await reload()
+    state.text = text || null;
+    state.filters = cloneFilters(config.transformFilters ? config.transformFilters(filters || {}) : filters);
+    state.currentPage = 1;
+    await syncRoute(router);
+    await reload();
   }
 
   async function changePage(page, router) {
-    state.currentPage = page
-    syncRoute(router)
-    await reload()
+    state.currentPage = page;
+    await syncRoute(router);
+    await reload();
   }
 
   async function changePageSize(size, router) {
-    state.pageSize = size
-    state.currentPage = 1
-    syncRoute(router)
-    await reload()
+    state.pageSize = size;
+    state.currentPage = 1;
+    await syncRoute(router);
+    await reload();
   }
 
   async function changeSort({ prop, order }, router) {
-    state.sort = config.allowedSortKeys.has(prop) ? prop : config.defaultSort
-    state.direction = order === 'ascending' ? 'asc' : (order === 'descending' ? 'desc' : config.defaultDirection)
-    state.currentPage = 1
-    syncRoute(router)
-    await reload()
+    state.sort = config.allowedSortKeys.has(prop) ? prop : config.defaultSort;
+    state.direction = order === "ascending" ? "asc" : (order === "descending" ? "desc" : config.defaultDirection);
+    state.currentPage = 1;
+    await syncRoute(router);
+    await reload();
   }
 
   async function reset(router) {
-    state.text = null
-    state.filters = {}
-    state.sort = config.defaultSort
-    state.direction = config.defaultDirection
-    state.currentPage = 1
-    syncRoute(router)
-    await reload()
+    state.text = null;
+    state.filters = {};
+    state.sort = config.defaultSort;
+    state.direction = config.defaultDirection;
+    state.currentPage = 1;
+    await syncRoute(router);
+    await reload();
   }
 
   async function search(text = state.text, filters = state.filters) {
-    state.text = text || null
-    state.filters = cloneFilters(config.transformFilters ? config.transformFilters(filters || {}) : filters)
-    await reload()
+    state.text = text || null;
+    state.filters = cloneFilters(config.transformFilters ? config.transformFilters(filters || {}) : filters);
+    await reload();
   }
 
   function exportCriteria() {
-    return criteriaFromState(state)
+    return criteriaFromState(state);
   }
 
-  return {
-    state: readonly(state),
-    initializeFromRoute,
-    applyFilter,
-    changePage,
-    changePageSize,
-    changeSort,
-    reset,
-    reload,
-    search,
-    exportCriteria,
-  }
+  return { state, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, search, exportCriteria, currentQuery };
 }
 ```
 
-- [ ] **Step 2: Refactor `usePo.js`**
+- [ ] **Step 4: Implement Vue wrapper `useListSearch.js`**
+
+Create `frontend/src/composables/useListSearch.js`:
+
+```js
+import { reactive } from 'vue'
+import { callApi } from '@/api/bridge.js'
+import { createListSearchCore } from '@/utils/listSearchCore.js'
+
+export function useListSearch(config) {
+  const core = createListSearchCore(config, callApi)
+  core.state = reactive(core.state)
+  return core
+}
+```
+
+`state` is intentionally writable because list pages bind `v-model:text="state.text"` and `v-model:filters="state.filters"` directly. Do not wrap it in `readonly()`.
+
+- [ ] **Step 5: Run list-search core tests and verify they pass**
+
+Run:
+
+```powershell
+node --test tests\web_use_list_search.test.mjs
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Refactor `usePo.js`**
 
 Replace list-state implementation with `useListSearch`. Keep existing mutation methods. Configuration:
 
@@ -842,7 +1141,8 @@ const list = useListSearch({
   defaultPageSize: pageSize,
   allowedFilterKeys: new Set([
     'status', 'po_id', 'po_no', 'sc_id', 'vendor_id', 'vendor_name',
-    'is_fc_po', 'contract_type', 'cost_center', 'purchaser',
+    'requester_name', 'is_fc_po', 'contract_type', 'contract_no',
+    'payment_frequency', 'contract_pos', 'cost_center', 'purchaser',
     'po_amount_min', 'po_amount_max',
     'contract_from_from', 'contract_from_to',
     'contract_to_from', 'contract_to_to',
@@ -857,52 +1157,181 @@ const list = useListSearch({
 })
 ```
 
-Return `searchPos: list.search`, `setFilters` as stateful compatibility, `resetFilters: list.reset`, `onSortChange: list.changeSort`, `onPageChange: list.changePage`, `onPageSizeChange: list.changePageSize`, plus new `initializeFromRoute`, `applyFilter`, `changePage`, `changePageSize`, `changeSort`, `reset`, `reload`, and `exportCriteria`.
+Return `state: list.state`, `searchPos: list.search`, `setFilters: filters => { list.state.filters = { ...(filters || {}) } }`, `resetFilters: list.reset`, `onSortChange: list.changeSort`, `onPageChange: list.changePage`, `onPageSizeChange: list.changePageSize`, plus `initializeFromRoute`, `restoreFromRoute`, `applyFilter`, `changePage`, `changePageSize`, `changeSort`, `reset`, `reload`, and `exportCriteria`.
 
-- [ ] **Step 3: Refactor `useSc.js`**
+- [ ] **Step 7: Refactor `useSc.js`**
 
-Use `useListSearch` for list state while preserving `fetchDetail`, `createDraft`, `submitSc`, `updateSc`, `approveSc`, `denySc`, and `finishSc`.
+Use `useListSearch` for list state. Do not change the existing implementations of `fetchDetail`, `createDraft`, `submitSc`, `updateSc`, `approveSc`, `denySc`, or `finishSc`.
 
-Allowed filters include all SC filter config keys plus generated range keys: `status`, `request_type`, `service_scope`, `is_calloff`, `asset`, `cost_center`, `sc_id`, `sc_no`, `requester_id`, `requester_name`, `created_by`, `created_by_name`, `service_period_start_from`, `service_period_start_to`, `sc_amount_min`, `sc_amount_max`, `pending_date_from`, `pending_date_to`, `approved_date_from`, `approved_date_to`, `deadline_from`, `deadline_to`.
+Use this configuration:
 
-Allowed sorts mirror backend SC allowed sorts.
+```js
+const list = useListSearch({
+  apiMethod: 'search_scs',
+  defaultSort: 'created_at',
+  defaultDirection: 'desc',
+  defaultPageSize: pageSize,
+  allowedFilterKeys: new Set([
+    'status', 'request_type', 'service_scope', 'is_calloff', 'asset',
+    'cost_center', 'sc_id', 'sc_no', 'requester_id', 'requester_name',
+    'created_by', 'created_by_name', 'description', 'calloff_po_id',
+    'service_period_start_from', 'service_period_start_to',
+    'sc_amount_min', 'sc_amount_max',
+    'pending_date_from', 'pending_date_to',
+    'approved_date_from', 'approved_date_to',
+    'confirmed_at_from', 'confirmed_at_to',
+    'deadline_from', 'deadline_to',
+  ]),
+  allowedSortKeys: new Set([
+    'sc_id', 'sc_no', 'requester_id', 'requester_name', 'request_type',
+    'service_scope', 'cost_center', 'sc_amount', 'status', 'created_at',
+    'updated_at', 'asset', 'pending_date', 'approved_date', 'confirmed_at',
+    'calloff_po_id',
+  ]),
+})
+```
 
-- [ ] **Step 4: Refactor `useGr.js`**
+Return this list API mapping from `useSc.js`:
 
-Use `useListSearch` for list state while preserving GR mutation methods.
+```js
+return {
+  state: list.state,
+  searchScs: list.search,
+  setFilters: filters => { list.state.filters = { ...(filters || {}) } },
+  resetFilters: list.reset,
+  onSortChange: list.changeSort,
+  onPageChange: list.changePage,
+  onPageSizeChange: list.changePageSize,
+  initializeFromRoute: list.initializeFromRoute,
+  restoreFromRoute: list.restoreFromRoute,
+  applyFilter: list.applyFilter,
+  changePage: list.changePage,
+  changePageSize: list.changePageSize,
+  changeSort: list.changeSort,
+  reset: list.reset,
+  reload: list.reload,
+  exportCriteria: list.exportCriteria,
+  fetchDetail,
+  createDraft,
+  submitSc,
+  updateSc,
+  approveSc,
+  denySc,
+  finishSc,
+}
+```
 
-Allowed filters include `status`, `gr_id`, `gr_no`, `po_id`, `sc_id`, `requester_id`, `vendor_id`, `estimated_amount_min`, `estimated_amount_max`, `tax_rate`, `con_value_min`, `con_value_max`, `pending_date_from`, `pending_date_to`, `approved_date_from`, `approved_date_to`, `goods_service_description`, `confirmation_name`, `last_delivery`, `is_cancellation`, `deadline_from`, `deadline_to`.
+- [ ] **Step 8: Refactor `useGr.js`**
 
-Allowed sorts mirror backend GR allowed sorts.
+Use `useListSearch` for list state. Do not change the existing GR mutation implementations.
 
-- [ ] **Step 5: Refactor `useVendor.js`**
+Use this configuration:
+
+```js
+const list = useListSearch({
+  apiMethod: 'search_grs',
+  defaultSort: 'created_at',
+  defaultDirection: 'desc',
+  defaultPageSize: pageSize,
+  allowedFilterKeys: new Set([
+    'status', 'gr_id', 'gr_no', 'po_id', 'sc_id', 'requester_id',
+    'vendor_id', 'estimated_amount_min', 'estimated_amount_max',
+    'tax_rate', 'con_value_min', 'con_value_max', 'gross_cost_min',
+    'gross_cost_max', 'pending_date_from', 'pending_date_to',
+    'approved_date_from', 'approved_date_to', 'confirmed_at_from',
+    'confirmed_at_to', 'goods_service_description', 'confirmation_name',
+    'last_delivery', 'is_cancellation', 'remark', 'created_by',
+    'deadline_from', 'deadline_to',
+  ]),
+  allowedSortKeys: new Set([
+    'gr_id', 'gr_no', 'po_no', 'sc_no', 'vendor_name', 'estimated_amount',
+    'con_value', 'gross_cost', 'tax_rate', 'goods_service_description',
+    'confirmation_name', 'last_delivery', 'status', 'created_at',
+    'approved_at', 'cancelled_at', 'pending_date', 'approved_date',
+    'confirmed_at',
+  ]),
+})
+```
+
+Return this list API mapping from `useGr.js`:
+
+```js
+return {
+  state: list.state,
+  searchGrs: list.search,
+  setFilters: filters => { list.state.filters = { ...(filters || {}) } },
+  resetFilters: list.reset,
+  onSortChange: list.changeSort,
+  onPageChange: list.changePage,
+  onPageSizeChange: list.changePageSize,
+  initializeFromRoute: list.initializeFromRoute,
+  restoreFromRoute: list.restoreFromRoute,
+  applyFilter: list.applyFilter,
+  changePage: list.changePage,
+  changePageSize: list.changePageSize,
+  changeSort: list.changeSort,
+  reset: list.reset,
+  reload: list.reload,
+  exportCriteria: list.exportCriteria,
+  createGr,
+  updateGr,
+  approveGr,
+  denyGr,
+  submitGr,
+  finishGr,
+}
+```
+
+- [ ] **Step 9: Refactor `useVendor.js`**
 
 Use `useListSearch` with default sort `vendor_name`, direction `asc`, page size `10`, and API `search_vendors`.
 
-Allowed filters: `vendor_name`, `company_name_cn`, `vendor_id`, `ksrm_vendor_code`, `service_scope`, `created_by`, `contact_person`, `email`.
+Use this configuration:
 
-Allowed sorts: `vendor_id`, `vendor_name`, `ksrm_vendor_code`, `company_name_cn`, `service_scope`, `created_at`, `updated_at`.
+```js
+const list = useListSearch({
+  apiMethod: 'search_vendors',
+  defaultSort: 'vendor_name',
+  defaultDirection: 'asc',
+  defaultPageSize: 10,
+  allowedFilterKeys: new Set([
+    'vendor_name', 'company_name_cn', 'vendor_id', 'ksrm_vendor_code',
+    'service_scope', 'created_by', 'contact_person', 'email', 'phone',
+    'description',
+  ]),
+  allowedSortKeys: new Set([
+    'vendor_id', 'vendor_name', 'ksrm_vendor_code', 'company_name_cn',
+    'service_scope', 'created_at', 'updated_at',
+  ]),
+})
+```
 
-Keep `createVendor`, `updateVendor`, `disableVendor`, `deleteVendor`, and `checkKsrmDuplicate`. Mutations should call `list.reload()` instead of stateless `searchVendors()`.
+Return `state: list.state`, `searchVendors: list.search`, `initializeFromRoute`, `restoreFromRoute`, `applyFilter`, `changePage`, `changePageSize`, `changeSort`, `reset`, `reload`, and `exportCriteria`, plus `createVendor`, `updateVendor`, `disableVendor`, `deleteVendor`, and `checkKsrmDuplicate`. Mutations should call `list.reload()` instead of stateless `searchVendors()`.
 
-- [ ] **Step 6: Run frontend build**
+- [ ] **Step 10: Run frontend behavior tests and build**
 
 Run:
+
+```powershell
+node --test tests\web_use_list_search.test.mjs
+```
+
+Expected: PASS.
+
+Run from `frontend`:
 
 ```powershell
 npm.cmd run build
 ```
 
-from `frontend`.
-
 Expected: PASS. Existing chunk-size warnings are acceptable.
 
-- [ ] **Step 7: Commit shared composable**
+- [ ] **Step 11: Commit shared composable**
 
 Run:
 
 ```powershell
-git add frontend/src/composables/useListSearch.js frontend/src/composables/usePo.js frontend/src/composables/useSc.js frontend/src/composables/useGr.js frontend/src/composables/useVendor.js
+git add frontend/src/utils/listSearchCore.js frontend/src/composables/useListSearch.js frontend/src/composables/usePo.js frontend/src/composables/useSc.js frontend/src/composables/useGr.js frontend/src/composables/useVendor.js tests/web_use_list_search.test.mjs
 git commit -m "feat(search): share list search state"
 ```
 
@@ -919,10 +1348,10 @@ git commit -m "feat(search): share list search state"
 
 - [ ] **Step 1: Convert `AdvancedFilterBar.vue` to controlled props**
 
-Modify script setup:
+Replace the `<script setup>` block in `frontend/src/components/common/AdvancedFilterBar.vue` with:
 
 ```js
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -940,6 +1369,7 @@ const searchText = computed({
 
 const showAdvanced = ref(false)
 let debounceTimer = null
+let pendingText = props.text || ''
 
 watch(
   () => props.filters,
@@ -949,47 +1379,151 @@ watch(
   { immediate: true, deep: true },
 )
 
+watch(
+  () => props.text,
+  value => { pendingText = value || '' },
+)
+
+onUnmounted(() => clearTimeout(debounceTimer))
+
+function emitFilterPayload(text = props.text || '') {
+  emit('filter', { text: text || null, filters: props.filters || {} })
+}
+
 function updateFilter(key, value) {
   const next = { ...(props.filters || {}) }
   if (value === null || value === '' || value === undefined) delete next[key]
   else next[key] = value
   emit('update:filters', next)
-  emit('filter', { text: props.text || null, filters: next })
+  emit('filter', { text: pendingText || props.text || null, filters: next })
 }
 
-function onSearchDebounced() {
+function onSearchDebounced(value) {
+  pendingText = value || ''
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => {
-    emit('filter', { text: props.text || null, filters: props.filters || {} })
-  }, 500)
+  debounceTimer = setTimeout(() => emitFilterPayload(pendingText), 500)
 }
 
 function handleReset() {
   clearTimeout(debounceTimer)
+  pendingText = ''
   emit('update:text', '')
   emit('update:filters', {})
   emit('reset')
 }
 ```
 
-Update template v-models:
+Update the top search input to keep the existing visual attributes and pass the current input value into the debounce handler:
 
 ```vue
 <el-input
   v-model="searchText"
-  ...
+  :placeholder="$t('common.search')"
+  :prefix-icon="Search"
+  clearable
+  style="width: 260px"
+  @input="onSearchDebounced"
 />
 ```
 
-For advanced controls, replace `v-model="filterValues[...]` with `:model-value="props.filters[...]` and `@update:model-value="value => updateFilter(key, value)"`.
+Replace advanced filter controls with controlled `:model-value` / `@update:model-value` bindings:
 
-- [ ] **Step 2: Wire PO list to controlled filter and route state**
+```vue
+<el-select
+  v-if="f.type === 'select'"
+  :model-value="filters[f.name]"
+  :placeholder="f.label"
+  clearable
+  style="width: 160px"
+  @update:model-value="value => updateFilter(f.name, value)"
+>
+```
 
-In `PoListView.vue`:
+```vue
+<el-input
+  v-else-if="f.type === 'input'"
+  :model-value="filters[f.name]"
+  :placeholder="f.label"
+  clearable
+  style="width: 160px"
+  @update:model-value="value => updateFilter(f.name, value)"
+/>
+```
 
-- Import `useRouter` and use both route/router.
-- Destructure new list actions from `usePo`.
-- Bind:
+For date ranges, use `f.name + '_from'` and `f.name + '_to'`:
+
+```vue
+<el-date-picker
+  :model-value="filters[f.name + '_from']"
+  :placeholder="f.label + ' ' + $t('common.from')"
+  type="date"
+  format="YYYY-MM-DD"
+  value-format="YYYY-MM-DD"
+  style="width: 160px"
+  @update:model-value="value => updateFilter(f.name + '_from', value)"
+/>
+<el-date-picker
+  :model-value="filters[f.name + '_to']"
+  :placeholder="f.label + ' ' + $t('common.to')"
+  type="date"
+  format="YYYY-MM-DD"
+  value-format="YYYY-MM-DD"
+  style="width: 160px"
+  @update:model-value="value => updateFilter(f.name + '_to', value)"
+/>
+```
+
+For amount ranges, use `f.name + '_min'` and `f.name + '_max'` with the same `updateFilter` pattern.
+
+- [ ] **Step 2: Add shared route-watch handlers to each list page**
+
+In each of `PoListView.vue`, `ScListView.vue`, `GrListView.vue`, and `VendorListView.vue`, import `watch` from Vue and import both router hooks:
+
+```js
+import { useRoute, useRouter } from 'vue-router'
+```
+
+Create route/router and a route-sync guard:
+
+```js
+const route = useRoute()
+const router = useRouter()
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
+  }
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+```
+
+Use `onMounted(() => initializeFromRoute(route, router))` for the initial load. The watcher covers browser Back/Forward query changes while staying on the same list route.
+
+- [ ] **Step 3: Wire PO list to controlled filter and route state**
+
+In `PoListView.vue`, destructure the list API from `usePo()`:
+
+```js
+const {
+  state, initializeFromRoute, restoreFromRoute, applyFilter, changePage,
+  changePageSize, changeSort, reset, reload, exportCriteria,
+  createPo, updatePo, submitPo, finishPo,
+} = usePo()
+```
+
+Bind the filter bar:
 
 ```vue
 <AdvancedFilterBar
@@ -1001,48 +1535,268 @@ In `PoListView.vue`:
 />
 ```
 
-- Use `applyFilter(payload, router)` in `handleFilter`.
-- Use `reset(router)` in `handleReset`.
-- Use `changePage(page, router)` and `changePageSize(size, router)`.
-- Use `reload()` after save/import/submit/finish.
-- Clear `selectedRows.value = []` after filter, reset, page, page-size, sort, and reload-triggering mutations.
-- Pass `returnTo: route.fullPath` when navigating to detail.
-- Pass `:text="state.text"` to `ExportDialog`.
+Use these handlers:
 
-- [ ] **Step 3: Wire SC list**
+```js
+async function handleFilter(payload) {
+  selectedRows.value = []
+  await applyFilter(payload, router)
+}
 
-In `ScListView.vue`, apply the same patterns:
+async function handleReset() {
+  selectedRows.value = []
+  await reset(router)
+}
 
-- Controlled `AdvancedFilterBar`.
-- `initializeFromRoute(route, router)` on mount.
-- `applyFilter`, `reset`, `changeSort`, `changePage`, `changePageSize`, `reload`.
-- Clear selection on list-state transitions.
-- Replace import `@imported="searchScs"` with a handler that clears selection and calls `reload()`.
-- Detail navigation includes `returnTo`.
-- `ExportDialog` gets `text`.
+async function handlePageChange(page) {
+  selectedRows.value = []
+  await changePage(page, router)
+}
 
-- [ ] **Step 4: Wire GR list**
+async function handlePageSizeChange(size) {
+  selectedRows.value = []
+  await changePageSize(size, router)
+}
 
-In `GrListView.vue`:
+async function handleSortChange(sortEvent) {
+  selectedRows.value = []
+  await changeSort(sortEvent, router)
+}
 
-- Controlled `AdvancedFilterBar`.
-- Fix table sorting by changing `@sort-change="onSortChange"` to a local handler that calls `changeSort(..., router)` and clears selection.
-- Remove sortable UI from columns not in backend allowed sorts, including `requester_name`, `is_cancellation`, `remark`, and `submitted_date` unless backend sort support is added.
-- Keep GR annual report export untouched.
-- `ExportDialog` gets `text`.
+async function refreshListAfterMutation() {
+  selectedRows.value = []
+  await reload()
+}
+```
 
-- [ ] **Step 5: Wire Vendor list with pagination**
+Detail navigation must use named routes and preserve the current list URL:
 
-In `VendorListView.vue`:
+```js
+function openPoDetail(row) {
+  const query = { returnTo: route.fullPath }
+  if (row.sc_id) router.push({ name: 'po-detail', params: { scId: row.sc_id, poId: row.po_id }, query })
+  else router.push({ name: 'po-detail-independent', params: { poId: row.po_id }, query })
+}
+```
 
-- Controlled `AdvancedFilterBar`.
-- Add `@sort-change="handleSortChange"` to table.
-- Add pagination below the table, matching PO/SC/GR layout.
-- Use `changePage`, `changePageSize`, `changeSort`, `applyFilter`, `reset`, and `initializeFromRoute`.
-- Replace export implementation with `exportAll('search_vendors', exportCriteria(), columns, filename)`.
-- After create/update/disable/delete/import, call `reload()`.
+Pass `:text="state.text"` and `v-bind="exportCriteria()"`-equivalent props to `ExportDialog`: `:filters="state.filters"`, `:sort="state.sort"`, and `:direction="state.direction"`.
 
-- [ ] **Step 6: Run frontend build**
+- [ ] **Step 4: Wire SC list explicitly**
+
+In `ScListView.vue`, destructure:
+
+```js
+const {
+  state, initializeFromRoute, restoreFromRoute, applyFilter, changePage,
+  changePageSize, changeSort, reset, reload, exportCriteria,
+  createDraft, submitSc, updateSc, approveSc, denySc, finishSc,
+} = useSc()
+```
+
+Bind the SC filter bar:
+
+```vue
+<AdvancedFilterBar
+  v-model:text="state.text"
+  v-model:filters="state.filters"
+  :filter-config="scFilterConfig"
+  @filter="handleFilter"
+  @reset="handleReset"
+/>
+```
+
+Use these SC handlers:
+
+```js
+async function handleFilter(payload) {
+  selectedRows.value = []
+  await applyFilter(payload, router)
+}
+
+async function handleReset() {
+  selectedRows.value = []
+  await reset(router)
+}
+
+async function handlePageChange(page) {
+  selectedRows.value = []
+  await changePage(page, router)
+}
+
+async function handlePageSizeChange(size) {
+  selectedRows.value = []
+  await changePageSize(size, router)
+}
+
+async function handleSortChange(sortEvent) {
+  selectedRows.value = []
+  await changeSort(sortEvent, router)
+}
+```
+
+Replace existing detail navigation with:
+
+```js
+function openScDetail(row) {
+  router.push({ name: 'sc-detail', params: { id: row.sc_id }, query: { returnTo: route.fullPath } })
+}
+```
+
+Replace import completion handlers that call `searchScs` with:
+
+```js
+async function handleImported() {
+  selectedRows.value = []
+  await reload()
+}
+```
+
+Pass `:text="state.text"`, `:filters="state.filters"`, `:sort="state.sort"`, and `:direction="state.direction"` to `ExportDialog`.
+
+- [ ] **Step 5: Wire GR list explicitly**
+
+In `GrListView.vue`, destructure:
+
+```js
+const {
+  state, initializeFromRoute, restoreFromRoute, applyFilter, changePage,
+  changePageSize, changeSort, reset, reload, exportCriteria,
+  createGr, updateGr, submitGr, approveGr, denyGr, finishGr,
+} = useGr()
+```
+
+Bind the GR filter bar:
+
+```vue
+<AdvancedFilterBar
+  v-model:text="state.text"
+  v-model:filters="state.filters"
+  :filter-config="grFilterConfig"
+  @filter="handleFilter"
+  @reset="handleReset"
+/>
+```
+
+Use these GR handlers:
+
+```js
+async function handleFilter(payload) {
+  selectedRows.value = []
+  await applyFilter(payload, router)
+}
+
+async function handleReset() {
+  selectedRows.value = []
+  await reset(router)
+}
+
+async function handlePageChange(page) {
+  selectedRows.value = []
+  await changePage(page, router)
+}
+
+async function handlePageSizeChange(size) {
+  selectedRows.value = []
+  await changePageSize(size, router)
+}
+
+async function handleSortChange(sortEvent) {
+  selectedRows.value = []
+  await changeSort(sortEvent, router)
+}
+```
+
+Replace detail navigation with:
+
+```js
+function openGrDetail(row) {
+  router.push({ name: 'gr-detail', params: { scId: row.sc_id, poId: row.po_id, grId: row.gr_id }, query: { returnTo: route.fullPath } })
+}
+```
+
+Set all backend-supported sortable GR columns to `sortable="custom"`: `gr_no`, `po_no`, `sc_no`, `vendor_name`, `estimated_amount`, `con_value`, `gross_cost`, `tax_rate`, `goods_service_description`, `confirmation_name`, `last_delivery`, `status`, `created_at`, `approved_at`, `cancelled_at`, `pending_date`, `approved_date`, and `confirmed_at`.
+
+Remove `sortable` from unsupported GR list columns currently visible in `GrListView.vue`: `requester_name`, `is_cancellation`, `remark`, and `submitted_date`. This plan does not add backend sort support for those columns.
+
+Keep GR annual report export untouched; do not pass list criteria into annual report export.
+
+- [ ] **Step 6: Wire Vendor list with pagination and export-all criteria**
+
+In `VendorListView.vue`, import router hooks and destructure:
+
+```js
+const {
+  state, initializeFromRoute, restoreFromRoute, applyFilter, changePage,
+  changePageSize, changeSort, reset, reload, exportCriteria,
+  createVendor, updateVendor, disableVendor, deleteVendor,
+} = useVendor()
+const { exportAll } = useExport()
+```
+
+Bind `AdvancedFilterBar`:
+
+```vue
+<AdvancedFilterBar
+  v-model:text="state.text"
+  v-model:filters="state.filters"
+  :filter-config="vendorFilterConfig"
+  @filter="handleFilter"
+  @reset="handleReset"
+>
+```
+
+Add sorting to the table:
+
+```vue
+<el-table :data="state.rows" v-loading="state.loading" stripe border @sort-change="handleSortChange">
+```
+
+Set Vendor sortable columns to `sortable="custom"` only for backend-supported sort keys visible in the table: `vendor_id`, `vendor_name`, `company_name_cn`, `ksrm_vendor_code`, and `service_scope`.
+
+Add pagination below the table:
+
+```vue
+<el-pagination
+  v-model:current-page="state.currentPage"
+  v-model:page-size="state.pageSize"
+  :page-sizes="[10, 25, 50, 100]"
+  :total="state.total"
+  layout="total, sizes, prev, pager, next, jumper"
+  style="margin-top: 12px; justify-content: flex-end"
+  @current-change="handlePageChange"
+  @size-change="handlePageSizeChange"
+/>
+```
+
+Replace Vendor export with paginated all-matching export. It must pass `text`, `filters`, `sort`, and `direction`, and must not pass `currentPage`, `pageSize`, or the current page rows:
+
+```js
+async function handleExport() {
+  exporting.value = true
+  try {
+    const columns = [
+      { key: 'vendor_id', label: t('vendor.vendorId') },
+      { key: 'vendor_name', label: t('vendor.vendorName') },
+      { key: 'company_name_cn', label: t('vendor.companyNameCn') },
+      { key: 'ksrm_vendor_code', label: t('vendor.ksrmCode') },
+      { key: 'service_scope', label: t('vendor.serviceScope') },
+      { key: 'contact_person', label: t('vendor.contact') },
+      { key: 'phone', label: t('vendor.phone') },
+      { key: 'email', label: t('vendor.email') },
+    ]
+    await exportAll('search_vendors', exportCriteria(), columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
+    ElMessage.success(t('export.exported'))
+  } catch (e) {
+    ElMessage.error(e.message || t('export.failed'))
+  } finally {
+    exporting.value = false
+  }
+}
+```
+
+After create/update/disable/delete/import, call `reload()` and clear selection if the page has selection state.
+
+- [ ] **Step 7: Run frontend build**
 
 Run from `frontend`:
 
@@ -1052,7 +1806,7 @@ npm.cmd run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit page wiring**
+- [ ] **Step 8: Commit page wiring**
 
 Run:
 
@@ -1069,6 +1823,9 @@ git commit -m "feat(search): wire list pages to shared state"
 - Modify: `frontend/src/components/po/PoTable.vue`
 - Modify: `frontend/src/components/sc/ScTable.vue`
 - Modify: `frontend/src/components/export/ExportDialog.vue`
+- Create: `frontend/src/utils/exportPaging.js`
+- Create: `tests/web_export_all.test.mjs`
+- Modify: `frontend/src/composables/useExport.js`
 
 - [ ] **Step 1: Update `PoTable.vue` sorting contract**
 
@@ -1077,7 +1834,7 @@ In `PoTable.vue`:
 - Add `@sort-change="$emit('sort-change', $event)"` to `<el-table>`.
 - Add `'sort-change'` to `defineEmits`.
 - Use `sortable="custom"` only for backend-supported columns.
-- Remove `sortable` from derived unsupported columns such as `open_po_amount`, `po_pending_total_incl_tax`, `consumed_amount`, and `finished_at` unless backend sort support has been added.
+- Remove `sortable` from derived unsupported columns `open_po_amount`, `po_pending_total_incl_tax`, `consumed_amount`, and `finished_at`. This plan does not add backend sort support for those columns.
 
 - [ ] **Step 2: Fix SC table sortable props**
 
@@ -1094,7 +1851,90 @@ Remove `sortable="custom"` from current unsupported date columns:
 
 Keep existing `@sort-change="$emit('sort-change', $event)"` and `defineEmits(['sort-change', 'detail', 'selection-change'])`.
 
-- [ ] **Step 3: Add text prop to `ExportDialog.vue`**
+- [ ] **Step 3: Add pure export-all paging test**
+
+Create `tests/web_export_all.test.mjs`:
+
+```js
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { fetchAllSearchRows } from "../frontend/src/utils/exportPaging.js";
+
+test("fetchAllSearchRows forwards criteria and paginates until short batch", async () => {
+  const calls = [];
+  const rows = await fetchAllSearchRows(
+    async (method, payload) => {
+      calls.push({ method, payload });
+      if (payload.offset === 0) return { rows: [{ id: 1 }, { id: 2 }] };
+      return { rows: [{ id: 3 }] };
+    },
+    "search_vendors",
+    { text: "alpha", filters: { service_scope: "IT" }, sort: "vendor_name", direction: "asc" },
+    2,
+  );
+
+  assert.deepEqual(rows, [{ id: 1 }, { id: 2 }, { id: 3 }]);
+  assert.deepEqual(calls.map(c => c.payload), [
+    { text: "alpha", filters: { service_scope: "IT" }, sort: "vendor_name", direction: "asc", limit: 2, offset: 0 },
+    { text: "alpha", filters: { service_scope: "IT" }, sort: "vendor_name", direction: "asc", limit: 2, offset: 2 },
+  ]);
+});
+```
+
+- [ ] **Step 4: Run export paging test and verify it fails**
+
+Run:
+
+```powershell
+node --test tests\web_export_all.test.mjs
+```
+
+Expected: FAIL because `frontend/src/utils/exportPaging.js` does not exist.
+
+- [ ] **Step 5: Implement `exportPaging.js` and use it in `useExport.js`**
+
+Create `frontend/src/utils/exportPaging.js`:
+
+```js
+export async function fetchAllSearchRows(callApi, apiMethod, params, limit = 500) {
+  const allRows = []
+  let offset = 0
+
+  while (true) {
+    const result = await callApi(apiMethod, { ...params, limit, offset })
+    const rows = Array.isArray(result) ? result : (result.items || result.rows || [])
+    if (!rows.length) break
+    allRows.push(...rows)
+    if (rows.length < limit) break
+    offset += limit
+  }
+
+  return allRows
+}
+```
+
+In `frontend/src/composables/useExport.js`, import it and replace the duplicated `exportAll` / `exportAllCSV` paging loops with:
+
+```js
+import { fetchAllSearchRows } from '@/utils/exportPaging.js'
+```
+
+```js
+async function exportAll(apiMethod, params, columns, filename) {
+  const allRows = await fetchAllSearchRows(callApi, apiMethod, params)
+  return await exportRows(allRows, columns, filename)
+}
+```
+
+```js
+async function exportAllCSV(apiMethod, params, columns, filename) {
+  const allRows = await fetchAllSearchRows(callApi, apiMethod, params)
+  return await exportCSV(allRows, columns, filename)
+}
+```
+
+- [ ] **Step 6: Add text prop to `ExportDialog.vue`**
 
 Modify props:
 
@@ -1112,15 +1952,16 @@ function hasActiveCriteria() {
 
 Use it in `initScope()` and `hasFilters`.
 
-- [ ] **Step 4: Pass text in export payload**
+- [ ] **Step 7: Pass text in export payload**
+
+In `ExportDialog.vue`, selected rows are the only mode that ignores current criteria. Every non-selected export sends current `text`, `filters`, `sort`, and `direction`, so â€œallâ€ means all rows matching the current search/filter state, not unfiltered database all rows.
 
 In `doExport()` payload:
 
 ```js
-const criteriaFilters = dataScope.value === 'all' ? props.filters : props.filters
 const payload = {
   text: dataScope.value === 'selected' ? null : (props.text || null),
-  filters: dataScope.value === 'selected' ? {} : criteriaFilters,
+  filters: dataScope.value === 'selected' ? {} : props.filters,
   sort: props.sort,
   direction: props.direction,
   cascade: { po: cascadePo.value, gr: cascadeGr.value },
@@ -1128,9 +1969,17 @@ const payload = {
 }
 ```
 
-For selected export, selected IDs take priority and text/filters are intentionally ignored.
+For selected export, selected IDs take priority and text/filters are intentionally ignored by criteria, but backend export must still enforce current-user visibility for those IDs.
 
-- [ ] **Step 5: Run frontend build**
+- [ ] **Step 8: Run export paging test and frontend build**
+
+Run:
+
+```powershell
+node --test tests\web_export_all.test.mjs
+```
+
+Expected: PASS.
 
 Run from `frontend`:
 
@@ -1140,12 +1989,12 @@ npm.cmd run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit table/export frontend updates**
+- [ ] **Step 9: Commit table/export frontend updates**
 
 Run:
 
 ```powershell
-git add frontend/src/components/po/PoTable.vue frontend/src/components/sc/ScTable.vue frontend/src/components/export/ExportDialog.vue
+git add frontend/src/components/po/PoTable.vue frontend/src/components/sc/ScTable.vue frontend/src/components/export/ExportDialog.vue frontend/src/composables/useExport.js frontend/src/utils/exportPaging.js tests/web_export_all.test.mjs
 git commit -m "fix(export): pass list text criteria"
 ```
 
@@ -1186,7 +2035,17 @@ test("sanitizeRedirectTarget rejects external URLs", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `sanitizeRedirectTarget`**
+- [ ] **Step 2: Run navigation helper test and verify it fails**
+
+Run:
+
+```powershell
+node --test tests\web_navigation_state.test.mjs
+```
+
+Expected: FAIL because `sanitizeRedirectTarget` is not exported from `frontend/src/utils/listQuery.js`.
+
+- [ ] **Step 3: Implement `sanitizeRedirectTarget`**
 
 Add to `frontend/src/utils/listQuery.js`:
 
@@ -1199,7 +2058,7 @@ export function sanitizeRedirectTarget(value, fallback = "/workbench") {
 }
 ```
 
-- [ ] **Step 3: Use redirect helper in `LoginView.vue`**
+- [ ] **Step 4: Use redirect helper in `LoginView.vue`**
 
 Import `sanitizeRedirectTarget` and update `enterApp()`:
 
@@ -1208,7 +2067,7 @@ const redirect = sanitizeRedirectTarget(router.currentRoute.value.query?.redirec
 router.push(redirect)
 ```
 
-- [ ] **Step 4: Add `returnTo` to list detail navigation**
+- [ ] **Step 5: Add `returnTo` to list detail navigation**
 
 In PO/SC/GR list views, update detail route pushes to include:
 
@@ -1216,7 +2075,7 @@ In PO/SC/GR list views, update detail route pushes to include:
 query: { returnTo: route.fullPath }
 ```
 
-Use named routes for all three detail pushes:
+Use named routes for all list-to-detail pushes:
 
 ```js
 router.push({ name: 'sc-detail', params: { id: row.sc_id }, query: { returnTo: route.fullPath } })
@@ -1227,9 +2086,39 @@ router.push({ name: 'gr-detail', params: { scId: row.sc_id, poId: row.po_id, grI
 
 Use `sc-detail` in `ScListView.vue`, use `po-detail` or `po-detail-independent` in `PoListView.vue` based on whether the row has `sc_id`, and use `gr-detail` in `GrListView.vue`.
 
-- [ ] **Step 5: Use `returnTo` in detail fallback navigation**
+- [ ] **Step 6: Propagate `returnTo` during detail-to-detail navigation**
 
-In SC/PO/GR detail views, add a helper:
+In `ScDetailView.vue`, `PoDetailView.vue`, and `GrDetailView.vue`, add:
+
+```js
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+```
+
+When navigating from SC detail to PO detail, pass `query: childReturnQuery()`:
+
+```js
+router.push({ name: 'po-detail', params: { scId, poId: row.po_id }, query: childReturnQuery() })
+```
+
+When navigating from PO detail to GR detail, pass `query: childReturnQuery()`:
+
+```js
+router.push({ name: 'gr-detail', params: { scId, poId, grId: row.gr_id }, query: childReturnQuery() })
+```
+
+When navigating from PO detail back to parent SC detail or from GR detail back to parent PO/SC detail, pass `query: childReturnQuery()` so a user who entered from a filtered list can delete from a deeper detail page and still return to the original list query.
+
+- [ ] **Step 7: Use `returnTo` in detail fallback navigation**
+
+In each of `ScDetailView.vue`, `PoDetailView.vue`, and `GrDetailView.vue`, import `sanitizeRedirectTarget`:
+
+```js
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
+```
+
+If the file does not already have `const route = useRoute()`, add it next to the existing router setup. Then add:
 
 ```js
 function listReturnPath(fallback) {
@@ -1245,7 +2134,7 @@ Use `listReturnPath` only in flows that currently replace the route after deleti
 
 Do not change finish/recall/approve/deny flows in this task because those flows refresh the current detail page and do not leave the detail route. Direct email/deep links remain supported because `listReturnPath` uses the existing fallback when `returnTo` is absent.
 
-- [ ] **Step 6: Run navigation helper tests**
+- [ ] **Step 8: Run navigation helper tests**
 
 Run:
 
@@ -1255,7 +2144,7 @@ node --test tests\web_navigation_state.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 7: Run frontend build**
+- [ ] **Step 9: Run frontend build**
 
 Run from `frontend`:
 
@@ -1265,7 +2154,7 @@ npm.cmd run build
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit navigation compatibility**
+- [ ] **Step 10: Commit navigation compatibility**
 
 Run:
 
@@ -1286,7 +2175,7 @@ git commit -m "feat(search): preserve list navigation state"
 Run:
 
 ```powershell
-uv run pytest tests\test_query_service.py tests\test_query_filters.py tests\test_export_service.py -q
+uv run pytest tests\test_query_service.py tests\test_query_filters.py tests\test_export_service.py tests\test_api_bridge.py -q
 ```
 
 Expected: PASS.
@@ -1296,7 +2185,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-node --test tests\web_list_query.test.mjs tests\web_date_helpers.test.mjs tests\web_navigation_state.test.mjs
+node --test tests\web_list_query.test.mjs tests\web_date_helpers.test.mjs tests\web_use_list_search.test.mjs tests\web_export_all.test.mjs tests\web_navigation_state.test.mjs
 ```
 
 Expected: PASS.
@@ -1327,6 +2216,7 @@ Run the app and verify:
 
 - PO list: search text, advanced filter, page change, page size, sort, reset, export.
 - SC list: `?status=pending` opens filter panel with status visible; search/filter survives paging and detail return.
+- Browser Back/Forward on PO/SC/GR/Vendor list restores `q`, advanced filters, page, pageSize, sort, and direction without a full page reload.
 - GR list: table sorting triggers backend reload; annual report export still ignores list filters.
 - Vendor list: pagination appears; export with a search term exports all matching rows, not only current page.
 - Login redirect: unauthenticated `/sc?status=pending&page=2&q=abc` returns to the same URL after login.
@@ -1336,7 +2226,7 @@ Run the app and verify:
 When Step 1-5 reveal defects, fix only files touched by this plan. Then run `git status --short`, stage the exact fixed paths shown by status, and commit them:
 
 ```powershell
-git add frontend/src/utils/listQuery.js frontend/src/utils/date.js frontend/src/composables/useListSearch.js frontend/src/composables/usePo.js frontend/src/composables/useSc.js frontend/src/composables/useGr.js frontend/src/composables/useVendor.js frontend/src/components/common/AdvancedFilterBar.vue frontend/src/components/po/PoTable.vue frontend/src/components/sc/ScTable.vue frontend/src/components/export/ExportDialog.vue frontend/src/views/PoListView.vue frontend/src/views/ScListView.vue frontend/src/views/GrListView.vue frontend/src/views/VendorListView.vue frontend/src/views/LoginView.vue frontend/src/views/ScDetailView.vue frontend/src/views/PoDetailView.vue frontend/src/views/GrDetailView.vue sc_gr_app/services/query_service.py sc_gr_app/services/export_service.py sc_gr_app/api/bridge.py tests/test_query_service.py tests/test_export_service.py tests/web_list_query.test.mjs tests/web_date_helpers.test.mjs tests/web_navigation_state.test.mjs tests/web_auth_state.test.mjs
+git add frontend/src/utils/listQuery.js frontend/src/utils/date.js frontend/src/utils/listSearchCore.js frontend/src/utils/exportPaging.js frontend/src/composables/useListSearch.js frontend/src/composables/usePo.js frontend/src/composables/useSc.js frontend/src/composables/useGr.js frontend/src/composables/useVendor.js frontend/src/composables/useExport.js frontend/src/components/common/AdvancedFilterBar.vue frontend/src/components/po/PoTable.vue frontend/src/components/sc/ScTable.vue frontend/src/components/export/ExportDialog.vue frontend/src/views/PoListView.vue frontend/src/views/ScListView.vue frontend/src/views/GrListView.vue frontend/src/views/VendorListView.vue frontend/src/views/LoginView.vue frontend/src/views/ScDetailView.vue frontend/src/views/PoDetailView.vue frontend/src/views/GrDetailView.vue sc_gr_app/services/query_service.py sc_gr_app/services/export_service.py sc_gr_app/api/bridge.py tests/test_query_service.py tests/test_export_service.py tests/test_api_bridge.py tests/web_list_query.test.mjs tests/web_date_helpers.test.mjs tests/web_use_list_search.test.mjs tests/web_export_all.test.mjs tests/web_navigation_state.test.mjs tests/web_auth_state.test.mjs
 git commit -m "fix(search): complete list state verification"
 ```
 
