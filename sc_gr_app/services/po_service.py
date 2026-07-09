@@ -1220,6 +1220,16 @@ def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> 
               )
               where report_year is not null
               group by po_id
+            ),
+            manual_amounts as (
+              select
+                po_id,
+                max(case when year = ? and type = 'provision' then amount end) as previous_year_provision,
+                max(case when year = ? and type = 'to_be_gr' then amount end) as selected_year_to_be_gr
+              from po_manual_amounts
+              where (year = ? and type = 'provision')
+                 or (year = ? and type = 'to_be_gr')
+              group by po_id
             )
             select
               'po' as row_type,
@@ -1231,15 +1241,16 @@ def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> 
               sc.sc_amount as sc_amount,
               po.po_amount as po_amount,
               coalesce(gr.previous_year_gr, 0) as previous_year_gr,
-              '' as previous_year_provision,
+              case when ma.previous_year_provision is null then '' else ma.previous_year_provision end as previous_year_provision,
               coalesce(gr.selected_year_gr, 0) as selected_year_gr,
-              '' as selected_year_to_be_gr,
+              case when ma.selected_year_to_be_gr is null then '' else ma.selected_year_to_be_gr end as selected_year_to_be_gr,
               '' as selected_year_fc_gr,
               '' as remark
             from pos po
             left join sc_records sc on sc.sc_id = po.sc_id
             left join users u on u.user_id = po.requester_id
             left join gr_totals gr on gr.po_id = po.po_id
+            left join manual_amounts ma on ma.po_id = po.po_id
             where
               (sc.status = 'approved' and po.status in ('active', 'finished'))
               or coalesce(gr.selected_year_count, 0) > 0
@@ -1247,7 +1258,16 @@ def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> 
               or (po.status = 'finished' and substr(po.finished_at, 1, 4) = ?)
             order by coalesce(sc.sc_no, ''), coalesce(po.po_no, ''), po.po_id
             """,
-            (previous_year, selected_year, selected_year, selected_year),
+            (
+                previous_year,
+                selected_year,
+                selected_year,
+                previous_year,
+                selected_year,
+                previous_year,
+                selected_year,
+                selected_year,
+            ),
         ).fetchall()
 
         qualifying_sc_ids = {

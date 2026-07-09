@@ -57,3 +57,28 @@ def test_get_annual_report_requires_admin(app_config, sample_data):
             "2026",
             {"role": "requester", "user_id": "u1", "machine_id": "M000001"},
         )
+
+
+def test_gr_annual_report_ignores_po_manual_amounts(app_config, sample_data):
+    import sqlite3
+
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute(
+        """
+        INSERT INTO po_manual_amounts (
+          manual_amount_id, po_id, year, type, amount, created_by, created_at
+        ) VALUES ('PMA-GR-GUARD', 'po-001', '2026', 'to_be_gr', 999999, 'u1', '2026-07-09')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    rows = get_annual_report_data(
+        app_config,
+        "2026",
+        {"role": "admin", "user_id": "u1", "machine_id": "M000001"},
+    )
+
+    assert {row["gr_no"] for row in rows} == {"GR-001", "GR-002"}
+    assert all("selected_year_to_be_gr" not in row for row in rows)
+    assert all("previous_year_provision" not in row for row in rows)

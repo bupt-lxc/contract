@@ -56,6 +56,16 @@ def _seed(config):
           ('GR_SELECTED', 'GR-SEL', 'PO_ACTIVE_APPROVED', 'U_REQ', 250, 250, 'finished', 'U_ADMIN', '2025-05-01', '2025-05-02', '2025-05-03'),
           ('GR_PENDING', 'GR-PENDING', 'PO_ACTIVE_APPROVED', 'U_REQ', 999, NULL, 'pending', 'U_ADMIN', '2025-05-01', NULL, NULL),
           ('GR_DRAFT_PARENT', 'GR-DRAFT-PARENT', 'PO_WITH_YEAR_GR', 'U_REQ', 300, 300, 'approved', 'U_ADMIN', '2025-02-01', '2025-02-02', NULL);
+
+        INSERT INTO po_manual_amounts (
+          manual_amount_id, po_id, year, type, amount, created_by, created_at
+        )
+        VALUES
+          ('PMA-PREV', 'PO_ACTIVE_APPROVED', '2024', 'provision', -10, 'U_REQ', '2025-01-01'),
+          ('PMA-TBG', 'PO_ACTIVE_APPROVED', '2025', 'to_be_gr', 222, 'U_REQ', '2025-01-01'),
+          ('PMA-OTHER-YEAR', 'PO_ACTIVE_APPROVED', '2026', 'to_be_gr', 999, 'U_REQ', '2025-01-01'),
+          ('PMA-OTHER-PO', 'PO_ACTIVE_INDEPENDENT', '2024', 'provision', 333, 'U_REQ', '2025-01-01'),
+          ('PMA-DRAFT-ONLY', 'PO_DRAFT_ONLY', '2024', 'provision', 444, 'U_REQ', '2025-01-01');
         """
     )
     conn.commit()
@@ -90,6 +100,9 @@ def test_po_annual_report_includes_qualifying_po_rows_and_sc_only_rows(app_confi
     assert sc_rows["SC-APP-002"]["po_amount"] == ""
     assert sc_rows["SC-APP-002"]["previous_year_gr"] == ""
     assert sc_rows["SC-APP-002"]["selected_year_gr"] == ""
+    assert sc_rows["SC-APP-002"]["previous_year_provision"] == ""
+    assert sc_rows["SC-APP-002"]["selected_year_to_be_gr"] == ""
+    assert "PO-DRAFT-ONLY" not in po_rows
 
 
 def test_po_annual_report_maps_amounts_and_blank_columns(app_config):
@@ -105,8 +118,8 @@ def test_po_annual_report_maps_amounts_and_blank_columns(app_config):
     assert row["po_amount"] == 6000
     assert row["previous_year_gr"] == 120
     assert row["selected_year_gr"] == 250
-    assert row["previous_year_provision"] == ""
-    assert row["selected_year_to_be_gr"] == ""
+    assert row["previous_year_provision"] == -10
+    assert row["selected_year_to_be_gr"] == 222
     assert row["selected_year_fc_gr"] == ""
     assert row["remark"] == ""
 
@@ -120,3 +133,18 @@ def test_po_annual_report_rejects_invalid_year_and_non_admin(app_config):
         po_service.get_annual_report_data(app_config, "202A", ADMIN)
     with pytest.raises(PermissionDenied):
         po_service.get_annual_report_data(app_config, "2025", REQUESTER)
+
+
+def test_po_annual_report_manual_records_do_not_expand_selection_scope(app_config):
+    _seed(app_config)
+
+    rows = po_service.get_annual_report_data(app_config, "2025", ADMIN)
+    independent = _by_po(rows)["PO-ACT-FC"]
+    po_rows = _by_po(rows)
+    sc_rows = _by_sc(rows)
+
+    assert independent["previous_year_provision"] == 333
+    assert independent["selected_year_to_be_gr"] == ""
+    assert "PO-DRAFT-ONLY" not in po_rows
+    assert sc_rows["SC-APP-002"]["previous_year_provision"] == ""
+    assert sc_rows["SC-APP-002"]["selected_year_to_be_gr"] == ""
