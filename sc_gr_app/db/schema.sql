@@ -93,6 +93,19 @@ CREATE TABLE IF NOT EXISTS pos (
   request_type TEXT CHECK (request_type IN ('FC'))
 );
 
+CREATE TABLE IF NOT EXISTS po_manual_amounts (
+  manual_amount_id TEXT PRIMARY KEY,
+  po_id TEXT NOT NULL REFERENCES pos(po_id),
+  year TEXT NOT NULL CHECK (year GLOB '[0-9][0-9][0-9][0-9]'),
+  type TEXT NOT NULL CHECK (type IN ('provision', 'to_be_gr')),
+  amount REAL NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(user_id),
+  created_at TEXT NOT NULL,
+  UNIQUE(po_id, year, type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id ON po_manual_amounts(po_id);
+
 CREATE TABLE IF NOT EXISTS gr_requests (
   gr_id TEXT PRIMARY KEY,
   gr_no TEXT,

@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import SCHEMA_VERSION, migrate
@@ -834,3 +835,85 @@ def test_migration_v38_preserves_existing_cancellation_values(fresh_db, app_conf
         ).fetchone()
 
     assert row[0] == "Y"
+
+
+def test_migration_creates_po_manual_amounts_table(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        columns = {
+            row[1]: row[2]
+            for row in conn.execute("PRAGMA table_info(po_manual_amounts)")
+        }
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(po_manual_amounts)")
+        }
+
+    assert columns.items() >= {
+        "manual_amount_id": "TEXT",
+        "po_id": "TEXT",
+        "year": "TEXT",
+        "type": "TEXT",
+        "amount": "REAL",
+        "created_by": "TEXT",
+        "created_at": "TEXT",
+    }.items()
+    assert "idx_po_manual_amounts_po_id" in indexes
+
+
+def test_schema_sql_includes_po_manual_amounts():
+    schema_sql = Path("sc_gr_app/db/schema.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS po_manual_amounts" in schema_sql
+    assert "UNIQUE(po_id, year, type)" in schema_sql
+    assert "idx_po_manual_amounts_po_id" in schema_sql
+
+
+def test_po_manual_amounts_constraints(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        conn.executescript(
+            """
+            INSERT INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at)
+            VALUES ('U1', 'M1', 'Requester', 'requester', 'u1@test.local', 'active', '2026-01-01', '2026-01-01');
+
+            INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at)
+            VALUES ('V1', 'Vendor', 'General', 'U1', '2026-01-01', '2026-01-01');
+
+            INSERT INTO pos (po_id, vendor_id, requester_id, po_amount, status, created_at, updated_at)
+            VALUES ('PO1', 'V1', 'U1', 100, 'active', '2026-01-01', '2026-01-01');
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO po_manual_amounts (
+              manual_amount_id, po_id, year, type, amount, created_by, created_at
+            ) VALUES ('PMA-1', 'PO1', '2025', 'provision', -10, 'U1', '2026-01-01')
+            """
+        )
+        try:
+            conn.execute(
+                """
+                INSERT INTO po_manual_amounts (
+                  manual_amount_id, po_id, year, type, amount, created_by, created_at
+                ) VALUES ('PMA-2', 'PO1', '2025', 'provision', 20, 'U1', '2026-01-01')
+                """
+            )
+        except sqlite3.IntegrityError as exc:
+            assert "UNIQUE" in str(exc)
+        else:
+            raise AssertionError("duplicate manual amount was accepted")
+        try:
+            conn.execute(
+                """
+                INSERT INTO po_manual_amounts (
+                  manual_amount_id, po_id, year, type, amount, created_by, created_at
+                ) VALUES ('PMA-3', 'PO1', '25', 'provision', 20, 'U1', '2026-01-01')
+                """
+            )
+        except sqlite3.IntegrityError as exc:
+            assert "CHECK" in str(exc)
+        else:
+            raise AssertionError("invalid year was accepted")
