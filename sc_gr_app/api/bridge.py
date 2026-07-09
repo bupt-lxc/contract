@@ -980,6 +980,43 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_sender_email(self, _payload=None) -> dict:
+        """Get the configured sender email, with default for notification emails."""
+        try:
+            self._require_current_user()
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
+                ).fetchone()
+                if row and row["setting_value"]:
+                    return ok({"email": row["setting_value"]})
+                return ok({"email": "pomp@audi.com.cn"})
+        except Exception as exc:
+            return fail(exc)
+
+    def set_sender_email(self, payload) -> dict:
+        """Save the sender email to app_settings."""
+        try:
+            from datetime import datetime, timezone
+
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            email = _require_payload_field(payload, "email")
+            timestamp = datetime.now(timezone.utc).isoformat()
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                    ("notify.sender_email", email.strip(), timestamp),
+                )
+                conn.commit()
+            return ok({"email": email.strip()})
+        except Exception as exc:
+            return fail(exc)
+
     def list_notification_queue(self, payload=None) -> dict:
         try:
             payload = self._payload(payload) or {}

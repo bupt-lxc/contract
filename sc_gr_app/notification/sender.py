@@ -385,16 +385,19 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
         outlook = win32com.client.Dispatch("Outlook.Application")
         mail = outlook.CreateItem(0)  # 0 = olMailItem
 
-        # Use configured sender account if available
+        # Use configured sender account, defaulting to pomp@audi.com.cn
         sender_email = conn.execute(
             "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
         ).fetchone()
-        if sender_email and sender_email["setting_value"]:
-            target = sender_email["setting_value"].strip().lower()
-            for acc in outlook.Session.Accounts:
-                if acc.SmtpAddress and acc.SmtpAddress.lower() == target:
-                    mail.SendUsingAccount = acc
-                    break
+        target = (
+            sender_email["setting_value"]
+            if sender_email and sender_email["setting_value"]
+            else "pomp@audi.com.cn"
+        ).strip().lower()
+        for acc in outlook.Session.Accounts:
+            if acc.SmtpAddress and acc.SmtpAddress.lower() == target:
+                mail.SendUsingAccount = acc
+                break
 
         mail.Subject = subject
         mail.HTMLBody = body
