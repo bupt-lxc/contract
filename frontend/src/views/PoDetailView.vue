@@ -112,6 +112,58 @@
 
       <div class="section-card">
         <div class="section-header">
+          <h3>{{ $t('po.manualAnnualAmounts') }}</h3>
+          <el-button
+            v-if="canManagePoManualAmounts"
+            type="primary"
+            size="small"
+            :disabled="loadingState.count > 0"
+            @click="openManualAmountDialog"
+          >
+            <el-icon><Plus /></el-icon>
+            {{ $t('po.addManualAmount') }}
+          </el-button>
+        </div>
+        <el-table :data="manualAmounts" border stripe>
+          <el-table-column prop="year" :label="$t('po.manualAmountYear')" width="90" />
+          <el-table-column :label="$t('po.manualAmountType')" width="140">
+            <template #default="{ row }">
+              {{ manualAmountTypeLabel(row.type) }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('po.manualAmountAmount')" width="140" align="right">
+            <template #default="{ row }">
+              <AmountDisplay :value="row.amount" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_by_name" :label="$t('po.manualAmountCreatedBy')" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="created_at" :label="$t('po.manualAmountCreatedAt')" min-width="160" />
+          <el-table-column
+            v-if="canManagePoManualAmounts"
+            :label="$t('common.actions')"
+            width="90"
+            fixed="right"
+          >
+            <template #default="{ row }">
+              <el-button
+                type="danger"
+                link
+                size="small"
+                :disabled="loadingState.count > 0"
+                @click="removeManualAmount(row)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty :description="$t('po.manualAmountNoRecords')" />
+          </template>
+        </el-table>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">
           <h3>{{ $t('attachment.attachments') }}</h3>
         </div>
         <AttachmentList
@@ -192,6 +244,50 @@
       :calloff-po-info="{ po_id: po.po_id, open_po_amount: po.open_po_amount }"
       @save-submit="handleCalloffScSave"
     />
+
+    <el-dialog
+      v-model="manualAmountDialogVisible"
+      :title="$t('po.addManualAmount')"
+      width="420px"
+    >
+      <el-form
+        ref="manualAmountFormRef"
+        :model="manualAmountForm"
+        :rules="manualAmountRules"
+        label-position="top"
+      >
+        <el-form-item prop="year" :label="$t('po.manualAmountYear')">
+          <el-input v-model="manualAmountForm.year" maxlength="4" />
+        </el-form-item>
+        <el-form-item prop="type" :label="$t('po.manualAmountType')">
+          <el-select v-model="manualAmountForm.type" style="width: 100%">
+            <el-option :label="$t('po.manualAmountProvision')" value="provision" />
+            <el-option :label="$t('po.manualAmountToBeGr')" value="to_be_gr" />
+          </el-select>
+        </el-form-item>
+        <el-form-item prop="amount" :label="$t('po.manualAmountAmount')">
+          <el-input-number
+            v-model="manualAmountForm.amount"
+            :precision="2"
+            :step="1000"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="manualAmountSaving" @click="manualAmountDialogVisible = false">
+          {{ $t('common.cancel') }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="manualAmountSaving"
+          :disabled="loadingState.count > 0"
+          @click="saveManualAmount"
+        >
+          {{ $t('common.save') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -199,7 +295,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, Download, Message } from '@element-plus/icons-vue'
+import { Plus, Download, Message, Delete } from '@element-plus/icons-vue'
 import { callApi, loadingState } from '@/api/bridge.js'
 import { useSc } from '@/composables/useSc.js'
 import { useExport } from '@/composables/useExport.js'
@@ -227,7 +323,13 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { state: scState, fetchDetail } = useSc()
-const { updatePo, finishPo, submitPo } = usePo()
+const {
+  updatePo,
+  finishPo,
+  submitPo,
+  createPoManualAmount,
+  deletePoManualAmount,
+} = usePo()
 const { createGr, updateGr, approveGr, denyGr, submitGr, finishGr } = useGr()
 
 const { state: notifState, fetchPoConfig, savePoConfig, fetchCustomSchedules, saveCustomSchedules } = useNotification()
@@ -314,6 +416,120 @@ const calloffScs = computed(() => {
   if (hasSc.value) return calloffScsData.value
   return poDetail.value?.calloff_scs || []
 })
+
+const manualAmounts = computed(() => {
+  if (poDetail.value?.manual_amounts) return poDetail.value.manual_amounts
+  return po.value?.manual_amounts || []
+})
+
+const canManagePoManualAmounts = computed(() => {
+  if (hasSc.value) return Boolean(po.value?.can_manage_po_manual_amounts)
+  return Boolean(
+    po.value?.can_manage_po_manual_amounts
+    || permissions.value?.can_manage_po_manual_amounts
+  )
+})
+
+const manualAmountDialogVisible = ref(false)
+const manualAmountSaving = ref(false)
+const manualAmountForm = reactive({
+  year: new Date().getFullYear().toString(),
+  type: 'to_be_gr',
+  amount: 0,
+})
+const manualAmountFormRef = ref(null)
+const manualAmountRules = {
+  year: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!/^\d{4}$/.test(String(value || ''))) {
+          callback(new Error(t('po.manualAmountInvalidYear')))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  type: [{ required: true, trigger: 'change' }],
+  amount: [
+    {
+      validator: (_rule, value, callback) => {
+        if (value === null || value === undefined || value === '') {
+          callback(new Error(t('po.manualAmountAmountRequired')))
+          return
+        }
+        callback()
+      },
+      trigger: 'change',
+    },
+  ],
+}
+
+function openManualAmountDialog() {
+  manualAmountForm.year = new Date().getFullYear().toString()
+  manualAmountForm.type = 'to_be_gr'
+  manualAmountForm.amount = 0
+  manualAmountDialogVisible.value = true
+}
+
+function manualAmountTypeLabel(type) {
+  return type === 'provision'
+    ? t('po.manualAmountProvision')
+    : t('po.manualAmountToBeGr')
+}
+
+async function saveManualAmount() {
+  try {
+    await manualAmountFormRef.value?.validate()
+  } catch {
+    return
+  }
+  manualAmountSaving.value = true
+  try {
+    await createPoManualAmount(po.value.po_id, {
+      year: manualAmountForm.year,
+      type: manualAmountForm.type,
+      amount: manualAmountForm.amount,
+    })
+    manualAmountDialogVisible.value = false
+    try {
+      await refreshDetail()
+      ElMessage.success(t('po.manualAmountSaved'))
+    } catch (refreshError) {
+      ElMessage.warning(t('po.manualAmountRefreshFailed'))
+    }
+  } catch (error) {
+    ElMessage.error(error.message || String(error))
+  } finally {
+    manualAmountSaving.value = false
+  }
+}
+
+async function removeManualAmount(row) {
+  try {
+    await ElMessageBox.confirm(
+      t('po.deleteManualAmountConfirm', {
+        year: row.year,
+        type: manualAmountTypeLabel(row.type),
+        amount: row.amount,
+      }),
+      t('common.confirm'),
+      { type: 'warning' }
+    )
+    await deletePoManualAmount(row.manual_amount_id)
+    try {
+      await refreshDetail()
+      ElMessage.success(t('po.manualAmountDeleted'))
+    } catch (refreshError) {
+      ElMessage.warning(t('po.manualAmountRefreshFailed'))
+    }
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error.message || String(error))
+    }
+  }
+}
 
 async function loadCalloffData() {
   if (!isFcPo.value) return
