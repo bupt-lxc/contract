@@ -1,41 +1,31 @@
-import { reactive, readonly } from 'vue'
+import { readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
+import { useListSearch } from './useListSearch.js'
 
 export function useGr(pageSize = 10) {
-  const state = reactive({
-    rows: [],
-    total: 0,
-    loading: false,
-    error: null,
-    filters: {},
-    sort: 'created_at',
-    direction: 'desc',
-    pageSize,
-    currentPage: 1
+  const list = useListSearch({
+    apiMethod: 'search_grs',
+    defaultSort: 'created_at',
+    defaultDirection: 'desc',
+    defaultPageSize: pageSize,
+    allowedFilterKeys: new Set([
+      'status', 'gr_id', 'gr_no', 'po_id', 'sc_id', 'requester_id',
+      'vendor_id', 'estimated_amount_min', 'estimated_amount_max',
+      'tax_rate', 'con_value_min', 'con_value_max', 'gross_cost_min',
+      'gross_cost_max', 'pending_date_from', 'pending_date_to',
+      'approved_date_from', 'approved_date_to', 'confirmed_at_from',
+      'confirmed_at_to', 'goods_service_description', 'confirmation_name',
+      'last_delivery', 'is_cancellation', 'remark', 'created_by',
+      'deadline_from', 'deadline_to',
+    ]),
+    allowedSortKeys: new Set([
+      'gr_id', 'gr_no', 'po_no', 'sc_no', 'vendor_name', 'estimated_amount',
+      'con_value', 'gross_cost', 'tax_rate', 'goods_service_description',
+      'confirmation_name', 'last_delivery', 'status', 'created_at',
+      'approved_at', 'cancelled_at', 'pending_date', 'approved_date',
+      'confirmed_at',
+    ]),
   })
-
-  async function searchGrs(text = null, filters = null) {
-    state.loading = true
-    state.error = null
-    try {
-      const payload = {
-        text,
-        filters,
-        sort: state.sort,
-        direction: state.direction,
-        limit: state.pageSize,
-        offset: (state.currentPage - 1) * state.pageSize
-      }
-      const result = await callApi('search_grs', payload)
-      state.rows = result.rows || result
-      state.total = result.total || state.rows.length
-    } catch (e) {
-      state.error = e.message
-      state.rows = []
-    } finally {
-      state.loading = false
-    }
-  }
 
   async function createGr(data) { return await callApi('create_gr', { data }) }
   async function updateGr(grId, data) { return await callApi('update_gr', { gr_id: grId, data }) }
@@ -46,15 +36,25 @@ export function useGr(pageSize = 10) {
   }
   async function submitGr(grId) { await callApi('submit_gr', { gr_id: grId }) }
 
-  function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
-  function resetFilters() { state.filters = {}; state.currentPage = 1 }
-  function onSortChange({ prop, order }) { state.sort = prop || 'created_at'; state.direction = order === 'ascending' ? 'asc' : 'desc' }
-  function onPageChange(page) { state.currentPage = page }
-  function onPageSizeChange(size) { state.pageSize = size; state.currentPage = 1 }
+  function setFilters(filters) { list.state.filters = { ...(filters || {}) }; list.state.currentPage = 1 }
+  function resetFilters() { list.reset() }
+  function onSortChange({ prop, order }) { list.changeSort({ prop, order }) }
+  function onPageChange(page) { list.changePage(page) }
+  function onPageSizeChange(size) { list.changePageSize(size) }
 
   return {
-    state: readonly(state),
-    searchGrs, createGr, updateGr, approveGr, denyGr, finishGr, submitGr,
-    setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange
+    state: readonly(list.state),
+    searchGrs: list.search,
+    createGr, updateGr, approveGr, denyGr, finishGr, submitGr,
+    setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange,
+    initializeFromRoute: list.initializeFromRoute,
+    restoreFromRoute: list.restoreFromRoute,
+    applyFilter: list.applyFilter,
+    changePage: list.changePage,
+    changePageSize: list.changePageSize,
+    changeSort: list.changeSort,
+    reset: list.reset,
+    reload: list.reload,
+    exportCriteria: list.exportCriteria,
   }
 }

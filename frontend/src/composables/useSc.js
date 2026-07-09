@@ -1,55 +1,46 @@
-import { reactive, readonly } from 'vue'
+import { readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
+import { useListSearch } from './useListSearch.js'
 
 export function useSc(pageSize = 10) {
-  const state = reactive({
-    rows: [],
-    total: 0,
-    loading: false,
-    error: null,
-    filters: {},
-    sort: 'created_at',
-    direction: 'desc',
-    pageSize,
-    currentPage: 1,
-    detail: null,
-    detailLoading: false,
-    detailError: null
+  const list = useListSearch({
+    apiMethod: 'search_scs',
+    defaultSort: 'created_at',
+    defaultDirection: 'desc',
+    defaultPageSize: pageSize,
+    allowedFilterKeys: new Set([
+      'status', 'request_type', 'service_scope', 'is_calloff', 'asset',
+      'cost_center', 'sc_id', 'sc_no', 'requester_id', 'requester_name',
+      'created_by', 'created_by_name', 'description', 'calloff_po_id',
+      'service_period_start_from', 'service_period_start_to',
+      'sc_amount_min', 'sc_amount_max',
+      'pending_date_from', 'pending_date_to',
+      'approved_date_from', 'approved_date_to',
+      'confirmed_at_from', 'confirmed_at_to',
+      'deadline_from', 'deadline_to',
+    ]),
+    allowedSortKeys: new Set([
+      'sc_id', 'sc_no', 'requester_id', 'requester_name', 'request_type',
+      'service_scope', 'cost_center', 'sc_amount', 'status', 'created_at',
+      'updated_at', 'asset', 'pending_date', 'approved_date', 'confirmed_at',
+      'calloff_po_id',
+    ]),
   })
 
-  async function searchScs(text = null, filters = null) {
-    state.loading = true
-    state.error = null
-    try {
-      const payload = {
-        text,
-        filters,
-        sort: state.sort,
-        direction: state.direction,
-        limit: state.pageSize,
-        offset: (state.currentPage - 1) * state.pageSize
-      }
-      const result = await callApi('search_scs', payload)
-      state.rows = result.rows || result
-      state.total = result.total || state.rows.length
-    } catch (e) {
-      state.error = e.message
-      state.rows = []
-    } finally {
-      state.loading = false
-    }
-  }
+  list.state.detail = null
+  list.state.detailLoading = false
+  list.state.detailError = null
 
   async function fetchDetail(scId) {
-    state.detailLoading = true
-    state.detailError = null
+    list.state.detailLoading = true
+    list.state.detailError = null
     try {
-      state.detail = await callApi('get_sc_detail', { sc_id: scId })
+      list.state.detail = await callApi('get_sc_detail', { sc_id: scId })
     } catch (e) {
-      state.detailError = e.message
-      state.detail = null
+      list.state.detailError = e.message
+      list.state.detail = null
     } finally {
-      state.detailLoading = false
+      list.state.detailLoading = false
     }
   }
 
@@ -78,29 +69,31 @@ export function useSc(pageSize = 10) {
   }
 
   function setFilters(filters) {
-    Object.assign(state.filters, filters)
-    state.currentPage = 1
+    list.state.filters = { ...(filters || {}) }
+    list.state.currentPage = 1
   }
 
-  function resetFilters() {
-    state.filters = {}
-    state.currentPage = 1
-  }
-
-  function onSortChange({ prop, order }) {
-    state.sort = prop || 'created_at'
-    state.direction = order === 'ascending' ? 'asc' : 'desc'
-  }
-
-  function onPageChange(page) { state.currentPage = page }
-  function onPageSizeChange(size) { state.pageSize = size; state.currentPage = 1 }
+  function resetFilters() { list.reset() }
+  function onSortChange({ prop, order }) { list.changeSort({ prop, order }) }
+  function onPageChange(page) { list.changePage(page) }
+  function onPageSizeChange(size) { list.changePageSize(size) }
 
   return {
-    state: readonly(state),
-    searchScs, fetchDetail,
+    state: readonly(list.state),
+    searchScs: list.search,
+    fetchDetail,
     createDraft, submitSc, updateSc,
     approveSc, denySc, finishSc,
     setFilters, resetFilters,
-    onSortChange, onPageChange, onPageSizeChange
+    onSortChange, onPageChange, onPageSizeChange,
+    initializeFromRoute: list.initializeFromRoute,
+    restoreFromRoute: list.restoreFromRoute,
+    applyFilter: list.applyFilter,
+    changePage: list.changePage,
+    changePageSize: list.changePageSize,
+    changeSort: list.changeSort,
+    reset: list.reset,
+    reload: list.reload,
+    exportCriteria: list.exportCriteria,
   }
 }
