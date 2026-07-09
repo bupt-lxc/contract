@@ -88,8 +88,8 @@
         <PoTable
           :rows="detail.pos || []"
           hide-sc-info
-          @row-click="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
-          @detail="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
+          @row-click="goToPoDetail"
+          @detail="goToPoDetail"
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @finish="row => handlePoFinish(row)"
           @submit="row => handlePoSubmit(row)"
@@ -195,6 +195,7 @@ import AttachmentList from '@/components/common/AttachmentList.vue'
 import ScVendorSection from '@/components/sc/ScVendorSection.vue'
 import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -229,6 +230,18 @@ const poDialogRecord = ref(null)
 const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
+
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+
+function listReturnPath(fallback) {
+  return sanitizeRedirectTarget(route.query.returnTo, fallback)
+}
+
+function goToPoDetail(row) {
+  router.push({ name: 'po-detail', params: { scId: scId.value, poId: row.po_id }, query: childReturnQuery() })
+}
 
 async function handleEditSave(data) {
   try {
@@ -340,7 +353,7 @@ async function handleDelete() {
     await ElMessageBox.confirm(t('sc.confirmDelete'), t('common.confirm'), { type: 'error' })
     await callApi('delete_sc', { sc_id: scId.value })
     ElMessage.success(t('sc.deleted'))
-    router.replace('/sc')
+    router.replace(listReturnPath('/sc'))
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }

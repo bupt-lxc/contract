@@ -45,7 +45,7 @@
       :empty-text="state.error || $t('sc.noRecords')"
       selectable
       @sort-change="handleSortChange"
-      @detail="row => $router.push(`/sc/${row.sc_id}`)"
+      @detail="openScDetail"
       @selection-change="val => selectedRows = val"
     />
 
@@ -273,6 +273,10 @@ function onPoFcSelect(po) {
   scDialogMode.value = 'create'
   scDialogRecord.value = null
   scDialogVisible.value = true
+}
+
+function openScDetail(row) {
+  router.push({ name: 'sc-detail', params: { id: row.sc_id }, query: { returnTo: route.fullPath } })
 }
 
 function handleFilter({ text, filters }) {

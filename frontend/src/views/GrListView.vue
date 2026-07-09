@@ -322,7 +322,7 @@ function handleSizeChange(size) {
 }
 
 function goToDetail(row) {
-  router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
+  router.push({ name: 'gr-detail', params: { scId: row.sc_id, poId: row.po_id, grId: row.gr_id }, query: { returnTo: route.fullPath } })
 }
 
 // ── Create GR with SC→PO selection ──

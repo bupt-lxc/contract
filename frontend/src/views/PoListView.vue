@@ -40,9 +40,7 @@
       selectable
       @selection-change="val => selectedRows = val"
       @sort-change="handleSortChange"
-      @detail="row => row.sc_id
-        ? $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)
-        : $router.push(`/po/${row.po_id}`)"
+      @detail="openPoDetail"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
       @submit="row => handleSubmitPo(row)"
       @finish="row => handleFinishPo(row)"
@@ -280,6 +278,14 @@ async function confirmScSelection() {
   poDialogMode.value = 'create'
   poDialogRecord.value = null
   poDialogVisible.value = true
+}
+
+function openPoDetail(row) {
+  if (row.sc_id) {
+    router.push({ name: 'po-detail', params: { scId: row.sc_id, poId: row.po_id }, query: { returnTo: route.fullPath } })
+  } else {
+    router.push({ name: 'po-detail-independent', params: { poId: row.po_id }, query: { returnTo: route.fullPath } })
+  }
 }
 
 function handleFilter({ text, filters }) {

@@ -77,3 +77,10 @@ export function criteriaFromState(state) {
     direction: state.direction,
   };
 }
+
+export function sanitizeRedirectTarget(value, fallback = "/workbench") {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+    return fallback;
+  }
+  return value;
+}
