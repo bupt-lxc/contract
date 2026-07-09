@@ -462,3 +462,39 @@ def test_bridge_annual_report_methods_forward_current_user_and_year(monkeypatch,
         ("po", app_config, "2025", current_user),
         ("gr", app_config, "2026", current_user),
     ]
+
+
+def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    calls = []
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda _config, _machine_id: {"user_id": "U1", "machine_id": "1234567", "user_name": "Alice", "role": "admin"},
+    )
+    def fake_rows(*args, **kwargs):
+        calls.append(("rows", args, kwargs))
+        return [{"_type": "SC", "sc_id": "sc-alpha"}]
+
+    def fake_stats(*args, **kwargs):
+        calls.append(("stats", args, kwargs))
+        return {"overview": {}}
+
+    monkeypatch.setattr(bridge.export_service, "build_cascade_rows", fake_rows)
+    monkeypatch.setattr(bridge.export_service, "compute_statistics", fake_stats)
+
+    api = bridge.ApiBridge(app_config)
+    api.export_scs_cascade({"text": "alpha", "filters": {"status": "approved"}, "sort": "created_at", "direction": "desc"})
+
+    row_args = calls[0][1]
+    row_kwargs = calls[0][2]
+    stats_kwargs = calls[1][2]
+    # current_user is a positional arg (index 6) in build_cascade_rows
+    assert row_kwargs["text"] == "alpha"
+    assert row_args[6]["user_id"] == "U1"
+    assert stats_kwargs["text"] == "alpha"
+    assert stats_kwargs["current_user"]["user_id"] == "U1"
+    assert "export_rows" in stats_kwargs

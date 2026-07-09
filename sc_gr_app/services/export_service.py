@@ -16,27 +16,28 @@ def build_cascade_rows(
     cascade_options: dict,
     current_user: dict,
     selected_ids: list[str] | None = None,
+    text: str | None = None,
 ) -> list[dict]:
     """Return a flat ordered list of dicts with _type marker for cascade export."""
     rows: list[dict] = []
 
     if entity_type == "sc":
-        rows = _build_sc_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids)
+        rows = _build_sc_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids, text=text)
     elif entity_type == "po":
-        rows = _build_po_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids)
+        rows = _build_po_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids, text=text)
     elif entity_type == "gr":
-        rows = _build_gr_rows(config, filters, sort, direction, current_user, selected_ids)
+        rows = _build_gr_rows(config, filters, sort, direction, current_user, selected_ids, text=text)
 
     return rows
 
 
-def _build_sc_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids):
+def _build_sc_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids, text=None):
     rows = []
     include_po = cascade_options.get("po", False)
     include_gr = cascade_options.get("gr", False)
 
     # Get all matching SCs (paginate internally)
-    all_scs = _fetch_all_search("sc", config, filters, sort, direction, current_user, selected_ids)
+    all_scs = _fetch_all_search("sc", config, filters, sort, direction, current_user, selected_ids, text=text)
 
     with connect(config) as conn:
         for sc in all_scs:
@@ -82,11 +83,11 @@ def _build_sc_cascade(config, filters, sort, direction, cascade_options, current
     return rows
 
 
-def _build_po_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids):
+def _build_po_cascade(config, filters, sort, direction, cascade_options, current_user, selected_ids, text=None):
     rows = []
     include_gr = cascade_options.get("gr", False)
 
-    all_pos = _fetch_all_search("po", config, filters, sort, direction, current_user, selected_ids)
+    all_pos = _fetch_all_search("po", config, filters, sort, direction, current_user, selected_ids, text=text)
 
     with connect(config) as conn:
         for po in all_pos:
@@ -139,9 +140,9 @@ def _build_po_cascade(config, filters, sort, direction, cascade_options, current
     return rows
 
 
-def _build_gr_rows(config, filters, sort, direction, current_user, selected_ids):
+def _build_gr_rows(config, filters, sort, direction, current_user, selected_ids, text=None):
     rows = []
-    all_grs = _fetch_all_search("gr", config, filters, sort, direction, current_user, selected_ids)
+    all_grs = _fetch_all_search("gr", config, filters, sort, direction, current_user, selected_ids, text=text)
     with connect(config) as conn:
         for gr in all_grs:
             gr["_type"] = "GR"
@@ -155,7 +156,7 @@ def _build_gr_rows(config, filters, sort, direction, current_user, selected_ids)
     return rows
 
 
-def _fetch_all_search(entity_type, config, filters, sort, direction, current_user, selected_ids):
+def _fetch_all_search(entity_type, config, filters, sort, direction, current_user, selected_ids, text=None):
     """Paginate through search API to get all matching rows."""
     if selected_ids:
         if not selected_ids:
@@ -193,6 +194,8 @@ def _fetch_all_search(entity_type, config, filters, sort, direction, current_use
 
     while True:
         kwargs = {"config": config, "filters": filters, "sort": sort, "direction": direction, "limit": limit, "offset": offset}
+        if text is not None:
+            kwargs["text"] = text
         if current_user is not None:
             kwargs["current_user"] = current_user
         result = search_fn(**kwargs)
@@ -223,25 +226,52 @@ def _resolve_requester_name(conn, requester_id):
     return u["user_name"] if u else ""
 
 
+def _ids_by_entity_from_export_rows(rows):
+    ids = {"SC": [], "PO": [], "GR": []}
+    for row in rows or []:
+        row_type = row.get("_type")
+        if row_type == "SC" and row.get("sc_id"):
+            ids["SC"].append(row["sc_id"])
+        elif row_type == "PO" and row.get("po_id"):
+            ids["PO"].append(row["po_id"])
+        elif row_type == "GR" and row.get("gr_id"):
+            ids["GR"].append(row["gr_id"])
+    return ids
+
+
 def compute_statistics(
     config: AppConfig,
     entity_types: set[str],
     filters: dict,
     selected_ids: list[str] | None = None,
+    export_rows: list[dict] | None = None,
+    text: str | None = None,
+    sort: str = "created_at",
+    direction: str = "desc",
+    current_user: dict | None = None,
 ) -> dict:
     """Return statistics dict with keys: overview, financial, budget_health, processing, by_requester.
     budget_health only present when 'SC' in entity_types.
+
+    When export_rows is provided, entity-specific IDs are derived from the rows
+    and statistics are scoped to those entities only.
     """
+    if export_rows is not None:
+        entity_ids = _ids_by_entity_from_export_rows(export_rows)
+
     stats = {}
 
     with connect(config) as conn:
         overview = {}
         if "SC" in entity_types:
-            overview["sc"] = _sc_overview(conn, filters, selected_ids)
+            sc_ids = entity_ids.get("SC") if export_rows is not None else selected_ids
+            overview["sc"] = _sc_overview(conn, filters, sc_ids)
         if "PO" in entity_types:
-            overview["po"] = _po_overview(conn, filters, selected_ids)
+            po_ids = entity_ids.get("PO") if export_rows is not None else selected_ids
+            overview["po"] = _po_overview(conn, filters, po_ids)
         if "GR" in entity_types:
-            overview["gr"] = _gr_overview(conn, filters, selected_ids)
+            gr_ids = entity_ids.get("GR") if export_rows is not None else selected_ids
+            overview["gr"] = _gr_overview(conn, filters, gr_ids)
         stats["overview"] = overview
 
         stats["financial"] = _financial_summary(conn, entity_types, filters, selected_ids)
@@ -249,7 +279,8 @@ def compute_statistics(
         stats["by_requester"] = _by_requester(conn, entity_types, filters, selected_ids)
 
         if "SC" in entity_types:
-            stats["budget_health"] = _budget_health(conn, filters, selected_ids)
+            sc_ids_budget = entity_ids.get("SC") if export_rows is not None else selected_ids
+            stats["budget_health"] = _budget_health(conn, filters, sc_ids_budget)
 
     return stats
 

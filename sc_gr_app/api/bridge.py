@@ -856,6 +856,7 @@ class ApiBridge:
             direction = payload.get("direction", "desc")
             cascade = payload.get("cascade", {"po": False, "gr": False})
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_options = {"po": bool(cascade.get("po")), "gr": bool(cascade.get("gr"))}
             entity_types = {"SC"}
@@ -867,9 +868,12 @@ class ApiBridge:
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "sc", filters, sort, direction,
                 cascade_options, current_user, selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
+                export_rows=cascade_rows, text=text, sort=sort,
+                direction=direction, current_user=current_user,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -884,6 +888,7 @@ class ApiBridge:
             direction = payload.get("direction", "desc")
             cascade = payload.get("cascade", {"gr": False})
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_options = {"gr": bool(cascade.get("gr"))}
             entity_types = {"PO"}
@@ -893,9 +898,12 @@ class ApiBridge:
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "po", filters, sort, direction,
                 cascade_options, current_user=current_user, selected_ids=selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
+                export_rows=cascade_rows, text=text, sort=sort,
+                direction=direction, current_user=current_user,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -909,13 +917,17 @@ class ApiBridge:
             sort = payload.get("sort", "created_at")
             direction = payload.get("direction", "desc")
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "gr", filters, sort, direction,
                 cascade_options={}, current_user=current_user, selected_ids=selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, {"GR"}, filters, selected_ids,
+                export_rows=cascade_rows, text=text, sort=sort,
+                direction=direction, current_user=current_user,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
