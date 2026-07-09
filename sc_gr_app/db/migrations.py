@@ -7,7 +7,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -2226,6 +2226,28 @@ def _migrate_v39(conn) -> None:
     _record(conn, 39)
 
 
+def _migrate_v40(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS po_manual_amounts (
+            manual_amount_id TEXT PRIMARY KEY,
+            po_id TEXT NOT NULL REFERENCES pos(po_id),
+            year TEXT NOT NULL CHECK (year GLOB '[0-9][0-9][0-9][0-9]'),
+            type TEXT NOT NULL CHECK (type IN ('provision', 'to_be_gr')),
+            amount REAL NOT NULL,
+            created_by TEXT NOT NULL REFERENCES users(user_id),
+            created_at TEXT NOT NULL,
+            UNIQUE(po_id, year, type)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id "
+        "ON po_manual_amounts(po_id)"
+    )
+    _record(conn, 40)
+
+
 def _get_initial_db_path() -> Path:
     """Path to the seed database, works in dev and PyInstaller frozen builds."""
     if getattr(sys, "frozen", False):
@@ -2464,6 +2486,10 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v39(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 40 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v40(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

@@ -225,6 +225,9 @@ class ApiBridge:
                 for key in ("pos", "grs", "operation_records"):
                     if key in result:
                         result[key] = _format_list_timestamps(result[key])
+                for po in result.get("pos", []):
+                    if isinstance(po, dict) and "manual_amounts" in po:
+                        po["manual_amounts"] = _format_list_timestamps(po["manual_amounts"])
             return ok(result)
         except Exception as exc:
             return fail(exc)
@@ -249,10 +252,40 @@ class ApiBridge:
             if isinstance(result, dict):
                 if "po" in result:
                     result["po"] = _format_entity_timestamps(result["po"])
-                for key in ("calloff_scs", "operation_records"):
+                for key in ("manual_amounts", "calloff_scs", "operation_records"):
                     if key in result:
                         result[key] = _format_list_timestamps(result[key])
             return ok(result)
+        except Exception as exc:
+            return fail(exc)
+
+    def list_po_manual_amounts(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            rows = po_service.list_po_manual_amounts(self.config, current_user, po_id)
+            return ok(_format_list_timestamps(rows))
+        except Exception as exc:
+            return fail(exc)
+
+    def create_po_manual_amount(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            data = _require_payload_field(payload, "data")
+            result = po_service.create_po_manual_amount(self.config, current_user, po_id, data)
+            return ok(_format_entity_timestamps(result))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_po_manual_amount(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            manual_amount_id = _require_payload_field(payload, "manual_amount_id")
+            return ok(po_service.delete_po_manual_amount(self.config, current_user, manual_amount_id))
         except Exception as exc:
             return fail(exc)
 

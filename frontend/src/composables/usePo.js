@@ -41,6 +41,9 @@ export function usePo(pageSize = 10) {
   async function updatePo(poId, data) { return await callApi('update_po', { po_id: poId, data }) }
   async function submitPo(poId) { await callApi('submit_po', { po_id: poId }) }
   async function finishPo(poId) { await callApi('finish_po', { po_id: poId }) }
+  async function listPoManualAmounts(poId) { return callApi('list_po_manual_amounts', { po_id: poId }) }
+  async function createPoManualAmount(poId, data) { return callApi('create_po_manual_amount', { po_id: poId, data }) }
+  async function deletePoManualAmount(manualAmountId) { return callApi('delete_po_manual_amount', { manual_amount_id: manualAmountId }) }
 
   function setFilters(filters) { Object.assign(state.filters, filters); state.currentPage = 1 }
   function resetFilters() { state.filters = {}; state.currentPage = 1 }
@@ -51,6 +54,7 @@ export function usePo(pageSize = 10) {
   return {
     state: readonly(state),
     searchPos, createPo, updatePo, submitPo, finishPo,
+    listPoManualAmounts, createPoManualAmount, deletePoManualAmount,
     setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange
   }
 }

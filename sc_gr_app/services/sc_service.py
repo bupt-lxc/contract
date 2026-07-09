@@ -232,6 +232,7 @@ def _sc_permissions(user: dict, sc: dict) -> dict:
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
         "can_transfer_sc": is_admin or is_owner,
+        "can_manage_po_manual_amounts": is_admin or is_owner,
     }
 
 
@@ -1194,6 +1195,7 @@ def delete_sc(config: AppConfig, current_user: dict, sc_id: str) -> dict:
                 # Delete GRs → POs → SC (and junction table)
                 for po_id in po_ids:
                     conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
+                    conn.execute("DELETE FROM po_manual_amounts WHERE po_id = ?", (po_id,))
                     conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
                 conn.execute("DELETE FROM sc_vendors WHERE sc_id = ?", (sc_id,))
                 conn.execute("DELETE FROM sc_assignees WHERE sc_id = ?", (sc_id,))
@@ -1289,6 +1291,32 @@ def get_sc_detail(config: AppConfig, current_user: dict, sc_id: str) -> dict:
             (sc_id,),
         ).fetchall()
         assignees = [_row_to_dict(r) for r in assignee_rows]
+
+        manual_amounts_by_po: dict[str, list[dict]] = {}
+        if pos:
+            placeholders = ",".join("?" for _ in pos)
+            manual_rows = conn.execute(
+                f"""
+                select pma.*, u.user_name as created_by_name
+                from po_manual_amounts pma
+                left join users u on u.user_id = pma.created_by
+                where pma.po_id in ({placeholders})
+                order by pma.year desc, pma.type asc, pma.created_at desc
+                """,
+                [po["po_id"] for po in pos],
+            ).fetchall()
+            for row in manual_rows:
+                item = dict(row)
+                if item.get("amount") is not None:
+                    item["amount"] = float(item["amount"])
+                manual_amounts_by_po.setdefault(item["po_id"], []).append(item)
+
+    for po in pos:
+        po["manual_amounts"] = manual_amounts_by_po.get(po["po_id"], [])
+        po["can_manage_po_manual_amounts"] = (
+            current_user.get("role") == "admin"
+            or current_user.get("user_id") == sc.get("requester_id")
+        )
 
     if parent_po is not None:
         parent_po["fc_budget"] = compute_po_fc_budget(config, sc["calloff_po_id"])
