@@ -229,6 +229,33 @@ class ApiBridge:
         except Exception as exc:
             return fail(exc)
 
+    def get_po(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(_format_entity_timestamps(
+                po_service.get_po(self.config, current_user, po_id)
+            ))
+        except Exception as exc:
+            return fail(exc)
+
+    def get_po_detail(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            result = po_service.get_po_detail(self.config, current_user, po_id)
+            if isinstance(result, dict):
+                if "po" in result:
+                    result["po"] = _format_entity_timestamps(result["po"])
+                for key in ("calloff_scs", "operation_records"):
+                    if key in result:
+                        result[key] = _format_list_timestamps(result[key])
+            return ok(result)
+        except Exception as exc:
+            return fail(exc)
+
     def create_sc_draft(self, payload) -> dict:
         try:
             payload = self._required_payload(payload)

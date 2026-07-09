@@ -181,7 +181,7 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "po_id"):
             continue
-        for field in ["sc_id", "po_no", "po_amount", "status"]:
+        for field in ["po_no", "po_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
         status = row.get("status", "")
@@ -390,14 +390,7 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "gr_id"):
             continue
-        # Resolve po_no to po_id if po_id is not provided directly
-        if not row.get("po_id") and row.get("po_no"):
-            po_row = conn.execute(
-                "SELECT po_id FROM pos WHERE po_no = ?",
-                (row["po_no"],),
-            ).fetchone()
-            if po_row:
-                row["po_id"] = po_row["po_id"]
+        _resolve_gr_po_id(conn, row)
         for field in ["po_id", "gr_no", "con_value", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
@@ -437,6 +430,38 @@ def _validate_gr_rows(conn, rows: list[dict]) -> list[dict]:
             if exists:
                 errors.append({"row": i, "field": "gr_no", "message": f"GR NO {gr_no} already exists"})
     return errors
+
+
+def _resolve_gr_po_id(conn, row: dict) -> None:
+    """Resolve po_no to the current DB po_id, overriding stale imported po_id."""
+    po_no = (row.get("po_no") or "").strip()
+    if not po_no:
+        return
+    po_row = conn.execute(
+        "SELECT po_id FROM pos WHERE po_no = ?",
+        (po_no,),
+    ).fetchone()
+    if po_row:
+        row["po_id"] = po_row["po_id"]
+
+
+def _po_has_finished_gr(conn, po_id: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM gr_requests WHERE po_id = ? AND status = 'finished' LIMIT 1",
+        (po_id,),
+    ).fetchone()
+    return row is not None
+
+
+def _finish_po_gr_group(conn, po_id: str, timestamp: str) -> None:
+    conn.execute(
+        "UPDATE pos SET status = 'finished', updated_at = ? WHERE po_id = ?",
+        (timestamp, po_id),
+    )
+    conn.execute(
+        "UPDATE gr_requests SET status = 'finished', updated_at = ? WHERE po_id = ?",
+        (timestamp, po_id),
+    )
 
 
 def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
@@ -507,14 +532,7 @@ def preview_gr_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             if _is_template_meta_row(row, "gr_id"):
                 continue
             errors_list = []
-            # Resolve po_no to po_id if po_id is not provided directly
-            if not row.get("po_id") and row.get("po_no"):
-                po_row = conn.execute(
-                    "SELECT po_id FROM pos WHERE po_no = ?",
-                    (row["po_no"],),
-                ).fetchone()
-                if po_row:
-                    row["po_id"] = po_row["po_id"]
+            _resolve_gr_po_id(conn, row)
             for field in ["po_id", "gr_no", "con_value", "status"]:
                 if not row.get(field):
                     errors_list.append(f"{field} is required")
@@ -581,6 +599,13 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                 for row in rows:
                     if _is_template_meta_row(row, "gr_id"):
                         continue
+                    po_id = row["po_id"]
+                    finish_group = (
+                        row.get("status") == "finished"
+                        or _po_has_finished_gr(conn, po_id)
+                    )
+                    if finish_group:
+                        row["status"] = "finished"
                     gr_id = (row.get("gr_id") or "").strip()
                     if gr_id:
                         exists = conn.execute(
@@ -601,7 +626,7 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             gr_id,
-                            row["po_id"],
+                            po_id,
                             row.get("gr_no"),
                             row.get("requester_id") or current_user["user_id"],
                             float(row["estimated_amount"]) if row.get("estimated_amount") else None,
@@ -618,6 +643,8 @@ def import_grs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             timestamp,
                         ),
                     )
+                    if finish_group:
+                        _finish_po_gr_group(conn, po_id, timestamp)
                     write_operation_record(
                         conn,
                         action_type="import_gr",

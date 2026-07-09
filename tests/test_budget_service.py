@@ -322,7 +322,7 @@ def test_compute_sc_budget_rejects_approved_gr_with_null_con_value(app_config):
 
     with pytest.raises(
         ConflictError,
-        match="Approved GR has NULL con_value for SC SC1",
+        match="Approved/finished GR has NULL con_value for SC SC1",
     ):
         compute_sc_budget(app_config, "SC1")
 
@@ -335,7 +335,7 @@ def test_compute_po_budget_rejects_approved_gr_with_null_con_value(app_config):
 
     with pytest.raises(
         ConflictError,
-        match="Approved GR has NULL con_value for PO PO1",
+        match="Approved/finished GR has NULL con_value for PO PO1",
     ):
         compute_po_budget(app_config, "PO1")
 

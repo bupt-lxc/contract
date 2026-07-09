@@ -28,7 +28,7 @@ def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
            LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
            LEFT JOIN (
              SELECT po_id, SUM(con_value) as con_value_total
-             FROM gr_requests WHERE status = 'approved'
+             FROM gr_requests WHERE status IN ('approved', 'finished')
              GROUP BY po_id
            ) gr_totals ON gr_totals.po_id = po.po_id
            LEFT JOIN (

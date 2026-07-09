@@ -67,7 +67,7 @@ def check_monthly_summary(conn: sqlite3.Connection) -> int:
                    CASE WHEN p.request_type = 'FC' OR sc.request_type = 'FC'
                      THEN calloff_totals.allocated
                      ELSE (SELECT SUM(gr.con_value) FROM gr_requests gr
-                           WHERE gr.po_id = p.po_id AND gr.status = 'approved')
+                           WHERE gr.po_id = p.po_id AND gr.status IN ('approved', 'finished'))
                    END, 0
                ) as open_po_amount
            FROM pos p

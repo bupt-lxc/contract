@@ -30,7 +30,7 @@ def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decima
             from gr_requests gr
             join pos po on po.po_id = gr.po_id
             where po.sc_id = ?
-              and gr.status = 'approved'
+              and gr.status IN ('approved', 'finished')
               and gr.con_value is null
             limit 1
             """,
@@ -38,7 +38,7 @@ def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decima
         ).fetchone()
         if null_con_value_gr is not None:
             raise ConflictError(
-                f"Approved GR has NULL con_value for SC {sc_id}: "
+                f"Approved/finished GR has NULL con_value for SC {sc_id}: "
                 f"{null_con_value_gr['gr_id']}"
             )
 
@@ -47,7 +47,7 @@ def compute_sc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Decima
             select
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm') then coalesce(gr.con_value, gr.estimated_amount) else 0 end), 0)
                 as pending_total,
-              coalesce(sum(case when gr.status = 'approved' then gr.con_value else 0 end), 0)
+              coalesce(sum(case when gr.status IN ('approved', 'finished') then gr.con_value else 0 end), 0)
                 as con_value_total,
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
                 then coalesce(gr.gross_cost, gr.estimated_amount) else 0 end), 0)
@@ -117,7 +117,7 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
             join pos p on p.po_id = gr.po_id
             join sc_records child_sc on child_sc.sc_id = p.sc_id
             where child_sc.calloff_po_id = ?
-              and gr.status = 'approved'
+              and gr.status IN ('approved', 'finished')
               and gr.con_value is null
             limit 1
             """,
@@ -125,7 +125,7 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
         ).fetchone()
         if null_con_value_gr is not None:
             raise ConflictError(
-                f"Approved downstream GR has NULL con_value for FC PO {po_id}: "
+                f"Approved/finished downstream GR has NULL con_value for FC PO {po_id}: "
                 f"{null_con_value_gr['gr_id']}"
             )
 
@@ -146,7 +146,7 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
             select
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
                            then gr.estimated_amount else 0 end), 0) as pending_total,
-              coalesce(sum(case when gr.status = 'approved'
+              coalesce(sum(case when gr.status IN ('approved', 'finished')
                            then gr.con_value else 0 end), 0) as con_value_total,
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
                            then coalesce(gr.gross_cost, gr.estimated_amount)
@@ -198,7 +198,7 @@ def compute_sc_fc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Dec
             join sc_records child_sc on child_sc.sc_id = p.sc_id
             join pos fc_po on fc_po.po_id = child_sc.calloff_po_id
             where fc_po.sc_id = ?
-              and gr.status = 'approved'
+              and gr.status IN ('approved', 'finished')
               and gr.con_value is null
             limit 1
             """,
@@ -206,7 +206,7 @@ def compute_sc_fc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Dec
         ).fetchone()
         if null_con_value_gr is not None:
             raise ConflictError(
-                f"Approved downstream GR has NULL con_value for FC SC {sc_id}: "
+                f"Approved/finished downstream GR has NULL con_value for FC SC {sc_id}: "
                 f"{null_con_value_gr['gr_id']}"
             )
 
@@ -236,7 +236,7 @@ def compute_sc_fc_budget_decimal(config: AppConfig, sc_id: str) -> dict[str, Dec
             select
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
                            then gr.estimated_amount else 0 end), 0) as pending_total,
-              coalesce(sum(case when gr.status = 'approved'
+              coalesce(sum(case when gr.status IN ('approved', 'finished')
                            then gr.con_value else 0 end), 0) as con_value_total,
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm')
                            then coalesce(gr.gross_cost, gr.estimated_amount)
@@ -282,7 +282,7 @@ def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decima
             select gr_id
             from gr_requests
             where po_id = ?
-              and status = 'approved'
+              and status IN ('approved', 'finished')
               and con_value is null
             limit 1
             """,
@@ -290,7 +290,7 @@ def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decima
         ).fetchone()
         if null_con_value_gr is not None:
             raise ConflictError(
-                f"Approved GR has NULL con_value for PO {po_id}: "
+                f"Approved/finished GR has NULL con_value for PO {po_id}: "
                 f"{null_con_value_gr['gr_id']}"
             )
 
@@ -299,7 +299,7 @@ def compute_po_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Decima
             select
               coalesce(sum(case when status in ('pending', 'manager_confirm') then coalesce(estimated_amount, 0) else 0 end), 0)
                 as pending_total,
-              coalesce(sum(case when status = 'approved' then con_value else 0 end), 0)
+              coalesce(sum(case when status IN ('approved', 'finished') then con_value else 0 end), 0)
                 as con_value_total,
               coalesce(sum(case when status in ('pending', 'manager_confirm')
                 then coalesce(gross_cost, estimated_amount, 0) else 0 end), 0)

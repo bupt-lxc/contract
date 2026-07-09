@@ -25,6 +25,7 @@ a = Analysis(
         (str(project_root / "sc_gr_app" / "web"), "sc_gr_app/web"),
         (str(project_root / "sc_gr_app" / "icons"), "sc_gr_app/icons"),
         (str(project_root / "sc_gr_app" / "db" / "schema.sql"), "sc_gr_app/db"),
+        (str(project_root / "sc_gr_app" / "db" / "initial.sqlite3"), "sc_gr_app/db"),
     ],
     hiddenimports=_hiddenimports,
     hookspath=[],

@@ -15,7 +15,7 @@ from sc_gr_app.services.budget_service import (
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("po_id", "requester_id", "estimated_amount")
+REQUIRED_FIELDS = ("po_id", "requester_id")
 SUPPORTED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
@@ -106,7 +106,9 @@ def _get_po_sc(conn, po_id: str):
         """
         select
           po.*,
+          po.request_type as po_request_type,
           sc.sc_no,
+          sc.request_type as sc_request_type,
           sc.status as sc_status,
           sc.sc_amount,
           vendor.vendor_name
@@ -176,6 +178,9 @@ def _validate_gr_creation_context(
     sc_status = po_sc["sc_status"]
     po_status = po_sc["status"]
 
+    if po_sc["po_request_type"] == "FC" or po_sc["sc_request_type"] == "FC":
+        raise ConflictError("Cannot create GR under an FC PO. Create a call-off SC instead.")
+
     if po_status == "draft" and sc_status == "draft":
         if gr_status != "draft":
             raise ConflictError("Draft PO only allows draft GR")
@@ -200,10 +205,14 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
     is_cancellation = data.get("is_cancellation", "N")
-    if is_cancellation == "Y":
-        estimated_amount = _negative_number(data["estimated_amount"], "estimated_amount")
+    estimated_amount_raw = data.get("estimated_amount")
+    if estimated_amount_raw is not None:
+        if is_cancellation == "Y":
+            estimated_amount = _negative_number(estimated_amount_raw, "estimated_amount")
+        else:
+            estimated_amount = _positive_number(estimated_amount_raw, "estimated_amount")
     else:
-        estimated_amount = _positive_number(data["estimated_amount"], "estimated_amount")
+        estimated_amount = None
     po_id = data["po_id"]
     requester_id = data["requester_id"]
 
@@ -266,14 +275,14 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       confirmation_name,
                       last_delivery,
                       is_cancellation
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
                         data.get("gr_no"),
                         po_id,
                         requester_id,
-                        float(estimated_amount),
+                        float(estimated_amount) if estimated_amount is not None else None,
                         None,
                         float(gross_cost) if gross_cost is not None else None,
                         data.get("tax_rate"),
@@ -534,11 +543,9 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def _compute_incl_tax(estimated_amount: Decimal, tax_rate) -> Decimal:
-    """Calculate tax-included amount: amount_ex_tax × (1 + tax_rate/100).
-
-    Returns estimated_amount when tax_rate is None (gross = net).
-    """
+def _compute_incl_tax(estimated_amount: Decimal | None, tax_rate) -> Decimal | None:
+    if estimated_amount is None:
+        return None
     if tax_rate is None:
         return estimated_amount
     rate = Decimal(str(tax_rate))
@@ -708,10 +715,14 @@ def update_gr(
                     if "requester_id" in allowed:
                         _validate_user_exists(conn, merged["requester_id"])
                     is_canc = merged.get("is_cancellation", "N")
-                    if is_canc == "Y":
-                        amount = _negative_number(merged["estimated_amount"], "estimated_amount")
+                    est_amount_val = merged.get("estimated_amount")
+                    if est_amount_val is not None:
+                        if is_canc == "Y":
+                            amount = _negative_number(est_amount_val, "estimated_amount")
+                        else:
+                            amount = _positive_number(est_amount_val, "estimated_amount")
                     else:
-                        amount = _positive_number(merged["estimated_amount"], "estimated_amount")
+                        amount = None
                     po_sc = _get_po_sc(conn, merged["po_id"])
                     is_draft_gr = before["status"] == "draft"
                     if is_draft_gr:
@@ -728,13 +739,17 @@ def update_gr(
 
                     # Recalculate gross_cost when estimated_amount or tax_rate changes
                     if "estimated_amount" in allowed or "tax_rate" in allowed:
-                        merged["gross_cost"] = _compute_incl_tax(
-                            Decimal(str(merged["estimated_amount"])),
-                            merged.get("tax_rate"),
-                        )
+                        est_val = merged.get("estimated_amount")
+                        if est_val is not None:
+                            merged["gross_cost"] = _compute_incl_tax(
+                                Decimal(str(est_val)),
+                                merged.get("tax_rate"),
+                            )
+                        else:
+                            merged["gross_cost"] = None
 
-                    if not is_draft_gr and is_canc != "Y":
-                        old_amount = Decimal(str(before["estimated_amount"]))
+                    if not is_draft_gr and is_canc != "Y" and amount is not None:
+                        old_amount = Decimal(str(before["estimated_amount"] or 0))
                         if po_sc["sc_id"] == sc_id:
                             sc_budget_amount = amount - old_amount
                         else:
@@ -776,7 +791,7 @@ def update_gr(
                         (
                             merged["po_id"],
                             merged["requester_id"],
-                            float(amount),
+                            float(amount) if amount is not None else None,
                             float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
                             merged.get("tax_rate"),
                             merged.get("remark"),

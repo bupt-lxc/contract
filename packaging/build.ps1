@@ -35,12 +35,23 @@ Write-Host "=== Installing Python dependencies ===" -ForegroundColor Cyan
 uv sync --all-groups
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-# 3. Run tests
+# 3. Ensure shared production database exists, without overwriting production data
+Write-Host "=== Ensuring shared production database ===" -ForegroundColor Cyan
+$sharedDataDir = Join-Path $sharedDrive "data"
+$sharedDb = Join-Path $sharedDataDir "sc_gr.sqlite3"
+if (-not (Test-Path -LiteralPath $sharedDb)) {
+    uv run python -m sc_gr_app.db.initial_db --production $sharedDb
+    if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+} else {
+    Write-Host "Shared production database already exists, skipped: $sharedDb" -ForegroundColor Yellow
+}
+
+# 4. Run tests
 Write-Host "=== Running tests ===" -ForegroundColor Cyan
 uv run pytest -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-# 4. Clean old build artifacts
+# 5. Clean old build artifacts
 $distDir = Join-Path (Get-Location) "dist"
 $distApp = Join-Path $distDir "PO Management Platform"
 if (Test-Path -LiteralPath $distApp) {
@@ -52,7 +63,7 @@ if (Test-Path -LiteralPath $buildApp) {
     Remove-Item -LiteralPath $buildApp -Recurse -Force
 }
 
-# 5. Generate icon from PNG (needed by PyInstaller spec files)
+# 6. Generate icon from PNG (needed by PyInstaller spec files)
 Write-Host "=== Generating icon ===" -ForegroundColor Cyan
 $iconDir = Join-Path (Get-Location) "build\app"
 if (-not (Test-Path $iconDir)) {
@@ -70,7 +81,7 @@ print('logo.ico generated')
 "
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
 
-# 6. Build executable
+# 7. Build executable
 Write-Host "=== Building with PyInstaller ===" -ForegroundColor Cyan
 uv run pyinstaller packaging/app.spec
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
@@ -87,7 +98,7 @@ if ($Beta) {
 # Read version once for Inno Setup, notification, and shared drive steps
 $version = (uv run python -c "from sc_gr_app import __version__; print(__version__)").Trim()
 
-# 7. Build Inno Setup installer
+# 8. Build Inno Setup installer
 $iscc = Join-Path $env:USERPROFILE "Utils\InnoSetup6\ISCC.exe"
 if (Test-Path $iscc) {
     Write-Host "=== Building installer with Inno Setup ===" -ForegroundColor Cyan
@@ -106,7 +117,7 @@ if (Test-Path $iscc) {
     Write-Host "=== Skipping Inno Setup (not found) ===" -ForegroundColor Yellow
 }
 
-# 8. Build notification executable
+# 9. Build notification executable
 Write-Host "=== Building notification executable ===" -ForegroundColor Cyan
 uv run pyinstaller packaging/notification.spec --distpath $distDir --workpath (Join-Path $distDir "build-notification") --noconfirm
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
@@ -123,7 +134,7 @@ if ($Beta) {
 }
 Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
 
-# 9. Push to shared drive (only if shared drive is accessible)
+# 10. Push to shared drive (only if shared drive is accessible)
 $sharedReleases = Join-Path $sharedDrive "releases"
 $guiInstaller = "$setupPrefix-$version-Setup.exe"
 $notifyExe = "$notifyPrefix-$version.exe"
@@ -181,7 +192,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 
 Write-Host "Pushed version $version to $sharedReleases" -ForegroundColor Green
 
-# 10. Local release directory: non-versioned copy (for manual distribution)
+# 11. Local release directory: non-versioned copy (for manual distribution)
 if (Test-Path $guiPath) {
     $releaseDir = Join-Path $distDir "release"
     if (-not (Test-Path $releaseDir)) {

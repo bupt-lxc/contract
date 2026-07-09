@@ -8,7 +8,11 @@ from sc_gr_app.errors import ConflictError, NotFound, PermissionDenied, Validati
 from sc_gr_app.rbac import require_admin, require_requester_or_admin
 from sc_gr_app.services.record_service import write_operation_record
 from sc_gr_app.services import notification_service
-from sc_gr_app.services.budget_service import compute_sc_budget_decimal
+from sc_gr_app.services.budget_service import (
+    compute_po_budget,
+    compute_po_fc_budget,
+    compute_sc_budget_decimal,
+)
 from sc_gr_app.services.lock_service import LeaseLock
 
 
@@ -75,7 +79,7 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
         select gr_id
         from gr_requests
         where po_id = ?
-          and status = 'approved'
+          and status IN ('approved', 'finished')
           and con_value is null
         limit 1
         """,
@@ -103,6 +107,121 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
         else:
             usage += Decimal(str(row["con_value"]))
     return usage
+
+
+def _assert_can_view_po(current_user: dict, po: dict, conn) -> None:
+    if current_user.get("role") == "admin":
+        return
+    if (
+        current_user.get("role") == "requester"
+        and current_user.get("user_id") == po["requester_id"]
+    ):
+        return
+    if po.get("sc_id"):
+        assignee_row = conn.execute(
+            "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
+            (po["sc_id"], current_user.get("user_id")),
+        ).fetchone()
+        if assignee_row is not None:
+            return
+    raise PermissionDenied("PO is not visible")
+
+
+def _po_permissions(current_user: dict, po: dict) -> dict:
+    is_admin = current_user.get("role") == "admin"
+    is_owner = current_user.get("user_id") == po["requester_id"]
+    can_manage = (is_admin or is_owner) and po["status"] in ("draft", "active")
+    return {
+        "is_admin": is_admin,
+        "can_delete_po": is_admin or is_owner,
+        "can_manage_po": can_manage,
+        "can_manage_gr": can_manage,
+    }
+
+
+def get_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    return get_po_detail(config, current_user, po_id)["po"]
+
+
+def get_po_detail(config: AppConfig, current_user: dict, po_id: str) -> dict:
+    """Return PO detail for independent PO routes.
+
+    SC-linked detail pages still load through get_sc_detail, but this endpoint
+    also supports linked POs for deep links and protocol navigation.
+    """
+    with connect(config) as conn:
+        row = conn.execute(
+            """
+            select
+              po.*,
+              sc.sc_no,
+              coalesce(po.request_type, sc.request_type) as sc_request_type,
+              u.user_name as requester_name,
+              vendor.vendor_name,
+              vendor.ksrm_vendor_code
+            from pos po
+            left join sc_records sc on sc.sc_id = po.sc_id
+            join users u on u.user_id = po.requester_id
+            join vendors vendor on vendor.vendor_id = po.vendor_id
+            where po.po_id = ?
+            """,
+            (po_id,),
+        ).fetchone()
+        if row is None:
+            raise NotFound(f"PO not found: {po_id}")
+
+        po = _row_to_dict(row)
+        _assert_can_view_po(current_user, po, conn)
+
+        records = [
+            _row_to_dict(record)
+            for record in conn.execute(
+                """
+                select *
+                from operation_records
+                where object_type = 'po' and object_id = ?
+                order by created_at desc
+                """,
+                (po_id,),
+            )
+        ]
+
+        calloff_scs = [
+            _row_to_dict(sc)
+            for sc in conn.execute(
+                """
+                select sc.*, u.user_name as requester_name
+                from sc_records sc
+                left join users u on u.user_id = sc.requester_id
+                where sc.calloff_po_id = ?
+                order by sc.created_at, sc.sc_id
+                """,
+                (po_id,),
+            )
+        ]
+
+    is_fc_po = po.get("sc_request_type") == "FC"
+    if is_fc_po:
+        po_budget = compute_po_fc_budget(config, po_id)
+        po["open_po_amount"] = po_budget["open_po_amount"]
+        po["allocated_calloff_amount"] = po_budget["allocated_calloff_amount"]
+        po["pending_calloff_amount"] = po_budget["pending_calloff_amount"]
+        po["downstream_consumed"] = po_budget["downstream_consumed"]
+        po["downstream_pending_gr"] = po_budget["downstream_pending_gr"]
+        po["downstream_pending_gr_tax"] = po_budget["downstream_pending_gr_tax"]
+    else:
+        po["budget"] = compute_po_budget(config, po_id)
+        po["open_po_amount"] = po["budget"]["open_po_amount"]
+        po["consumed_amount"] = po["budget"]["po_con_value_total"]
+        po["pending_total"] = po["budget"]["po_pending_total"]
+        po["pending_total_incl_tax"] = po["budget"]["po_pending_total_incl_tax"]
+
+    return {
+        "po": po,
+        "calloff_scs": calloff_scs if is_fc_po else [],
+        "operation_records": records,
+        "permissions": _po_permissions(current_user, po),
+    }
 
 
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:

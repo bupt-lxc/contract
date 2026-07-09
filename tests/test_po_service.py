@@ -371,6 +371,42 @@ class TestPoCreate:
         assert po["status"] == "draft"
 
 
+class TestIndependentFcPoDetail:
+    def test_get_po_detail_returns_independent_fc_po(self, seeded_config):
+        """Independent FC PO detail can be opened without a parent SC."""
+        from sc_gr_app.services.po_service import get_po_detail
+
+        with connect(seeded_config) as conn:
+            admin = dict(conn.execute(
+                "select * from users where role = 'admin' limit 1"
+            ).fetchone())
+
+        vendor = create_vendor(seeded_config, admin, {
+            "vendor_name": "Independent FC Vendor",
+            "service_scope": "General Service",
+        })
+
+        po = create_po(seeded_config, admin, {
+            "vendor_id": vendor["vendor_id"],
+            "po_amount": "120000",
+            "request_type": "FC",
+            "status": "active",
+            "po_no": "PO-FC-INDEPENDENT",
+        })
+
+        detail = get_po_detail(seeded_config, admin, po["po_id"])
+
+        assert detail["po"]["po_id"] == po["po_id"]
+        assert detail["po"]["sc_id"] is None
+        assert detail["po"]["request_type"] == "FC"
+        assert detail["po"]["sc_request_type"] == "FC"
+        assert detail["po"]["vendor_name"] == "Independent FC Vendor"
+        assert detail["po"]["open_po_amount"] == 120000.0
+        assert detail["po"]["allocated_calloff_amount"] == 0.0
+        assert detail["calloff_scs"] == []
+        assert detail["permissions"]["can_manage_po"] is True
+
+
 class TestPoSubmit:
     def test_submit_draft_po_to_active(self, seeded_config):
         """Submit draft PO transitions to active."""

@@ -393,9 +393,9 @@ def search_pos(
 
     if filters and "is_fc_po" in filters:
         if filters["is_fc_po"] == "1":
-            base_clauses.append("(po.request_type = 'FC' OR sc.request_type = 'FC')")
+            base_clauses.append("(po.request_type IS 'FC' OR sc.request_type IS 'FC')")
         elif filters["is_fc_po"] == "0":
-            base_clauses.append("(po.request_type IS NULL AND sc.request_type != 'FC')")
+            base_clauses.append("(po.request_type IS NOT 'FC' AND sc.request_type IS NOT 'FC')")
         filters = {k: v for k, v in filters.items() if k != "is_fc_po"}
 
     if filters and "is_independent" in filters:
@@ -432,7 +432,7 @@ def search_pos(
             po_id,
             sum(case when status in ('pending', 'manager_confirm')
                       then estimated_amount else 0 end) as pending_total,
-            sum(case when status = 'approved'
+            sum(case when status IN ('approved', 'finished')
                       then con_value else 0 end) as con_value_total,
             sum(case when status in ('pending', 'manager_confirm')
                       then coalesce(gross_cost, estimated_amount)
@@ -745,7 +745,7 @@ def workbench_data(
                 f"  SELECT po_id,"
                 f"    SUM(CASE WHEN status IN ('pending', 'manager_confirm') "
                 f"THEN estimated_amount ELSE 0 END) AS pending_total,"
-                f"    SUM(CASE WHEN status = 'approved' "
+                f"    SUM(CASE WHEN status IN ('approved', 'finished') "
                 f"THEN con_value ELSE 0 END) AS con_value_total"
                 f"  FROM gr_requests GROUP BY po_id"
                 f") gr_sums ON gr_sums.po_id = po.po_id "

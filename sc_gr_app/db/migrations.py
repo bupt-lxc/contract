@@ -7,7 +7,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -2024,6 +2024,7 @@ def _migrate_v38(conn) -> None:
     """
     has_gr = _table_exists(conn, "gr_requests")
     if not has_gr:
+        _record(conn, 38)
         return
 
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
@@ -2043,8 +2044,9 @@ def _migrate_v38(conn) -> None:
           gr_no TEXT,
           po_id TEXT NOT NULL REFERENCES pos(po_id),
           requester_id TEXT NOT NULL REFERENCES users(user_id),
-          estimated_amount REAL NOT NULL CHECK (
-            (is_cancellation = 'N' AND estimated_amount > 0) OR
+          estimated_amount REAL CHECK (
+            estimated_amount IS NULL OR
+            (is_cancellation = 'N' AND estimated_amount >= 0) OR
             (is_cancellation = 'Y' AND estimated_amount < 0)
           ),
           con_value REAL CHECK (
@@ -2104,6 +2106,82 @@ def _migrate_v38(conn) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
     _record(conn, 38)
+
+
+def _migrate_v39(conn) -> None:
+    """Relax estimated_amount CHECK: allow zero (>= 0) instead of (> 0)."""
+    has_gr = _table_exists(conn, "gr_requests")
+    if not has_gr:
+        _record(conn, 39)
+        return
+    conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    conn.execute("""
+        CREATE TABLE gr_requests (
+          gr_id TEXT PRIMARY KEY,
+          gr_no TEXT,
+          po_id TEXT NOT NULL REFERENCES pos(po_id),
+          requester_id TEXT NOT NULL REFERENCES users(user_id),
+          estimated_amount REAL CHECK (
+            estimated_amount IS NULL OR
+            (is_cancellation = 'N' AND estimated_amount >= 0) OR
+            (is_cancellation = 'Y' AND estimated_amount < 0)
+          ),
+          con_value REAL CHECK (
+            con_value IS NULL OR
+            (is_cancellation = 'N' AND con_value >= 0) OR
+            (is_cancellation = 'Y' AND con_value <= 0)
+          ),
+          gross_cost REAL,
+          tax_rate REAL,
+          status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+          remark TEXT,
+          created_by TEXT NOT NULL REFERENCES users(user_id),
+          created_at TEXT NOT NULL,
+          approved_by TEXT REFERENCES users(user_id),
+          approved_at TEXT,
+          denied_by TEXT REFERENCES users(user_id),
+          denied_at TEXT,
+          finished_by TEXT REFERENCES users(user_id),
+          finished_at TEXT,
+          confirmed_at TEXT,
+          pending_date TEXT,
+          approved_date TEXT,
+          submitted_date TEXT,
+          goods_service_description TEXT,
+          confirmation_name TEXT,
+          delivery_from TEXT,
+          delivery_to TEXT,
+          last_delivery TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          is_cancellation TEXT NOT NULL DEFAULT 'N' CHECK (is_cancellation IN ('N', 'Y'))
+        )
+    """)
+    conn.execute("""
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery, updated_at,
+          is_cancellation
+        )
+        SELECT
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery,
+          COALESCE(updated_at, datetime('now')),
+          is_cancellation
+        FROM gr_requests_old
+    """)
+    conn.execute("DROP TABLE gr_requests_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    _record(conn, 39)
 
 
 def _get_initial_db_path() -> Path:
@@ -2326,6 +2404,12 @@ def migrate(config: AppConfig) -> None:
                 conn.execute("PRAGMA foreign_keys = OFF")
                 conn.execute("BEGIN")
                 _migrate_v38(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 39 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v39(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
         except Exception:

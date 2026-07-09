@@ -336,7 +336,7 @@ def _budget_health(conn, filters, selected_ids):
         gr_totals = conn.execute("""
             SELECT
               coalesce(sum(case when gr.status in ('pending', 'manager_confirm') then coalesce(gr.gross_cost, gr.estimated_amount) else 0 end), 0) as pending_tax,
-              coalesce(sum(case when gr.status = 'approved' then coalesce(gr.con_value, 0) else 0 end), 0) as consumed
+              coalesce(sum(case when gr.status IN ('approved', 'finished') then coalesce(gr.con_value, 0) else 0 end), 0) as consumed
             FROM gr_requests gr
             JOIN pos po ON po.po_id = gr.po_id
             WHERE po.sc_id = ?

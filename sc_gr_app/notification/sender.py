@@ -54,7 +54,7 @@ def _attach_budget_info(
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN status = 'approved'
+              COALESCE(SUM(CASE WHEN status IN ('approved', 'finished')
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gross_cost, estimated_amount, 0)
@@ -95,7 +95,7 @@ def _attach_budget_info(
             SELECT
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gr.con_value, gr.estimated_amount) ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN gr.status = 'approved'
+              COALESCE(SUM(CASE WHEN gr.status IN ('approved', 'finished')
                                  THEN gr.con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gr.gross_cost, gr.estimated_amount)
@@ -153,7 +153,7 @@ def _attach_child_pos(
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN status = 'approved'
+              COALESCE(SUM(CASE WHEN status IN ('approved', 'finished')
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gross_cost, estimated_amount, 0)

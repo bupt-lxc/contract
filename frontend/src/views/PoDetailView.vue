@@ -246,7 +246,7 @@ const po = computed(() => {
   }
   return poDetail.value?.po || {}
 })
-const isFcPo = computed(() => po.value?.sc_request_type === 'FC')
+const isFcPo = computed(() => po.value?.request_type === 'FC' || po.value?.sc_request_type === 'FC')
 const grs = computed(() => {
   if (hasSc.value) {
     const allGrs = scDetail.value?.grs || []
@@ -269,7 +269,10 @@ const permissions = computed(() => {
   }
   return poDetail.value?.permissions || {}
 })
-const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
+const isRequester = computed(() => {
+  const ownerId = hasSc.value ? scDetail.value?.sc?.requester_id : po.value?.requester_id
+  return window.__currentUser?.user_id === ownerId
+})
 const notificationConfig = computed(() => notifState.poConfig)
 const customSchedules = computed(() => notifState.customSchedules || [])
 
