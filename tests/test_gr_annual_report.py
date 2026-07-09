@@ -1,6 +1,6 @@
 import pytest
 from sc_gr_app.services.gr_service import get_annual_report_data
-from sc_gr_app.errors import ValidationError
+from sc_gr_app.errors import PermissionDenied, ValidationError
 
 
 def test_get_annual_report_filters_by_year_and_status(app_config, sample_data):
@@ -48,3 +48,12 @@ def test_get_annual_report_rejects_invalid_year(app_config, sample_data):
         get_annual_report_data(app_config, "abc", {"role": "admin", "user_id": "u1", "machine_id": "M000001"})
     with pytest.raises(ValidationError):
         get_annual_report_data(app_config, "202", {"role": "admin", "user_id": "u1", "machine_id": "M000001"})
+
+
+def test_get_annual_report_requires_admin(app_config, sample_data):
+    with pytest.raises(PermissionDenied):
+        get_annual_report_data(
+            app_config,
+            "2026",
+            {"role": "requester", "user_id": "u1", "machine_id": "M000001"},
+        )

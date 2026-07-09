@@ -1094,3 +1094,47 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return before
+
+
+def _validate_annual_report_year(year: str) -> str:
+    import re
+
+    if not isinstance(year, str) or not re.fullmatch(r"\d{4}", year):
+        raise ValidationError("year must be a 4-digit string")
+    return year
+
+
+def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> list[dict]:
+    """Return approved/finished GR rows in the selected report year."""
+    require_admin(current_user)
+    year = _validate_annual_report_year(year)
+
+    with connect(config) as conn:
+        rows = conn.execute(
+            """
+            select
+              gr.*,
+              po.po_no,
+              po.sc_id,
+              sc.sc_no,
+              sc.cost_center,
+              vendor.vendor_name,
+              u.user_name as requester_name
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            left join sc_records sc on sc.sc_id = po.sc_id
+            join vendors vendor on vendor.vendor_id = po.vendor_id
+            left join users u on u.user_id = gr.requester_id
+            where gr.status in ('approved', 'finished')
+              and (
+                (gr.status = 'finished' and substr(gr.finished_at, 1, 4) = ?)
+                or
+                (gr.status = 'approved' and substr(gr.approved_date, 1, 4) = ?)
+              )
+            order by coalesce(gr.finished_at, gr.approved_date, gr.created_at) desc,
+                     gr.gr_no
+            """,
+            (year, year),
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]
