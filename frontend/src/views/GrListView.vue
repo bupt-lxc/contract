@@ -19,7 +19,7 @@
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
-      <el-button @click="openAnnualReportDialog">
+      <el-button v-if="isAdmin" @click="openAnnualReportDialog">
         <el-icon><Download /></el-icon> {{ $t('gr.annualReport') }}
       </el-button>
     </div>
@@ -187,6 +187,7 @@
             placeholder="YYYY"
             format="YYYY"
             value-format="YYYY"
+            :clearable="false"
             style="width:100%"
           />
         </el-form-item>
@@ -455,7 +456,8 @@ function openAnnualReportDialog() {
 async function handleAnnualExport() {
   annualExporting.value = true
   try {
-    const result = await callApi('get_gr_annual_report', { year: annualReportYear.value })
+    const year = annualReportYear.value || new Date().getFullYear().toString()
+    const result = await callApi('get_gr_annual_report', { year })
     const rows = result.rows || []
 
     // Build column definitions matching the spec
@@ -490,7 +492,8 @@ async function handleAnnualExport() {
       ...remainingKeys.map(k => ({ key: k, label: k })),
     ]
 
-    await exportRows(rows, allColumns, `GR_Annual_Report_${annualReportYear.value}`)
+    const saveResult = await exportRows(rows, allColumns, `GR_Annual_Report_${year}`)
+    if (saveResult?.cancelled) return
     ElMessage.success(t('msg.exportedSuccessfully'))
     annualReportVisible.value = false
   } catch (e) {
