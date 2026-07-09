@@ -13,6 +13,7 @@
 ## File Map
 
 - `sc_gr_app/db/migrations.py`: bump schema to v40 and create `po_manual_amounts`.
+- `sc_gr_app/db/schema.sql`: add `po_manual_amounts` to fresh schema creation.
 - `sc_gr_app/services/po_service.py`: add manual amount CRUD helpers, permission flag, PO detail data, PO deletion cleanup, and annual report values.
 - `sc_gr_app/services/sc_service.py`: attach manual amounts to nested PO rows and clean them when deleting an SC directly.
 - `sc_gr_app/api/bridge.py`: expose list/create/delete bridge methods and format top-level and nested manual amount timestamps.
@@ -23,13 +24,15 @@
 - `tests/test_migrations.py`: assert v40 schema, constraints, and index.
 - `tests/test_po_manual_amounts.py`: cover service create/list/delete, permission, detail, deletion cleanup, and calculation non-interference.
 - `tests/test_po_annual_report.py`: cover manual columns in PO annual report and blank SC-only rows.
+- `tests/test_gr_annual_report.py`: verify manual amounts do not affect GR annual report.
 - `tests/test_api_bridge.py`: cover bridge forwarding and timestamp formatting for manual amounts.
 
 ## Invariants
 
 - Manual amounts do not call `write_operation_record`, `notification_service`, or email/outlook helpers.
 - Manual amounts do not change `compute_po_budget`, `compute_sc_budget`, GR status behavior, PO open amount, SC amount, PO amount, or validation comparing PO/SC/GR amounts.
-- Add/delete permission is exposed as `can_manage_po_manual_amounts`; do not reuse `can_manage_po` because finished POs must remain editable for this feature. In the SC nested detail route, expose this flag on each PO row as well so the current PO requester and the parent SC requester are both represented accurately.
+- Manual amounts do not affect GR annual report, PO search/filter/list columns, regular PO export, PO import, PO template download, dashboards, or batch import/export.
+- Add/delete permission is exposed as `can_manage_po_manual_amounts`; do not reuse `can_manage_po` because finished POs must remain editable for this feature. For SC-linked POs, visibility and mutation are based on the current owning SC requester, not the historical `pos.requester_id`; for independent POs with no SC, visibility and mutation use the PO requester. SC assignees retain read-only visibility only.
 - `year` is a four-digit string. `amount` accepts positive, zero, and negative numeric values.
 - Duplicate `(po_id, year, type)` raises `ConflictError`.
 - Annual report missing manual records render as `""`, not `0`.
@@ -41,9 +44,16 @@
 
 **Files:**
 - Modify: `sc_gr_app/db/migrations.py`
+- Modify: `sc_gr_app/db/schema.sql`
 - Modify: `tests/test_migrations.py`
 
 - [ ] **Step 1: Write the failing migration tests**
+
+Add `Path` to the imports in `tests/test_migrations.py`:
+
+```python
+from pathlib import Path
+```
 
 Add these tests near the other schema tests in `tests/test_migrations.py`:
 
@@ -61,7 +71,7 @@ def test_migration_creates_po_manual_amounts_table(app_config):
             for row in conn.execute("PRAGMA index_list(po_manual_amounts)")
         }
 
-    assert columns == {
+    assert columns.items() >= {
         "manual_amount_id": "TEXT",
         "po_id": "TEXT",
         "year": "TEXT",
@@ -69,8 +79,16 @@ def test_migration_creates_po_manual_amounts_table(app_config):
         "amount": "REAL",
         "created_by": "TEXT",
         "created_at": "TEXT",
-    }
+    }.items()
     assert "idx_po_manual_amounts_po_id" in indexes
+
+
+def test_schema_sql_includes_po_manual_amounts():
+    schema_sql = Path("sc_gr_app/db/schema.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS po_manual_amounts" in schema_sql
+    assert "UNIQUE(po_id, year, type)" in schema_sql
+    assert "idx_po_manual_amounts_po_id" in schema_sql
 
 
 def test_po_manual_amounts_constraints(app_config):
@@ -168,14 +186,35 @@ def _migrate_v40(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id "
         "ON po_manual_amounts(po_id)"
     )
+    _record(conn, 40)
 ```
 
-In `migrate()`, immediately after the v39 block, add:
+In `migrate()`, immediately after the v39 block, follow the existing `_applied_versions` style and add:
 
 ```python
-            if max_applied < 40:
+            if 40 not in _applied_versions(conn):
+                conn.execute("BEGIN")
                 _migrate_v40(conn)
-                record_migration(conn, 40)
+                conn.commit()
+```
+
+Do not introduce a `record_migration` function. This codebase records migration versions with `_record(conn, version)` inside each `_migrate_vN` function.
+
+Update `sc_gr_app/db/schema.sql` after the `pos` table and before dependent PO child tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS po_manual_amounts (
+  manual_amount_id TEXT PRIMARY KEY,
+  po_id TEXT NOT NULL REFERENCES pos(po_id),
+  year TEXT NOT NULL CHECK (year GLOB '[0-9][0-9][0-9][0-9]'),
+  type TEXT NOT NULL CHECK (type IN ('provision', 'to_be_gr')),
+  amount REAL NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(user_id),
+  created_at TEXT NOT NULL,
+  UNIQUE(po_id, year, type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id ON po_manual_amounts(po_id);
 ```
 
 - [ ] **Step 4: Run migration tests and verify pass**
@@ -193,7 +232,7 @@ Expected: all selected tests pass and recorded migration versions include 40.
 Run:
 
 ```powershell
-git add sc_gr_app/db/migrations.py tests/test_migrations.py
+git add sc_gr_app/db/migrations.py sc_gr_app/db/schema.sql tests/test_migrations.py
 git commit -m "feat: add PO manual amounts migration"
 ```
 
@@ -222,6 +261,7 @@ from sc_gr_app.services import po_service
 ADMIN = {"user_id": "U_ADMIN", "role": "admin", "machine_id": "M_ADMIN"}
 PO_REQUESTER = {"user_id": "U_PO", "role": "requester", "machine_id": "M_PO"}
 SC_REQUESTER = {"user_id": "U_SC", "role": "requester", "machine_id": "M_SC"}
+SC_ASSIGNEE = {"user_id": "U_ASSIGNEE", "role": "requester", "machine_id": "M_ASSIGNEE"}
 OTHER = {"user_id": "U_OTHER", "role": "requester", "machine_id": "M_OTHER"}
 
 
@@ -235,6 +275,7 @@ def _seed(config, po_status="active"):
           ('U_ADMIN', 'M_ADMIN', 'Admin User', 'admin', 'admin@test.local', 'active', '2026-01-01', '2026-01-01'),
           ('U_PO', 'M_PO', 'PO Requester', 'requester', 'po@test.local', 'active', '2026-01-01', '2026-01-01'),
           ('U_SC', 'M_SC', 'SC Requester', 'requester', 'sc@test.local', 'active', '2026-01-01', '2026-01-01'),
+          ('U_ASSIGNEE', 'M_ASSIGNEE', 'SC Assignee', 'requester', 'assignee@test.local', 'active', '2026-01-01', '2026-01-01'),
           ('U_OTHER', 'M_OTHER', 'Other User', 'requester', 'other@test.local', 'active', '2026-01-01', '2026-01-01');
 
         INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at)
@@ -247,11 +288,16 @@ def _seed(config, po_status="active"):
         )
         VALUES ('SC1', 'SC-001', 'U_SC', 'new', 1000, 10000, '2026-01-01', '2026-12-31', 'approved', 'Approved SC', 'U_ADMIN', '2026-01-01', '2026-01-01');
 
+        INSERT INTO sc_assignees (sc_id, user_id)
+        VALUES ('SC1', 'U_ASSIGNEE');
+
         INSERT INTO pos (
           po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
           created_at, updated_at, finished_at
         )
-        VALUES ('PO1', 'SC1', 'V1', 'PO-001', 'U_PO', 5000, '{po_status}', '2026-01-01', '2026-01-01', '2026-06-01');
+        VALUES
+          ('PO1', 'SC1', 'V1', 'PO-001', 'U_PO', 5000, '{po_status}', '2026-01-01', '2026-01-01', '2026-06-01'),
+          ('PO_INDEPENDENT', NULL, 'V1', 'PO-INDEP', 'U_PO', 3000, '{po_status}', '2026-01-01', '2026-01-01', '2026-06-01');
         """
     )
     conn.commit()
@@ -319,10 +365,10 @@ def test_manual_amount_validation_and_duplicate(app_config):
         )
 
 
-def test_manual_amount_mutation_permissions_include_admin_po_owner_and_sc_owner(app_config):
+def test_manual_amount_mutation_permissions_for_linked_and_independent_pos(app_config):
     _seed(app_config)
 
-    for index, user in enumerate((ADMIN, PO_REQUESTER, SC_REQUESTER), start=1):
+    for index, user in enumerate((ADMIN, SC_REQUESTER), start=1):
         created = po_service.create_po_manual_amount(
             app_config,
             user,
@@ -334,9 +380,25 @@ def test_manual_amount_mutation_permissions_include_admin_po_owner_and_sc_owner(
             app_config, user, created["manual_amount_id"]
         )["deleted"] is True
 
+    independent = po_service.create_po_manual_amount(
+        app_config,
+        PO_REQUESTER,
+        "PO_INDEPENDENT",
+        {"year": "2025", "type": "provision", "amount": 10},
+    )
+    assert po_service.delete_po_manual_amount(
+        app_config, PO_REQUESTER, independent["manual_amount_id"]
+    )["deleted"] is True
+
+    for user in (PO_REQUESTER, SC_ASSIGNEE, OTHER):
+        with pytest.raises(PermissionDenied):
+            po_service.create_po_manual_amount(
+                app_config, user, "PO1", {"year": "2026", "type": "provision", "amount": 1}
+            )
+
     with pytest.raises(PermissionDenied):
         po_service.create_po_manual_amount(
-            app_config, OTHER, "PO1", {"year": "2026", "type": "provision", "amount": 1}
+            app_config, OTHER, "PO_INDEPENDENT", {"year": "2026", "type": "provision", "amount": 1}
         )
 
 
@@ -344,12 +406,12 @@ def test_manual_amounts_allowed_on_finished_po(app_config):
     _seed(app_config, po_status="finished")
 
     created = po_service.create_po_manual_amount(
-        app_config, PO_REQUESTER, "PO1", {"year": "2026", "type": "to_be_gr", "amount": 12}
+        app_config, SC_REQUESTER, "PO1", {"year": "2026", "type": "to_be_gr", "amount": 12}
     )
 
     assert created["amount"] == 12
     assert po_service.delete_po_manual_amount(
-        app_config, PO_REQUESTER, created["manual_amount_id"]
+        app_config, SC_REQUESTER, created["manual_amount_id"]
     )["deleted"] is True
 ```
 
@@ -429,17 +491,14 @@ def _is_parent_sc_requester(current_user: dict, po: dict, conn) -> bool:
 def _can_manage_po_manual_amounts(current_user: dict, po: dict, conn) -> bool:
     if current_user.get("role") == "admin":
         return True
-    user_id = current_user.get("user_id")
-    if user_id and user_id == po.get("requester_id"):
-        return True
-    if _is_parent_sc_requester(current_user, po, conn):
-        return True
-    return False
+    if po.get("sc_id"):
+        return _is_parent_sc_requester(current_user, po, conn)
+    return current_user.get("user_id") == po.get("requester_id")
 
 
 def _assert_can_manage_po_manual_amounts(current_user: dict, po: dict, conn) -> None:
     if not _can_manage_po_manual_amounts(current_user, po, conn):
-        raise PermissionDenied("Only admin, PO requester, or SC requester can manage manual PO amounts")
+        raise PermissionDenied("Only admin, owning SC requester, or independent PO requester can manage manual PO amounts")
 
 
 def _validate_manual_amount_data(data: dict) -> tuple[str, str, float]:
@@ -461,30 +520,31 @@ def _validate_manual_amount_data(data: dict) -> tuple[str, str, float]:
     return year, record_type, float(amount)
 ```
 
-Update `_assert_can_view_po` so the owning SC requester can view and mutate linked POs:
+Update `_assert_can_view_po` so SC-linked PO visibility follows the owning SC requester and SC assignee rules, while independent PO visibility still follows the PO requester:
 
 ```python
 def _assert_can_view_po(current_user: dict, po: dict, conn) -> None:
     if current_user.get("role") == "admin":
         return
-    if (
-        current_user.get("role") == "requester"
-        and current_user.get("user_id") == po["requester_id"]
-    ):
-        return
-    if _is_parent_sc_requester(current_user, po, conn):
-        return
     if po.get("sc_id"):
+        if _is_parent_sc_requester(current_user, po, conn):
+            return
         assignee_row = conn.execute(
             "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
             (po["sc_id"], current_user.get("user_id")),
         ).fetchone()
         if assignee_row is not None:
             return
+        raise PermissionDenied("PO is not visible")
+    if (
+        current_user.get("role") == "requester"
+        and current_user.get("user_id") == po["requester_id"]
+    ):
+        return
     raise PermissionDenied("PO is not visible")
 ```
 
-Change `_po_permissions` to require a connection and include the new flag:
+Change `_po_permissions` to require a connection and include the new flag. Keep existing PO manage/delete semantics intact; the new finished-PO edit behavior must live only in `can_manage_po_manual_amounts`:
 
 ```python
 def _po_permissions(current_user: dict, po: dict, conn) -> dict:
@@ -612,10 +672,17 @@ def test_po_and_sc_detail_include_manual_amounts_and_permission(app_config):
         app_config, ADMIN, "PO1", {"year": "2025", "type": "provision", "amount": 11}
     )
 
-    po_detail = po_service.get_po_detail(app_config, PO_REQUESTER, "PO1")
+    po_detail = po_service.get_po_detail(app_config, SC_REQUESTER, "PO1")
     assert po_detail["manual_amounts"][0]["manual_amount_id"] == created["manual_amount_id"]
     assert po_detail["manual_amounts"][0]["created_by_name"] == "Admin User"
     assert po_detail["permissions"]["can_manage_po_manual_amounts"] is True
+
+    assignee_detail = po_service.get_po_detail(app_config, SC_ASSIGNEE, "PO1")
+    assert assignee_detail["manual_amounts"][0]["manual_amount_id"] == created["manual_amount_id"]
+    assert assignee_detail["permissions"]["can_manage_po_manual_amounts"] is False
+
+    with pytest.raises(PermissionDenied):
+        po_service.get_po_detail(app_config, PO_REQUESTER, "PO1")
 
     from sc_gr_app.services import sc_service
 
@@ -737,7 +804,6 @@ After the connection closes, add the records to each PO row:
         po["manual_amounts"] = manual_amounts_by_po.get(po["po_id"], [])
         po["can_manage_po_manual_amounts"] = (
             current_user.get("role") == "admin"
-            or current_user.get("user_id") == po.get("requester_id")
             or current_user.get("user_id") == sc.get("requester_id")
         )
 ```
@@ -1002,6 +1068,7 @@ git commit -m "feat: expose PO manual amount bridge methods"
 **Files:**
 - Modify: `sc_gr_app/services/po_service.py`
 - Modify: `tests/test_po_annual_report.py`
+- Modify: `tests/test_gr_annual_report.py`
 
 - [ ] **Step 1: Add failing annual report tests**
 
@@ -1015,7 +1082,8 @@ In `_seed` in `tests/test_po_annual_report.py`, add manual rows after the existi
           ('PMA-PREV', 'PO_ACTIVE_APPROVED', '2024', 'provision', -10, 'U_REQ', '2025-01-01'),
           ('PMA-TBG', 'PO_ACTIVE_APPROVED', '2025', 'to_be_gr', 222, 'U_REQ', '2025-01-01'),
           ('PMA-OTHER-YEAR', 'PO_ACTIVE_APPROVED', '2026', 'to_be_gr', 999, 'U_REQ', '2025-01-01'),
-          ('PMA-OTHER-PO', 'PO_ACTIVE_INDEPENDENT', '2024', 'provision', 333, 'U_REQ', '2025-01-01');
+          ('PMA-OTHER-PO', 'PO_ACTIVE_INDEPENDENT', '2024', 'provision', 333, 'U_REQ', '2025-01-01'),
+          ('PMA-DRAFT-ONLY', 'PO_DRAFT_ONLY', '2024', 'provision', 444, 'U_REQ', '2025-01-01');
 ```
 
 In `test_po_annual_report_maps_amounts_and_blank_columns`, change the manual column assertions to:
@@ -1032,19 +1100,53 @@ Add this assertion to `test_po_annual_report_includes_qualifying_po_rows_and_sc_
 ```python
     assert sc_rows["SC-APP-002"]["previous_year_provision"] == ""
     assert sc_rows["SC-APP-002"]["selected_year_to_be_gr"] == ""
+    assert "PO-DRAFT-ONLY" not in po_rows
 ```
 
 Add this test:
 
 ```python
-def test_po_annual_report_missing_manual_amounts_are_blank(app_config):
+def test_po_annual_report_manual_records_do_not_expand_selection_scope(app_config):
     _seed(app_config)
 
     rows = po_service.get_annual_report_data(app_config, "2025", ADMIN)
     independent = _by_po(rows)["PO-ACT-FC"]
+    po_rows = _by_po(rows)
+    sc_rows = _by_sc(rows)
 
     assert independent["previous_year_provision"] == 333
     assert independent["selected_year_to_be_gr"] == ""
+    assert "PO-DRAFT-ONLY" not in po_rows
+    assert sc_rows["SC-APP-002"]["previous_year_provision"] == ""
+    assert sc_rows["SC-APP-002"]["selected_year_to_be_gr"] == ""
+```
+
+Add a GR annual report guard in `tests/test_gr_annual_report.py`. Insert one manual amount for the sample PO after `sample_data` is created, then assert the existing GR annual report output is unchanged:
+
+```python
+def test_gr_annual_report_ignores_po_manual_amounts(app_config, sample_data):
+    import sqlite3
+
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute(
+        """
+        INSERT INTO po_manual_amounts (
+          manual_amount_id, po_id, year, type, amount, created_by, created_at
+        ) VALUES ('PMA-GR-GUARD', 'po-001', '2026', 'to_be_gr', 999999, 'u1', '2026-07-09')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    rows = get_annual_report_data(
+        app_config,
+        "2026",
+        {"role": "admin", "user_id": "u1", "machine_id": "M000001"},
+    )
+
+    assert {row["gr_no"] for row in rows} == {"GR-001", "GR-002"}
+    assert all("selected_year_to_be_gr" not in row for row in rows)
+    assert all("previous_year_provision" not in row for row in rows)
 ```
 
 - [ ] **Step 2: Run annual report tests and verify failure**
@@ -1052,7 +1154,7 @@ def test_po_annual_report_missing_manual_amounts_are_blank(app_config):
 Run:
 
 ```powershell
-pytest tests/test_po_annual_report.py -q
+pytest tests/test_po_annual_report.py tests/test_gr_annual_report.py -q
 ```
 
 Expected: tests fail because manual amount columns are still hard-coded blanks.
@@ -1124,14 +1226,14 @@ Run:
 pytest tests/test_po_annual_report.py -q
 ```
 
-Expected: annual report tests pass and SC-only rows keep manual columns blank.
+Expected: annual report tests pass, SC-only rows keep manual columns blank, manual-only POs do not enter the PO annual report, and GR annual report output stays unchanged.
 
 - [ ] **Step 5: Commit**
 
 Run:
 
 ```powershell
-git add sc_gr_app/services/po_service.py tests/test_po_annual_report.py
+git add sc_gr_app/services/po_service.py tests/test_po_annual_report.py tests/test_gr_annual_report.py
 git commit -m "feat: include manual amounts in PO annual report"
 ```
 
@@ -1188,7 +1290,7 @@ Keep the existing returned names intact.
 
 - [ ] **Step 2: Add translations**
 
-Add this object under the existing `po` namespace in `frontend/src/i18n/locales/en-US.js`:
+Add these flat keys under the existing `po` namespace in `frontend/src/i18n/locales/en-US.js`:
 
 ```js
 manualAnnualAmounts: 'Manual Annual Amounts',
@@ -1200,9 +1302,13 @@ manualAmountCreatedBy: 'Created By',
 manualAmountCreatedAt: 'Created At',
 manualAmountProvision: 'Provision',
 manualAmountToBeGr: 'To be GR',
-deleteManualAmountConfirm: 'Delete this manual annual amount record?',
+deleteManualAmountConfirm: 'Delete {year} {type} manual amount {amount}?',
 manualAmountSaved: 'Manual annual amount saved',
 manualAmountDeleted: 'Manual annual amount deleted',
+manualAmountNoRecords: 'No manual annual amount records',
+manualAmountInvalidYear: 'Year must be four digits',
+manualAmountAmountRequired: 'Amount is required',
+manualAmountRefreshFailed: 'Saved, but refresh failed. Refresh the detail page to see the latest records.',
 ```
 
 Add the matching Chinese keys under `po` in `frontend/src/i18n/locales/zh-CN.js`:
@@ -1217,10 +1323,16 @@ manualAmountCreatedBy: '记录人',
 manualAmountCreatedAt: '记录时间',
 manualAmountProvision: 'Provision',
 manualAmountToBeGr: 'To be GR',
-deleteManualAmountConfirm: '确认删除这条手工年度金额记录？',
+deleteManualAmountConfirm: '确认删除 {year} {type} 手工年度金额 {amount}？',
 manualAmountSaved: '手工年度金额已保存',
 manualAmountDeleted: '手工年度金额已删除',
+manualAmountNoRecords: '暂无手工年度金额记录',
+manualAmountInvalidYear: '年份必须是四位数字',
+manualAmountAmountRequired: '金额必填',
+manualAmountRefreshFailed: '已保存，但刷新失败。请刷新详情页查看最新记录。',
 ```
+
+Keep the locale file's existing UTF-8 Chinese text style; do not paste mojibake text.
 
 - [ ] **Step 3: Add state and handlers in `PoDetailView.vue`**
 
@@ -1252,6 +1364,7 @@ const manualAmounts = computed(() => {
 })
 
 const canManagePoManualAmounts = computed(() => {
+  if (hasSc.value) return Boolean(po.value?.can_manage_po_manual_amounts)
   return Boolean(
     po.value?.can_manage_po_manual_amounts
     || permissions.value?.can_manage_po_manual_amounts
@@ -1269,6 +1382,34 @@ const manualAmountForm = reactive({
   type: 'to_be_gr',
   amount: 0,
 })
+const manualAmountFormRef = ref(null)
+const manualAmountRules = {
+  year: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!/^\d{4}$/.test(String(value || ''))) {
+          callback(new Error(t('po.manualAmountInvalidYear')))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  type: [{ required: true, trigger: 'change' }],
+  amount: [
+    {
+      validator: (_rule, value, callback) => {
+        if (value === null || value === undefined || value === '') {
+          callback(new Error(t('po.manualAmountAmountRequired')))
+          return
+        }
+        callback()
+      },
+      trigger: 'change',
+    },
+  ],
+}
 ```
 
 Add helpers:
@@ -1292,6 +1433,11 @@ async function refreshPoDetailAfterManualAmountChange() {
 }
 
 async function saveManualAmount() {
+  try {
+    await manualAmountFormRef.value?.validate()
+  } catch {
+    return
+  }
   manualAmountSaving.value = true
   try {
     await createPoManualAmount(po.value.po_id, {
@@ -1299,9 +1445,13 @@ async function saveManualAmount() {
       type: manualAmountForm.type,
       amount: manualAmountForm.amount,
     })
-    ElMessage.success(t('po.manualAmountSaved'))
     manualAmountDialogVisible.value = false
-    await refreshPoDetailAfterManualAmountChange()
+    try {
+      await refreshPoDetailAfterManualAmountChange()
+      ElMessage.success(t('po.manualAmountSaved'))
+    } catch (refreshError) {
+      ElMessage.warning(t('po.manualAmountRefreshFailed'))
+    }
   } catch (error) {
     ElMessage.error(error.message || String(error))
   } finally {
@@ -1312,13 +1462,21 @@ async function saveManualAmount() {
 async function removeManualAmount(row) {
   try {
     await ElMessageBox.confirm(
-      t('po.deleteManualAmountConfirm'),
+      t('po.deleteManualAmountConfirm', {
+        year: row.year,
+        type: manualAmountTypeLabel(row.type),
+        amount: row.amount,
+      }),
       t('common.confirm'),
       { type: 'warning' }
     )
     await deletePoManualAmount(row.manual_amount_id)
-    ElMessage.success(t('po.manualAmountDeleted'))
-    await refreshPoDetailAfterManualAmountChange()
+    try {
+      await refreshPoDetailAfterManualAmountChange()
+      ElMessage.success(t('po.manualAmountDeleted'))
+    } catch (refreshError) {
+      ElMessage.warning(t('po.manualAmountRefreshFailed'))
+    }
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error(error.message || String(error))
@@ -1339,6 +1497,7 @@ Add this section near the other PO detail sections, not in PO lists or dashboard
       v-if="canManagePoManualAmounts"
       type="primary"
       size="small"
+      :disabled="loadingState.count > 0"
       @click="openManualAmountDialog"
     >
       <el-icon><Plus /></el-icon>
@@ -1366,11 +1525,20 @@ Add this section near the other PO detail sections, not in PO lists or dashboard
       fixed="right"
     >
       <template #default="{ row }">
-        <el-button type="danger" link size="small" @click="removeManualAmount(row)">
+        <el-button
+          type="danger"
+          link
+          size="small"
+          :disabled="loadingState.count > 0"
+          @click="removeManualAmount(row)"
+        >
           <el-icon><Delete /></el-icon>
         </el-button>
       </template>
     </el-table-column>
+    <template #empty>
+      <el-empty :description="$t('po.manualAmountNoRecords')" />
+    </template>
   </el-table>
 </div>
 ```
@@ -1383,17 +1551,22 @@ Add the dialog:
   :title="$t('po.addManualAmount')"
   width="420px"
 >
-  <el-form label-position="top">
-    <el-form-item :label="$t('po.manualAmountYear')">
+  <el-form
+    ref="manualAmountFormRef"
+    :model="manualAmountForm"
+    :rules="manualAmountRules"
+    label-position="top"
+  >
+    <el-form-item prop="year" :label="$t('po.manualAmountYear')">
       <el-input v-model="manualAmountForm.year" maxlength="4" />
     </el-form-item>
-    <el-form-item :label="$t('po.manualAmountType')">
+    <el-form-item prop="type" :label="$t('po.manualAmountType')">
       <el-select v-model="manualAmountForm.type" style="width: 100%">
         <el-option :label="$t('po.manualAmountProvision')" value="provision" />
         <el-option :label="$t('po.manualAmountToBeGr')" value="to_be_gr" />
       </el-select>
     </el-form-item>
-    <el-form-item :label="$t('po.manualAmountAmount')">
+    <el-form-item prop="amount" :label="$t('po.manualAmountAmount')">
       <el-input-number
         v-model="manualAmountForm.amount"
         :precision="2"
@@ -1403,10 +1576,15 @@ Add the dialog:
     </el-form-item>
   </el-form>
   <template #footer>
-    <el-button @click="manualAmountDialogVisible = false">
+    <el-button :disabled="manualAmountSaving" @click="manualAmountDialogVisible = false">
       {{ $t('common.cancel') }}
     </el-button>
-    <el-button type="primary" :loading="manualAmountSaving" @click="saveManualAmount">
+    <el-button
+      type="primary"
+      :loading="manualAmountSaving"
+      :disabled="loadingState.count > 0"
+      @click="saveManualAmount"
+    >
       {{ $t('common.save') }}
     </el-button>
   </template>
@@ -1447,7 +1625,7 @@ git commit -m "feat: manage PO manual amounts in detail view"
 Run:
 
 ```powershell
-pytest tests/test_migrations.py tests/test_po_manual_amounts.py tests/test_po_annual_report.py tests/test_api_bridge.py -q
+pytest tests/test_migrations.py tests/test_po_manual_amounts.py tests/test_po_annual_report.py tests/test_gr_annual_report.py tests/test_api_bridge.py -q
 ```
 
 Expected: all selected tests pass.
@@ -1478,7 +1656,7 @@ Expected: build exits successfully.
 Run:
 
 ```powershell
-rg -n "po_manual_amounts|create_po_manual_amount|delete_po_manual_amount|can_manage_po_manual_amounts|write_operation_record|queue_status_change|_auto_open_outlook_draft" sc_gr_app frontend/src tests
+rg -n "po_manual_amounts|create_po_manual_amount|delete_po_manual_amount|can_manage_po_manual_amounts|write_operation_record|notification_service|queue_status_change|_auto_open_outlook_draft|open_entity_email|generate_email_draft|open_email_draft_in_outlook|sender" sc_gr_app frontend/src tests
 ```
 
 Expected:
@@ -1486,7 +1664,7 @@ Expected:
 - `po_manual_amounts` appears in migrations, PO/SC service cleanup/detail/report code, and tests.
 - `create_po_manual_amount` and `delete_po_manual_amount` appear only in PO service, API bridge, frontend PO detail/usePo, and tests.
 - `can_manage_po_manual_amounts` appears in permission payloads and frontend visibility checks.
-- No manual amount create/delete path calls `write_operation_record`, `queue_status_change`, or `_auto_open_outlook_draft`.
+- No manual amount create/delete path calls `write_operation_record`, `notification_service`, `queue_status_change`, `_auto_open_outlook_draft`, `open_entity_email`, `generate_email_draft`, `open_email_draft_in_outlook`, or `sender`.
 
 - [ ] **Step 5: Inspect annual export columns manually**
 
@@ -1520,7 +1698,7 @@ If no files changed, do not create an empty commit.
 ## Completion Criteria
 
 - Database schema version is 40 and fresh databases create `po_manual_amounts`.
-- Manual records can be created, listed, and deleted by admin, PO requester, and owning SC requester.
+- Manual records can be created, listed, and deleted by admin, owning SC requester for SC-linked POs, and PO requester for independent POs.
 - Manual records can be added and deleted for finished POs.
 - Other users cannot mutate records, but PO visibility still controls read access.
 - PO detail shows top-level `manual_amounts`.
