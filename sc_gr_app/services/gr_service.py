@@ -266,7 +266,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       confirmation_name,
                       last_delivery,
                       is_cancellation
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
