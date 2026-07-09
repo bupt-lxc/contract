@@ -1048,6 +1048,7 @@ def test_get_sc_detail_returns_related_data_and_permissions(app_config):
         "can_manage_po": True,
         "can_manage_gr": True,
         "can_transfer_sc": True,
+        "can_manage_po_manual_amounts": True,
     }
     assert requester_detail["permissions"]["can_manage_po"] is True
     assert requester_detail["permissions"]["can_manage_gr"] is True
