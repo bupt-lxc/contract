@@ -7,6 +7,7 @@
     :row-class-name="rowClass"
     :default-sort="{ prop: 'po_no', order: 'ascending' }"
     @selection-change="val => $emit('selection-change', val)"
+    @sort-change="(sort) => $emit('sort-change', sort)"
   >
     <el-table-column v-if="selectable" type="selection" width="50" />
     <el-table-column prop="status" :label="$t('po.status')" width="100" sortable>
@@ -103,7 +104,7 @@ defineProps({
   selectable: { type: Boolean, default: false }
 })
 
-defineEmits(['detail', 'edit', 'finish', 'submit', 'selection-change'])
+defineEmits(['detail', 'edit', 'finish', 'submit', 'selection-change', 'sort-change'])
 
 function shortId(id) { if (!id) return '-'; const parts = id.split('-'); return parts.slice(2).join('-') }
 function rowClass({ row }) { return `status-row-${row.status || ''}` }

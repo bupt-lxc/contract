@@ -2,6 +2,8 @@
   <div>
     <AdvancedFilterBar
       :filter-config="poFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     />
@@ -37,6 +39,7 @@
       :loading="state.loading"
       selectable
       @selection-change="val => selectedRows = val"
+      @sort-change="handleSortChange"
       @detail="row => row.sc_id
         ? $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)
         : $router.push(`/po/${row.po_id}`)"
@@ -46,8 +49,9 @@
     />
 
     <el-pagination
-      :current-page="state.currentPage"
-      :page-size="state.pageSize"
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
       :total="state.total"
       layout="total, sizes, prev, pager, next, jumper"
       @current-change="handlePageChange"
@@ -96,12 +100,13 @@
       entity-type="PO"
       :columns="poImportColumns"
       :rules-text="$t('po.importRules')"
-      @imported="searchPos"
+      @imported="reload"
     />
 
     <ExportDialog
       v-model:visible="exportDialogVisible"
       entity-type="po"
+      :text="state.text"
       :filters="state.filters"
       :sort="state.sort"
       :direction="state.direction"
@@ -138,8 +143,8 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, ArrowDown, Download, Upload } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
@@ -153,10 +158,11 @@ import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 
-const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
+const { state, searchPos, createPo, updatePo, submitPo, finishPo, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = usePo()
 const { exportRows } = useExport()
 const exporting = ref(false)
 const selectedRows = ref([])
@@ -286,12 +292,28 @@ function handleFilter({ text, filters }) {
     }
   }
   delete transformed.deadline
-  searchPos(text, transformed)
+  selectedRows.value = []
+  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
 }
 
 function handleReset() {
-  resetFilters()
-  searchPos()
+  selectedRows.value = []
+  reset()
+}
+
+function handleSortChange(sort) {
+  changeSort(sort)
+  reload()
+}
+
+function handlePageChange(page) {
+  selectedRows.value = []
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  selectedRows.value = []
+  changePageSize(size)
 }
 
 async function handleSubmitPo(row) {
@@ -299,7 +321,7 @@ async function handleSubmitPo(row) {
     await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
     await submitPo(row.po_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
-    await searchPos()
+    await reload()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -310,7 +332,7 @@ async function handleFinishPo(row) {
     await ElMessageBox.confirm(t('confirm.finishPo'), t('common.confirm'), { type: 'warning' })
     await finishPo(row.po_id)
     ElMessage.success(t('msg.poFinished'))
-    await searchPos()
+    await reload()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -344,7 +366,7 @@ async function handlePoSave(data) {
     }
     ElMessage.success(t('common.saved'))
     poDialogVisible.value = false
-    await searchPos()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -370,15 +392,12 @@ async function handlePoSaveDraft(data) {
     }
     ElMessage.success(t('po.draftSaved'))
     poDialogVisible.value = false
-    await searchPos()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
   }
 }
-
-function handlePageChange(page) { onPageChange(page); searchPos() }
-function handleSizeChange(size) { onPageSizeChange(size); searchPos() }
 
 function handleExport() {
   exportDialogVisible.value = true
@@ -453,12 +472,28 @@ async function downloadTemplate() {
   }
 }
 
-onMounted(async () => {
-  const filters = {}
-  if (route.query.status) {
-    filters.status = route.query.status
-    setFilters(filters)
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
   }
-  await Promise.all([searchPos(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
+onMounted(async () => {
+  await Promise.all([initializeFromRoute(route, router), loadEligibleScs()])
 })
 </script>

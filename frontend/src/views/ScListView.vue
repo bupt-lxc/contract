@@ -2,6 +2,8 @@
   <div>
     <AdvancedFilterBar
       :filter-config="scFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     >
@@ -48,8 +50,9 @@
     />
 
     <el-pagination
-      :current-page="state.currentPage"
-      :page-size="state.pageSize"
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
       :total="state.total"
       layout="total, sizes, prev, pager, next, jumper"
       @current-change="handlePageChange"
@@ -86,12 +89,13 @@
       entity-type="SC"
       :columns="scImportColumns"
       :rules-text="$t('sc.importRules')"
-      @imported="searchScs"
+      @imported="reload"
     />
 
     <ExportDialog
       v-model:visible="exportDialogVisible"
       entity-type="sc"
+      :text="state.text"
       :filters="state.filters"
       :sort="state.sort"
       :direction="state.direction"
@@ -103,8 +107,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download, Upload, ArrowDown } from '@element-plus/icons-vue'
 import PoFcSelectorDialog from '@/components/sc/PoFcSelectorDialog.vue'
@@ -124,7 +128,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { requestTypeLabel } from '@/composables/useRequestType.js'
 
 const route = useRoute()
-const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
+const router = useRouter()
+const { state, searchScs, createDraft, submitSc, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = useSc()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const { t } = useI18n()
@@ -177,7 +182,7 @@ async function handleBatchSubmit() {
   const summary = await runBatch(selectedRows.value, 'submit', async (row) => {
     await callApi('submit_sc', { sc_id: row.sc_id, data: {} })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'submit')
 }
 
@@ -186,7 +191,7 @@ async function handleBatchConfirm() {
   const summary = await runBatch(selectedRows.value, 'confirm', async (row) => {
     await callApi('confirm_sc', { sc_id: row.sc_id })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'confirm')
 }
 
@@ -195,7 +200,7 @@ async function handleBatchApprove() {
   const summary = await runBatch(selectedRows.value, 'approve', async (row) => {
     await callApi('approve_sc', { sc_id: row.sc_id })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'approve')
 }
 
@@ -280,21 +285,29 @@ function handleFilter({ text, filters }) {
     }
   }
   delete transformed.deadline
-  searchScs(text, transformed)
+  selectedRows.value = []
+  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
 }
 
 function handleReset() {
-  resetFilters()
-  searchScs()
+  selectedRows.value = []
+  reset()
 }
 
 function handleSortChange({ prop, order }) {
-  onSortChange({ prop, order })
-  searchScs()
+  changeSort({ prop, order })
+  reload()
 }
 
-function handlePageChange(page) { onPageChange(page); searchScs() }
-function handleSizeChange(size) { onPageSizeChange(size); searchScs() }
+function handlePageChange(page) {
+  selectedRows.value = []
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  selectedRows.value = []
+  changePageSize(size)
+}
 
 async function handleSaveDraft(data) {
   try {
@@ -305,7 +318,7 @@ async function handleSaveDraft(data) {
     }
     ElMessage.success(t('sc.draftSaved'))
     scDialogVisible.value = false
-    await searchScs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -322,7 +335,7 @@ async function handleSaveSubmit(data) {
     await submitSc(created.sc_id, formData)
     ElMessage.success(t('common.saved'))
     scDialogVisible.value = false
-    await searchScs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -366,15 +379,31 @@ async function downloadTemplate() {
   }
 }
 
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
+  }
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
 onMounted(async () => {
   try {
     activeUsers.value = await callApi('list_users')
   } catch { /* ignore — user list is non-critical */ }
-  const filters = {}
-  if (route.query.status) {
-    filters.status = route.query.status
-    setFilters(filters)
-  }
-  await Promise.all([searchScs(null, Object.keys(filters).length ? filters : null), searchVendors()])
+  await Promise.all([initializeFromRoute(route, router), searchVendors()])
 })
 </script>
