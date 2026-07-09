@@ -27,6 +27,9 @@
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
+      <el-button v-if="isAdmin" @click="openAnnualReportDialog">
+        <el-icon><Download /></el-icon> {{ $t('po.annualReport') }}
+      </el-button>
     </div>
 
     <PoTable
@@ -106,11 +109,36 @@
       :filtered-count="state.total"
       :total-count="state.total"
     />
+    <el-dialog
+      v-model="annualReportVisible"
+      :title="$t('po.annualReportTitle')"
+      width="360px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('po.selectYear')">
+          <el-date-picker
+            v-model="annualReportYear"
+            type="year"
+            placeholder="YYYY"
+            format="YYYY"
+            value-format="YYYY"
+            :clearable="false"
+            style="width:100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="annualReportVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="annualExporting" @click="handleAnnualExport">
+          {{ $t('common.export') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, ArrowDown, Download, Upload } from '@element-plus/icons-vue'
@@ -126,12 +154,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const { t } = useI18n()
+const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 
 const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
-const { exportAll } = useExport()
+const { exportRows } = useExport()
 const exporting = ref(false)
 const selectedRows = ref([])
 const exportDialogVisible = ref(false)
+const annualReportVisible = ref(false)
+const annualReportYear = ref(new Date().getFullYear().toString())
+const annualExporting = ref(false)
 
 const scLinkedVendors = ref([])
 
@@ -350,6 +382,43 @@ function handleSizeChange(size) { onPageSizeChange(size); searchPos() }
 
 function handleExport() {
   exportDialogVisible.value = true
+}
+
+function openAnnualReportDialog() {
+  annualReportYear.value = new Date().getFullYear().toString()
+  annualReportVisible.value = true
+}
+
+async function handleAnnualExport() {
+  annualExporting.value = true
+  try {
+    const year = annualReportYear.value || new Date().getFullYear().toString()
+    const previousYear = String(Number(year) - 1)
+    const result = await callApi('get_po_annual_report', { year })
+    const rows = result.rows || []
+    const columns = [
+      { key: 'requester', label: 'Requester' },
+      { key: 'sc_no', label: 'SC no' },
+      { key: 'po_no', label: 'PO number' },
+      { key: 'short_text', label: 'Short Text' },
+      { key: 'sc_amount', label: 'SC amount' },
+      { key: 'po_amount', label: 'PO amount' },
+      { key: 'previous_year_gr', label: `${previousYear} GR` },
+      { key: 'previous_year_provision', label: `${previousYear} Provision` },
+      { key: 'selected_year_gr', label: `${year} GR` },
+      { key: 'selected_year_to_be_gr', label: `${year} to be GR` },
+      { key: 'selected_year_fc_gr', label: `${year} FC GR` },
+      { key: 'remark', label: 'Remark' },
+    ]
+    const saveResult = await exportRows(rows, columns, `PO_Annual_Report_${year}`)
+    if (saveResult?.cancelled) return
+    ElMessage.success(t('msg.exportedSuccessfully'))
+    annualReportVisible.value = false
+  } catch (e) {
+    ElMessage.error(e.message || t('msg.exportFailed'))
+  } finally {
+    annualExporting.value = false
+  }
 }
 
 // PO import

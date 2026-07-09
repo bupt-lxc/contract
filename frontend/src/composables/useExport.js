@@ -41,16 +41,21 @@ export function useExport() {
    * @param {string}   filename – without extension
    */
   async function exportRows(rows, columns, filename) {
-    const sheetData = rows.map(row => {
-      const obj = {}
-      columns.forEach(col => {
-        const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
-        obj[col.label] = raw
+    let ws
+    if (!rows.length) {
+      ws = XLSX.utils.aoa_to_sheet([columns.map(c => c.label)])
+    } else {
+      const sheetData = rows.map(row => {
+        const obj = {}
+        columns.forEach(col => {
+          const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
+          obj[col.label] = raw
+        })
+        return obj
       })
-      return obj
-    })
+      ws = XLSX.utils.json_to_sheet(sheetData)
+    }
 
-    const ws = XLSX.utils.json_to_sheet(sheetData)
     ws['!cols'] = columns.map(c => ({ wch: Math.max(c.label.length, 12) }))
 
     const wb = XLSX.utils.book_new()
@@ -59,7 +64,7 @@ export function useExport() {
     const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
     const binary = _uint8ToString(new Uint8Array(wbArray))
     const b64 = btoa(binary)
-    await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
+    return await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
   }
 
   /**
@@ -74,16 +79,21 @@ export function useExport() {
     const wb = XLSX.utils.book_new()
 
     for (const sheet of sheets) {
-      const sheetData = sheet.rows.map(row => {
-        const obj = {}
-        sheet.columns.forEach(col => {
-          const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
-          obj[col.label] = raw
+      let ws
+      if (!sheet.rows.length) {
+        ws = XLSX.utils.aoa_to_sheet([sheet.columns.map(c => c.label)])
+      } else {
+        const sheetData = sheet.rows.map(row => {
+          const obj = {}
+          sheet.columns.forEach(col => {
+            const raw = col.getValue ? col.getValue(row) : (row[col.key] ?? '')
+            obj[col.label] = raw
+          })
+          return obj
         })
-        return obj
-      })
+        ws = XLSX.utils.json_to_sheet(sheetData)
+      }
 
-      const ws = XLSX.utils.json_to_sheet(sheetData)
       ws['!cols'] = sheet.columns.map(c => ({ wch: Math.max(c.label.length, 12) }))
       XLSX.utils.book_append_sheet(wb, ws, sheet.name)
     }
@@ -91,7 +101,7 @@ export function useExport() {
     const wbArray = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
     const binary = _uint8ToString(new Uint8Array(wbArray))
     const b64 = btoa(binary)
-    await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
+    return await callApi('save_file', { filename: `${filename}.xlsx`, data: b64 })
   }
 
   /**
@@ -116,7 +126,7 @@ export function useExport() {
       offset += limit
     }
 
-    await exportRows(allRows, columns, filename)
+    return await exportRows(allRows, columns, filename)
   }
 
   /**
@@ -151,7 +161,7 @@ export function useExport() {
   async function exportCSV(rows, columns, filename) {
     const csv = _toCSV(rows, columns)
     const b64 = btoa(unescape(encodeURIComponent(csv)))
-    await callApi('save_file', { filename: `${filename}.csv`, data: b64 })
+    return await callApi('save_file', { filename: `${filename}.csv`, data: b64 })
   }
 
   /**
@@ -171,7 +181,7 @@ export function useExport() {
       offset += limit
     }
 
-    await exportCSV(allRows, columns, filename)
+    return await exportCSV(allRows, columns, filename)
   }
 
   return { exportRows, exportAll, exportMultiSheet, exportCSV, exportAllCSV }

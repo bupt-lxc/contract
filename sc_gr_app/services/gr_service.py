@@ -111,6 +111,7 @@ def _get_po_sc(conn, po_id: str):
           sc.request_type as sc_request_type,
           sc.status as sc_status,
           sc.sc_amount,
+          sc.request_type as sc_request_type,
           vendor.vendor_name
         from pos po
         join sc_records sc on sc.sc_id = po.sc_id
@@ -137,6 +138,39 @@ def _get_gr_sc_id(conn, gr_id: str) -> str:
     if lookup is None:
         raise NotFound(f"GR not found: {gr_id}")
     return lookup["sc_id"]
+
+
+def _is_fc_po(po_sc) -> bool:
+    return po_sc["request_type"] == "FC" or po_sc["sc_request_type"] == "FC"
+
+
+def _validate_last_delivery_value(value) -> None:
+    if value not in (None, "", "Y", "N"):
+        raise ValidationError("last_delivery must be 'Y' or 'N'")
+
+
+def _normalize_last_delivery(value) -> str:
+    _validate_last_delivery_value(value)
+    return "Y" if value == "Y" else "N"
+
+
+def _require_unique_last_delivery(conn, po_id: str, gr_id: str | None, value) -> None:
+    if _normalize_last_delivery(value) != "Y":
+        return
+    existing = conn.execute(
+        """
+        select gr_id
+        from gr_requests
+        where po_id = ?
+          and last_delivery = 'Y'
+          and status != 'denied'
+          and (? is null or gr_id != ?)
+        limit 1
+        """,
+        (po_id, gr_id, gr_id),
+    ).fetchone()
+    if existing:
+        raise ConflictError("A GR is already marked as Last Delivery")
 
 
 def _require_editable_parent_sc(conn, sc_id: str) -> None:
@@ -246,6 +280,10 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                 elif gr_status not in SUPPORTED_STATUSES:
                     raise ValidationError(f"Invalid GR status: {gr_status}")
 
+                if _is_fc_po(po_sc):
+                    raise ConflictError("Cannot create GR under an FC PO")
+                last_delivery = _normalize_last_delivery(data.get("last_delivery"))
+                _require_unique_last_delivery(conn, po_id, None, last_delivery)
                 _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status, is_cancellation)
 
                 is_draft = gr_status == "draft"
@@ -298,7 +336,7 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         data.get("goods_service_description"),
                         data.get("confirmation_name"),
-                        data.get("last_delivery"),
+                        last_delivery,
                         is_cancellation,
                     ),
                 )
@@ -736,6 +774,13 @@ def update_gr(
                             raise ConflictError("SC must be approved")
                         if po_sc["status"] != "active":
                             raise ConflictError("PO must be active")
+                        if _is_fc_po(po_sc):
+                            raise ConflictError("Cannot create GR under an FC PO")
+
+                    merged["last_delivery"] = _normalize_last_delivery(merged.get("last_delivery"))
+                    _require_unique_last_delivery(
+                        conn, merged["po_id"], gr_id, merged["last_delivery"]
+                    )
 
                     # Recalculate gross_cost when estimated_amount or tax_rate changes
                     if "estimated_amount" in allowed or "tax_rate" in allowed:
@@ -817,6 +862,10 @@ def update_gr(
                         raise ValidationError("No GR fields to update")
 
                     merged = {**before, **allowed}
+                    merged["last_delivery"] = _normalize_last_delivery(merged.get("last_delivery"))
+                    _require_unique_last_delivery(
+                        conn, before["po_id"], gr_id, merged["last_delivery"]
+                    )
                     # Recalculate gross_cost when tax_rate changes on approved GR
                     if "tax_rate" in allowed:
                         merged["gross_cost"] = _compute_incl_tax(
@@ -943,7 +992,12 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+def finish_gr(
+    config: AppConfig,
+    current_user: dict,
+    gr_id: str,
+    confirm_cascade: bool = False,
+) -> dict:
     """Mark an approved GR as finished (goods received / service completed)."""
     require_requester_or_admin(current_user)
 
@@ -960,6 +1014,98 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     raise ConflictError("GR must be approved")
 
                 timestamp = utc_now()
+                if before.get("last_delivery") == "Y":
+                    problematic = [
+                        dict(row)
+                        for row in conn.execute(
+                            """
+                            select gr_id, status
+                            from gr_requests
+                            where po_id = ?
+                              and gr_id != ?
+                              and status not in ('approved', 'finished')
+                            order by gr_id
+                            """,
+                            (before["po_id"], gr_id),
+                        ).fetchall()
+                    ]
+                    if problematic:
+                        raise ConflictError(
+                            "Cannot finish Last Delivery GR while other GRs are not approved or finished",
+                            conflicts=problematic,
+                        )
+
+                    grs_to_finish = [
+                        row["gr_id"]
+                        for row in conn.execute(
+                            """
+                            select gr_id
+                            from gr_requests
+                            where po_id = ?
+                              and gr_id != ?
+                              and status = 'approved'
+                            order by gr_id
+                            """,
+                            (before["po_id"], gr_id),
+                        ).fetchall()
+                    ]
+                    if not confirm_cascade:
+                        conn.rollback()
+                        return {
+                            "needs_cascade": True,
+                            "grs_to_finish": grs_to_finish,
+                        }
+
+                    all_gr_ids = [gr_id, *grs_to_finish]
+                    for cascade_gr_id in all_gr_ids:
+                        conn.execute(
+                            """
+                            update gr_requests
+                            set status = 'finished',
+                                finished_by = ?,
+                                finished_at = ?
+                            where gr_id = ?
+                            """,
+                            (current_user["user_id"], timestamp, cascade_gr_id),
+                        )
+                    conn.execute(
+                        """
+                        update pos
+                        set status = 'finished',
+                            finished_by = ?,
+                            finished_at = ?,
+                            updated_at = ?
+                        where po_id = ?
+                        """,
+                        (current_user["user_id"], timestamp, timestamp, before["po_id"]),
+                    )
+                    after = _get_gr(conn, gr_id)
+                    write_operation_record(
+                        conn,
+                        action_type="finish_gr",
+                        object_type="gr",
+                        object_id=gr_id,
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=before,
+                        after=after,
+                    )
+                    sc = conn.execute(
+                        "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                        (sc_id,),
+                    ).fetchone()
+                    notification_service.queue_status_change(
+                        conn, "gr", gr_id, "finish",
+                        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    )
+                    conn.commit()
+                    return {
+                        "gr": after,
+                        "cascaded_grs": grs_to_finish,
+                        "po_finished": before["po_id"],
+                    }
+
                 conn.execute(
                     """
                     update gr_requests
@@ -1109,3 +1255,47 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return before
+
+
+def _validate_annual_report_year(year: str) -> str:
+    import re
+
+    if not isinstance(year, str) or not re.fullmatch(r"\d{4}", year):
+        raise ValidationError("year must be a 4-digit string")
+    return year
+
+
+def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> list[dict]:
+    """Return approved/finished GR rows in the selected report year."""
+    require_admin(current_user)
+    year = _validate_annual_report_year(year)
+
+    with connect(config) as conn:
+        rows = conn.execute(
+            """
+            select
+              gr.*,
+              po.po_no,
+              po.sc_id,
+              sc.sc_no,
+              sc.cost_center,
+              vendor.vendor_name,
+              u.user_name as requester_name
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            left join sc_records sc on sc.sc_id = po.sc_id
+            join vendors vendor on vendor.vendor_id = po.vendor_id
+            left join users u on u.user_id = gr.requester_id
+            where gr.status in ('approved', 'finished')
+              and (
+                (gr.status = 'finished' and substr(gr.finished_at, 1, 4) = ?)
+                or
+                (gr.status = 'approved' and substr(gr.approved_date, 1, 4) = ?)
+              )
+            order by coalesce(gr.finished_at, gr.approved_date, gr.created_at) desc,
+                     gr.gr_no
+            """,
+            (year, year),
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]

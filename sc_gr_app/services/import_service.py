@@ -9,6 +9,17 @@ from sc_gr_app.services.lock_service import LeaseLock
 from sc_gr_app.services.record_service import write_operation_record
 
 SC_IMPORT_ALLOWED_STATUSES = {"approved", "finished"}
+LEGACY_REQUEST_TYPE_MAP = {
+    "material": "new",
+    "service": "new",
+    "fixed_asset": "new",
+}
+
+
+def _normalize_request_type(value):
+    if value in (None, ""):
+        return value
+    return LEGACY_REQUEST_TYPE_MAP.get(value, value)
 
 
 def utc_now() -> str:
@@ -85,6 +96,9 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
         status = row.get("status", "")
         if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+        request_type = _normalize_request_type(row.get("request_type"))
+        if request_type and request_type not in ("FC", "call_off", "new"):
+            errors.append({"row": i, "field": "request_type", "message": "request_type is invalid"})
         if row.get("requester_id"):
             exists = conn.execute(
                 "SELECT 1 FROM users WHERE user_id = ?", (row["requester_id"],)
@@ -138,7 +152,7 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             sc_id,
                             row.get("sc_no"),
                             row.get("requester_id") or current_user["user_id"],
-                            row.get("request_type"),
+                            _normalize_request_type(row.get("request_type")),
                             row.get("cost_center"),
                             float(row["sc_amount"]) if row.get("sc_amount") else None,
                             row.get("service_period_start"),
@@ -478,6 +492,9 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             status = row.get("status", "")
             if status and status not in SC_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
+            request_type = _normalize_request_type(row.get("request_type"))
+            if request_type and request_type not in ("FC", "call_off", "new"):
+                errors_list.append("request_type is invalid")
             if row.get("requester_id"):
                 exists = conn.execute(
                     "SELECT 1 FROM users WHERE user_id = ?", (row["requester_id"],)
