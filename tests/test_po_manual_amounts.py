@@ -162,3 +162,73 @@ def test_manual_amounts_allowed_on_finished_po(app_config):
     assert po_service.delete_po_manual_amount(
         app_config, SC_REQUESTER, created["manual_amount_id"]
     )["deleted"] is True
+
+
+def test_po_and_sc_detail_include_manual_amounts_and_permission(app_config):
+    _seed(app_config)
+    created = po_service.create_po_manual_amount(
+        app_config, ADMIN, "PO1", {"year": "2025", "type": "provision", "amount": 11}
+    )
+
+    po_detail = po_service.get_po_detail(app_config, SC_REQUESTER, "PO1")
+    assert po_detail["manual_amounts"][0]["manual_amount_id"] == created["manual_amount_id"]
+    assert po_detail["manual_amounts"][0]["created_by_name"] == "Admin User"
+    assert po_detail["permissions"]["can_manage_po_manual_amounts"] is True
+
+    assignee_detail = po_service.get_po_detail(app_config, SC_ASSIGNEE, "PO1")
+    assert assignee_detail["manual_amounts"][0]["manual_amount_id"] == created["manual_amount_id"]
+    assert assignee_detail["permissions"]["can_manage_po_manual_amounts"] is False
+
+    with pytest.raises(PermissionDenied):
+        po_service.get_po_detail(app_config, PO_REQUESTER, "PO1")
+
+    from sc_gr_app.services import sc_service
+
+    sc_detail = sc_service.get_sc_detail(app_config, SC_REQUESTER, "SC1")
+    po_row = next(row for row in sc_detail["pos"] if row["po_id"] == "PO1")
+    assert po_row["manual_amounts"][0]["manual_amount_id"] == created["manual_amount_id"]
+    assert po_row["can_manage_po_manual_amounts"] is True
+    assert sc_detail["permissions"]["can_manage_po_manual_amounts"] is True
+
+
+def test_manual_amounts_do_not_change_po_budget(app_config):
+    _seed(app_config)
+    before = po_service.get_po_detail(app_config, ADMIN, "PO1")["po"]["open_po_amount"]
+
+    po_service.create_po_manual_amount(
+        app_config, ADMIN, "PO1", {"year": "2025", "type": "provision", "amount": 999999}
+    )
+
+    after = po_service.get_po_detail(app_config, ADMIN, "PO1")["po"]["open_po_amount"]
+    assert after == before
+
+
+def test_delete_po_removes_manual_amounts(app_config):
+    _seed(app_config, po_status="draft")
+    po_service.create_po_manual_amount(
+        app_config, ADMIN, "PO1", {"year": "2025", "type": "provision", "amount": 11}
+    )
+
+    po_service.delete_po(app_config, SC_REQUESTER, "PO1")
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        count = conn.execute("select count(*) from po_manual_amounts").fetchone()[0]
+    assert count == 0
+
+
+def test_delete_sc_removes_child_po_manual_amounts(app_config):
+    _seed(app_config, po_status="draft")
+    with sqlite3.connect(app_config.db_path) as conn:
+        conn.execute("update sc_records set status = 'draft' where sc_id = 'SC1'")
+        conn.commit()
+    po_service.create_po_manual_amount(
+        app_config, ADMIN, "PO1", {"year": "2025", "type": "to_be_gr", "amount": 22}
+    )
+
+    from sc_gr_app.services import sc_service
+
+    sc_service.delete_sc(app_config, SC_REQUESTER, "SC1")
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        count = conn.execute("select count(*) from po_manual_amounts").fetchone()[0]
+    assert count == 0

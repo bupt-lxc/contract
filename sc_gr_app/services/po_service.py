@@ -290,6 +290,9 @@ def get_po_detail(config: AppConfig, current_user: dict, po_id: str) -> dict:
         ]
 
     is_fc_po = po.get("sc_request_type") == "FC"
+    manual_amounts = _manual_amount_rows(conn, po_id)
+    permissions = _po_permissions(current_user, po, conn)
+
     if is_fc_po:
         po_budget = compute_po_fc_budget(config, po_id)
         po["open_po_amount"] = po_budget["open_po_amount"]
@@ -307,9 +310,10 @@ def get_po_detail(config: AppConfig, current_user: dict, po_id: str) -> dict:
 
     return {
         "po": po,
+        "manual_amounts": manual_amounts,
         "calloff_scs": calloff_scs if is_fc_po else [],
         "operation_records": records,
-        "permissions": _po_permissions(current_user, po, conn),
+        "permissions": permissions,
     }
 
 
@@ -1147,6 +1151,7 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                              "SELECT gr_id FROM gr_requests WHERE po_id = ?)", (po_id,))
                 conn.execute("DELETE FROM gr_requests WHERE po_id = ?", (po_id,))
                 conn.execute("DELETE FROM attachments WHERE entity_type = 'po' AND entity_id = ?", (po_id,))
+                conn.execute("DELETE FROM po_manual_amounts WHERE po_id = ?", (po_id,))
                 conn.execute("DELETE FROM pos WHERE po_id = ?", (po_id,))
 
                 write_operation_record(
