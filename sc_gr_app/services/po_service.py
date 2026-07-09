@@ -895,3 +895,116 @@ def delete_po(config: AppConfig, current_user: dict, po_id: str) -> dict:
                 raise
 
     return before
+
+
+def _validate_annual_report_year(year: str) -> tuple[str, str]:
+    import re
+
+    if not isinstance(year, str) or not re.fullmatch(r"\d{4}", year):
+        raise ValidationError("year must be a 4-digit string")
+    previous_year = str(int(year) - 1)
+    return year, previous_year
+
+
+def _annual_gr_year_expr() -> str:
+    return (
+        "case "
+        "when status = 'finished' then substr(finished_at, 1, 4) "
+        "when status = 'approved' then substr(approved_date, 1, 4) "
+        "else null end"
+    )
+
+
+def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> list[dict]:
+    """Return annual report rows for PO List export."""
+    require_admin(current_user)
+    selected_year, previous_year = _validate_annual_report_year(year)
+    year_expr = _annual_gr_year_expr()
+
+    with connect(config) as conn:
+        po_rows = conn.execute(
+            f"""
+            with gr_totals as (
+              select
+                po_id,
+                sum(case when report_year = ? then coalesce(con_value, 0) else 0 end) as previous_year_gr,
+                sum(case when report_year = ? then coalesce(con_value, 0) else 0 end) as selected_year_gr,
+                sum(case when report_year = ? then 1 else 0 end) as selected_year_count
+              from (
+                select po_id, con_value, {year_expr} as report_year
+                from gr_requests
+                where status in ('approved', 'finished')
+              )
+              where report_year is not null
+              group by po_id
+            )
+            select
+              'po' as row_type,
+              po.sc_id as _sc_id,
+              coalesce(u.user_name, po.requester_id, '') as requester,
+              coalesce(sc.sc_no, '') as sc_no,
+              coalesce(po.po_no, '') as po_no,
+              coalesce(sc.description, '') as short_text,
+              sc.sc_amount as sc_amount,
+              po.po_amount as po_amount,
+              coalesce(gr.previous_year_gr, 0) as previous_year_gr,
+              '' as previous_year_provision,
+              coalesce(gr.selected_year_gr, 0) as selected_year_gr,
+              '' as selected_year_to_be_gr,
+              '' as selected_year_fc_gr,
+              '' as remark
+            from pos po
+            left join sc_records sc on sc.sc_id = po.sc_id
+            left join users u on u.user_id = po.requester_id
+            left join gr_totals gr on gr.po_id = po.po_id
+            where
+              (sc.status = 'approved' and po.status in ('active', 'finished'))
+              or coalesce(gr.selected_year_count, 0) > 0
+              or po.status = 'active'
+              or (po.status = 'finished' and substr(po.finished_at, 1, 4) = ?)
+            order by coalesce(sc.sc_no, ''), coalesce(po.po_no, ''), po.po_id
+            """,
+            (previous_year, selected_year, selected_year, selected_year),
+        ).fetchall()
+
+        qualifying_sc_ids = {
+            row["_sc_id"] for row in po_rows if row["_sc_id"] not in (None, "")
+        }
+
+        sc_rows = conn.execute(
+            """
+            select
+              'sc' as row_type,
+              sc.sc_id as _sc_id,
+              coalesce(u.user_name, sc.requester_id, '') as requester,
+              coalesce(sc.sc_no, '') as sc_no,
+              '' as po_no,
+              coalesce(sc.description, '') as short_text,
+              sc.sc_amount as sc_amount,
+              '' as po_amount,
+              '' as previous_year_gr,
+              '' as previous_year_provision,
+              '' as selected_year_gr,
+              '' as selected_year_to_be_gr,
+              '' as selected_year_fc_gr,
+              '' as remark
+            from sc_records sc
+            left join users u on u.user_id = sc.requester_id
+            where sc.status = 'approved'
+            order by coalesce(sc.sc_no, ''), sc.sc_id
+            """
+        ).fetchall()
+
+    result: list[dict] = []
+    for row in po_rows:
+        item = dict(row)
+        item.pop("_sc_id", None)
+        result.append(item)
+
+    for row in sc_rows:
+        item = dict(row)
+        sc_id = item.pop("_sc_id", None)
+        if sc_id not in qualifying_sc_ids:
+            result.append(item)
+
+    return result
