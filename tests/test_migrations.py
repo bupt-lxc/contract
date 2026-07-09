@@ -1,7 +1,13 @@
 import sqlite3
 
 from sc_gr_app.db.connection import connect
-from sc_gr_app.db.migrations import migrate
+from sc_gr_app.db.migrations import SCHEMA_VERSION, migrate
+
+
+EXPECTED_MIGRATION_VERSIONS = [
+    *range(1, 6),
+    *range(7, SCHEMA_VERSION + 1),
+]
 
 
 def test_migration_creates_core_tables(app_config):
@@ -48,7 +54,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
+    assert [row[0] for row in rows] == EXPECTED_MIGRATION_VERSIONS
     assert rows[0][1]
     assert rows[1][1]
 
@@ -64,7 +70,7 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
+    assert versions == EXPECTED_MIGRATION_VERSIONS
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
     migrate(app_config)
@@ -286,7 +292,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
+    assert versions == EXPECTED_MIGRATION_VERSIONS
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
     with connect(app_config) as conn:
@@ -744,3 +750,85 @@ def test_migration_v35(fresh_db, app_config):
     # Verify service_scope column exists on sc_records
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(sc_records)")}
     assert "service_scope" in cols
+
+
+def test_migration_backfills_missing_old_versions_without_rebuilding_newer_gr_schema(fresh_db, app_config):
+    """Missing old migration records should not drop newer v38 cancellation data."""
+    conn = fresh_db
+    conn.execute("DELETE FROM schema_migrations WHERE version IN (34, 35)")
+    conn.execute(
+        """
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          status, created_by, created_at, is_cancellation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "GR-CANCEL",
+            "GR-CANCEL",
+            "PO-SEED",
+            "U000001",
+            -100,
+            -100,
+            "draft",
+            "U000001",
+            "2026-01-01",
+            "Y",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as verify_conn:
+        versions = [
+            row[0]
+            for row in verify_conn.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            )
+        ]
+        row = verify_conn.execute(
+            "SELECT is_cancellation FROM gr_requests WHERE gr_id = ?",
+            ("GR-CANCEL",),
+        ).fetchone()
+
+    assert versions == EXPECTED_MIGRATION_VERSIONS
+    assert row[0] == "Y"
+
+
+def test_migration_v38_preserves_existing_cancellation_values(fresh_db, app_config):
+    conn = fresh_db
+    conn.execute("DELETE FROM schema_migrations WHERE version = 38")
+    conn.execute(
+        """
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          status, created_by, created_at, is_cancellation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "GR-CANCEL-V38",
+            "GR-CANCEL-V38",
+            "PO-SEED",
+            "U000001",
+            -100,
+            -100,
+            "draft",
+            "U000001",
+            "2026-01-01",
+            "Y",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as verify_conn:
+        row = verify_conn.execute(
+            "SELECT is_cancellation FROM gr_requests WHERE gr_id = ?",
+            ("GR-CANCEL-V38",),
+        ).fetchone()
+
+    assert row[0] == "Y"

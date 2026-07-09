@@ -171,6 +171,14 @@ def _record(conn, version: int) -> None:
     )
 
 
+def _has_recorded_later_version(conn, version: int) -> bool:
+    row = conn.execute(
+        "select 1 from schema_migrations where version > ? limit 1",
+        (version,),
+    ).fetchone()
+    return row is not None
+
+
 def _sc_records_sql(conn) -> str:
     row = conn.execute(
         "select sql from sqlite_master where type = 'table' and name = 'sc_records'"
@@ -1530,7 +1538,24 @@ def _migrate_v34(conn) -> None:
     if has_sc:
         conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
     if has_gr:
-        conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            )
+            SELECT
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            FROM gr_requests_old
+        """)
     if has_sv:
         conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
 
@@ -1771,7 +1796,24 @@ def _migrate_v35(conn) -> None:
         " FROM sc_records_old"
         )
     if has_gr:
-        conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            )
+            SELECT
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            FROM gr_requests_old
+        """)
     if has_sv:
         conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
 
@@ -2024,6 +2066,7 @@ def _migrate_v38(conn) -> None:
     """
     has_gr = _table_exists(conn, "gr_requests")
     if not has_gr:
+        _record(conn, 38)
         return
 
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
@@ -2095,7 +2138,7 @@ def _migrate_v38(conn) -> None:
           finished_at, confirmed_at, pending_date, approved_date,
           submitted_date, goods_service_description, confirmation_name,
           delivery_from, delivery_to, last_delivery, updated_at,
-          'N' as is_cancellation
+          is_cancellation
         FROM gr_requests_old
     """)
 
@@ -2301,17 +2344,27 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v33(conn)
                 conn.commit()
             if 34 not in _applied_versions(conn):
-                conn.execute("PRAGMA foreign_keys = OFF")
-                conn.execute("BEGIN")
-                _migrate_v34(conn)
-                conn.commit()
-                conn.execute("PRAGMA foreign_keys = ON")
+                if _has_recorded_later_version(conn, 34):
+                    conn.execute("BEGIN")
+                    _record(conn, 34)
+                    conn.commit()
+                else:
+                    conn.execute("PRAGMA foreign_keys = OFF")
+                    conn.execute("BEGIN")
+                    _migrate_v34(conn)
+                    conn.commit()
+                    conn.execute("PRAGMA foreign_keys = ON")
             if 35 not in _applied_versions(conn):
-                conn.execute("PRAGMA foreign_keys = OFF")
-                conn.execute("BEGIN")
-                _migrate_v35(conn)
-                conn.commit()
-                conn.execute("PRAGMA foreign_keys = ON")
+                if _has_recorded_later_version(conn, 35):
+                    conn.execute("BEGIN")
+                    _record(conn, 35)
+                    conn.commit()
+                else:
+                    conn.execute("PRAGMA foreign_keys = OFF")
+                    conn.execute("BEGIN")
+                    _migrate_v35(conn)
+                    conn.commit()
+                    conn.execute("PRAGMA foreign_keys = ON")
             if 36 not in _applied_versions(conn):
                 conn.execute("PRAGMA foreign_keys = OFF")
                 conn.execute("BEGIN")

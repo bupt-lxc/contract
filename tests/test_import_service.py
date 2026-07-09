@@ -23,7 +23,7 @@ def _seed_sc(conn, sc_id="SC-0000001-20260701-001"):
                sc_id, sc_no, requester_id, request_type, cost_center,
                sc_amount, service_period_start, service_period_end,
                status, description, asset, created_by, created_at, updated_at
-           ) VALUES (?, ?, 'U000001', 'service', 1000, 100000,
+           ) VALUES (?, ?, 'U000001', 'new', 1000, 100000,
                      '2026-01-01', '2026-12-31',
                      'approved', 'Test SC', 'N', 'U000001', ?, ?)""",
         (sc_id, f"SCNO-{sc_id}", _utc_now(), _utc_now()),
