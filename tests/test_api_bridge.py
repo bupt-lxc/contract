@@ -496,5 +496,4 @@ def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_co
     assert row_kwargs["text"] == "alpha"
     assert row_args[6]["user_id"] == "U1"
     assert stats_kwargs["text"] == "alpha"
-    assert stats_kwargs["current_user"]["user_id"] == "U1"
     assert "export_rows" in stats_kwargs

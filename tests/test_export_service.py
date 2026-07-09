@@ -230,9 +230,6 @@ def test_export_statistics_use_same_text_criteria_as_rows(app_config):
         {},
         export_rows=rows,
         text="alpha",
-        sort="created_at",
-        direction="desc",
-        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
     )
 
     assert stats["overview"]["sc"]["total_count"] == 1

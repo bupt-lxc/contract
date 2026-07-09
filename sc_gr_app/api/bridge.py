@@ -872,8 +872,7 @@ class ApiBridge:
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
-                export_rows=cascade_rows, text=text, sort=sort,
-                direction=direction, current_user=current_user,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -902,8 +901,7 @@ class ApiBridge:
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
-                export_rows=cascade_rows, text=text, sort=sort,
-                direction=direction, current_user=current_user,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -926,8 +924,7 @@ class ApiBridge:
             )
             statistics = export_service.compute_statistics(
                 self.config, {"GR"}, filters, selected_ids,
-                export_rows=cascade_rows, text=text, sort=sort,
-                direction=direction, current_user=current_user,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
