@@ -73,15 +73,34 @@ def _generate_gr_id(conn, machine_id: str) -> str:
 
 def _is_template_meta_row(row: dict, id_field: str) -> bool:
     """Check if this is a template meta row (hint or sample) that should be skipped."""
-    val = row.get(id_field, "").strip()
-    if val == "[EXAMPLE]":
-        return True
-    # Hint rows have ID values that look like instructions rather than real IDs.
-    # Real IDs are empty, alphanumeric+hyphens, or match the format XX-NNNNNNN-NNNNNNNN-NNN.
-    # Hint text (like "Optional (auto-generated...)") contains spaces and parens.
-    if " " in val or "(" in val:
-        return True
+    for field in (id_field, "sc_no", "po_no", "gr_no"):
+        val = str(row.get(field) or "").strip()
+        if val == "[EXAMPLE]":
+            return True
+        # Hint rows have ID values that look like instructions rather than real IDs.
+        # Hint text (like "Optional (auto-generated...)") contains spaces and parens.
+        if field == id_field and (" " in val or "(" in val):
+            return True
     return False
+
+
+def _resolve_po_sc_id(conn, row: dict) -> str | None:
+    """Resolve an import row's SC NO into sc_id when no sc_id is provided."""
+    if row.get("sc_id"):
+        return None
+    sc_no = (row.get("sc_no") or "").strip()
+    if not sc_no:
+        return None
+    matches = conn.execute(
+        "SELECT sc_id FROM sc_records WHERE sc_no = ? ORDER BY sc_id",
+        (sc_no,),
+    ).fetchall()
+    if len(matches) == 1:
+        row["sc_id"] = matches[0]["sc_id"]
+        return None
+    if len(matches) == 0:
+        return f"SC NO {sc_no} not found"
+    return f"SC NO {sc_no} is ambiguous"
 
 
 def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
@@ -96,6 +115,14 @@ def _validate_sc_rows(conn, rows: list[dict]) -> list[dict]:
         status = row.get("status", "")
         if status and status not in SC_IMPORT_ALLOWED_STATUSES:
             errors.append({"row": i, "field": "status", "message": f"Invalid status: {status}"})
+        sc_no = (row.get("sc_no") or "").strip()
+        if sc_no:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM sc_records WHERE sc_no = ?",
+                (sc_no,),
+            ).fetchone()[0]
+            if existing:
+                raise ValidationError(f"Duplicate SC NO: {sc_no}")
         request_type = _normalize_request_type(row.get("request_type"))
         if request_type and request_type not in ("FC", "call_off", "new"):
             errors.append({"row": i, "field": "request_type", "message": "request_type is invalid"})
@@ -195,6 +222,11 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
     for i, row in enumerate(rows, start=1):
         if _is_template_meta_row(row, "po_id"):
             continue
+        sc_error = _resolve_po_sc_id(conn, row)
+        if not row.get("sc_id") and not row.get("sc_no"):
+            errors.append({"row": i, "field": "sc_no", "message": "sc_no is required"})
+        elif sc_error:
+            errors.append({"row": i, "field": "sc_no", "message": sc_error})
         for field in ["po_no", "po_amount", "status"]:
             if not row.get(field):
                 errors.append({"row": i, "field": field, "message": f"{field} is required"})
@@ -356,6 +388,9 @@ _DATE_FORMATS = [
     "%Y/%m/%d",
     "%d.%m.%Y",
     "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%d/%m/%Y",
+    "%Y%m%d",
 ]
 
 
@@ -492,6 +527,14 @@ def preview_sc_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             status = row.get("status", "")
             if status and status not in SC_IMPORT_ALLOWED_STATUSES:
                 errors_list.append(f"Invalid status: {status}")
+            sc_no = (row.get("sc_no") or "").strip()
+            if sc_no:
+                existing = conn.execute(
+                    "SELECT COUNT(*) FROM sc_records WHERE sc_no = ?",
+                    (sc_no,),
+                ).fetchone()[0]
+                if existing:
+                    errors_list.append(f"Duplicate SC NO: {sc_no}")
             request_type = _normalize_request_type(row.get("request_type"))
             if request_type and request_type not in ("FC", "call_off", "new"):
                 errors_list.append("request_type is invalid")
@@ -516,7 +559,12 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
             if _is_template_meta_row(row, "po_id"):
                 continue
             errors_list = []
-            for field in ["sc_id", "po_no", "po_amount", "status"]:
+            sc_error = _resolve_po_sc_id(conn, row)
+            if not row.get("sc_id") and not row.get("sc_no"):
+                errors_list.append("sc_no is required")
+            elif sc_error:
+                errors_list.append(sc_error)
+            for field in ["po_no", "po_amount", "status"]:
                 if not row.get(field):
                     errors_list.append(f"{field} is required")
             status = row.get("status", "")

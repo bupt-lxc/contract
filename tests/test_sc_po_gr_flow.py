@@ -661,7 +661,7 @@ def test_create_gr_rejects_approved_gr_with_null_con_value(app_config):
         )
         conn.commit()
 
-    with pytest.raises(ConflictError, match="Approved GR has NULL con_value"):
+    with pytest.raises(ConflictError, match="Approved/finished GR has NULL con_value"):
         create_gr(
             app_config,
             ADMIN,

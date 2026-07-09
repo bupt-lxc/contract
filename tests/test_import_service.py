@@ -231,31 +231,17 @@ class TestRequiredFields:
         assert preview[0]["_valid"] is False
         assert any("con_value is required" in e for e in preview[0]["_errors"])
 
-    def test_gr_fails_without_delivery_from(self, app_config):
+    def test_gr_allows_missing_estimated_amount(self, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
             _seed_user(conn)
             _seed_sc(conn)
             _seed_vendor(conn)
             _seed_po(conn)
-        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_to": "2026-12-31", "status": "approved"}]
+        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-OPT-001",
+                  "con_value": "10000", "status": "approved"}]
         preview = import_service.preview_gr_import(app_config, rows)
-        assert preview[0]["_valid"] is False
-        assert any("delivery_from is required" in e for e in preview[0]["_errors"])
-
-    def test_gr_fails_without_delivery_to(self, app_config):
-        migrate(app_config)
-        with connect(app_config) as conn:
-            _seed_user(conn)
-            _seed_sc(conn)
-            _seed_vendor(conn)
-            _seed_po(conn)
-        rows = [{"po_no": "PONO-PO-0000001-20260701-001", "gr_no": "GR-001", "estimated_amount": "10000",
-                  "con_value": "10000", "delivery_from": "2026-01-01", "status": "approved"}]
-        preview = import_service.preview_gr_import(app_config, rows)
-        assert preview[0]["_valid"] is False
-        assert any("delivery_to is required" in e for e in preview[0]["_errors"])
+        assert preview[0]["_valid"] is True
 
 
 class TestPreviewAnnotations:
