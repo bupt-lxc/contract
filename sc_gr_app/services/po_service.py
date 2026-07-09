@@ -1,3 +1,5 @@
+import re
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -112,22 +114,108 @@ def _po_gr_usage(conn, po_id: str) -> Decimal:
 def _assert_can_view_po(current_user: dict, po: dict, conn) -> None:
     if current_user.get("role") == "admin":
         return
-    if (
-        current_user.get("role") == "requester"
-        and current_user.get("user_id") == po["requester_id"]
-    ):
-        return
     if po.get("sc_id"):
+        if _is_parent_sc_requester(current_user, po, conn):
+            return
         assignee_row = conn.execute(
             "SELECT 1 FROM sc_assignees WHERE sc_id = ? AND user_id = ?",
             (po["sc_id"], current_user.get("user_id")),
         ).fetchone()
         if assignee_row is not None:
             return
+        raise PermissionDenied("PO is not visible")
+    if (
+        current_user.get("role") == "requester"
+        and current_user.get("user_id") == po["requester_id"]
+    ):
+        return
     raise PermissionDenied("PO is not visible")
 
 
-def _po_permissions(current_user: dict, po: dict) -> dict:
+MANUAL_AMOUNT_TYPES = {"provision", "to_be_gr"}
+
+
+def _manual_amount_row_to_dict(row) -> dict:
+    item = _row_to_dict(row)
+    if item.get("amount") is not None:
+        item["amount"] = float(item["amount"])
+    return item
+
+
+def _manual_amount_rows(conn, po_id: str) -> list[dict]:
+    return [
+        _manual_amount_row_to_dict(row)
+        for row in conn.execute(
+            """
+            select pma.*, u.user_name as created_by_name
+            from po_manual_amounts pma
+            left join users u on u.user_id = pma.created_by
+            where pma.po_id = ?
+            order by pma.year desc, pma.type asc, pma.created_at desc
+            """,
+            (po_id,),
+        )
+    ]
+
+
+def _get_manual_amount_or_raise(conn, manual_amount_id: str) -> dict:
+    row = conn.execute(
+        """
+        select pma.*, u.user_name as created_by_name
+        from po_manual_amounts pma
+        left join users u on u.user_id = pma.created_by
+        where pma.manual_amount_id = ?
+        """,
+        (manual_amount_id,),
+    ).fetchone()
+    if row is None:
+        raise NotFound(f"Manual PO amount not found: {manual_amount_id}")
+    return _manual_amount_row_to_dict(row)
+
+
+def _is_parent_sc_requester(current_user: dict, po: dict, conn) -> bool:
+    if not po.get("sc_id"):
+        return False
+    row = conn.execute(
+        "select requester_id from sc_records where sc_id = ?",
+        (po["sc_id"],),
+    ).fetchone()
+    return row is not None and row["requester_id"] == current_user.get("user_id")
+
+
+def _can_manage_po_manual_amounts(current_user: dict, po: dict, conn) -> bool:
+    if current_user.get("role") == "admin":
+        return True
+    if po.get("sc_id"):
+        return _is_parent_sc_requester(current_user, po, conn)
+    return current_user.get("user_id") == po.get("requester_id")
+
+
+def _assert_can_manage_po_manual_amounts(current_user: dict, po: dict, conn) -> None:
+    if not _can_manage_po_manual_amounts(current_user, po, conn):
+        raise PermissionDenied("Only admin, owning SC requester, or independent PO requester can manage manual PO amounts")
+
+
+def _validate_manual_amount_data(data: dict) -> tuple[str, str, float]:
+    year = data.get("year")
+    if not isinstance(year, str) or not re.fullmatch(r"\d{4}", year):
+        raise ValidationError("year must be a 4-digit string")
+
+    record_type = data.get("type")
+    if record_type not in MANUAL_AMOUNT_TYPES:
+        raise ValidationError("type must be 'provision' or 'to_be_gr'")
+
+    try:
+        amount = Decimal(str(data.get("amount")))
+    except Exception:
+        raise ValidationError("amount must be a number") from None
+    if not amount.is_finite():
+        raise ValidationError("amount must be a number")
+
+    return year, record_type, float(amount)
+
+
+def _po_permissions(current_user: dict, po: dict, conn) -> dict:
     is_admin = current_user.get("role") == "admin"
     is_owner = current_user.get("user_id") == po["requester_id"]
     can_manage = (is_admin or is_owner) and po["status"] in ("draft", "active")
@@ -136,6 +224,7 @@ def _po_permissions(current_user: dict, po: dict) -> dict:
         "can_delete_po": is_admin or is_owner,
         "can_manage_po": can_manage,
         "can_manage_gr": can_manage,
+        "can_manage_po_manual_amounts": _can_manage_po_manual_amounts(current_user, po, conn),
     }
 
 
@@ -220,8 +309,78 @@ def get_po_detail(config: AppConfig, current_user: dict, po_id: str) -> dict:
         "po": po,
         "calloff_scs": calloff_scs if is_fc_po else [],
         "operation_records": records,
-        "permissions": _po_permissions(current_user, po),
+        "permissions": _po_permissions(current_user, po, conn),
     }
+
+
+def list_po_manual_amounts(config: AppConfig, current_user: dict, po_id: str) -> list[dict]:
+    with connect(config) as conn:
+        po = _get_po_or_raise(conn, po_id)
+        _assert_can_view_po(current_user, po, conn)
+        return _manual_amount_rows(conn, po_id)
+
+
+def create_po_manual_amount(config: AppConfig, current_user: dict, po_id: str, data: dict) -> dict:
+    with connect(config) as conn:
+        po = _get_po_or_raise(conn, po_id)
+        _assert_can_view_po(current_user, po, conn)
+        _assert_can_manage_po_manual_amounts(current_user, po, conn)
+        year, record_type, amount = _validate_manual_amount_data(data)
+        manual_amount_id = f"PMA-{uuid.uuid4().hex}"
+        timestamp = utc_now()
+        try:
+            conn.execute(
+                """
+                insert into po_manual_amounts (
+                  manual_amount_id, po_id, year, type, amount, created_by, created_at
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    manual_amount_id,
+                    po_id,
+                    year,
+                    record_type,
+                    amount,
+                    current_user["user_id"],
+                    timestamp,
+                ),
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            if "UNIQUE" in str(exc):
+                raise ConflictError("Manual amount already exists for this PO, year, and type") from None
+            raise
+        return _get_manual_amount_or_raise(conn, manual_amount_id)
+
+
+def delete_po_manual_amount(config: AppConfig, current_user: dict, manual_amount_id: str) -> dict:
+    with connect(config) as conn:
+        row = conn.execute(
+            """
+            select pma.*, po.requester_id, po.sc_id, po.status
+            from po_manual_amounts pma
+            join pos po on po.po_id = pma.po_id
+            where pma.manual_amount_id = ?
+            """,
+            (manual_amount_id,),
+        ).fetchone()
+        if row is None:
+            raise NotFound(f"Manual PO amount not found: {manual_amount_id}")
+        po = {
+            "po_id": row["po_id"],
+            "requester_id": row["requester_id"],
+            "sc_id": row["sc_id"],
+            "status": row["status"],
+        }
+        _assert_can_view_po(current_user, po, conn)
+        _assert_can_manage_po_manual_amounts(current_user, po, conn)
+        conn.execute(
+            "delete from po_manual_amounts where manual_amount_id = ?",
+            (manual_amount_id,),
+        )
+        conn.commit()
+    return {"deleted": True, "manual_amount_id": manual_amount_id}
 
 
 def create_po(config: AppConfig, current_user: dict, data: dict) -> dict:
