@@ -545,6 +545,7 @@ def search_grs(
           sc.sc_no,
           vendor.vendor_id,
           vendor.vendor_name,
+          vendor.ksrm_vendor_code,
           requester.user_name as requester_name
         from gr_requests gr
         join pos po on po.po_id = gr.po_id
@@ -560,6 +561,7 @@ def search_grs(
             "po.po_no",
             "sc.sc_no",
             "vendor.vendor_name",
+            "vendor.ksrm_vendor_code",
             "cast(gr.estimated_amount as text)",
             "cast(gr.con_value as text)",
             "cast(gr.gross_cost as text)",
@@ -625,6 +627,7 @@ def search_grs(
             "po_no": "po.po_no",
             "sc_no": "sc.sc_no",
             "vendor_name": "vendor.vendor_name",
+            "ksrm_vendor_code": "vendor.ksrm_vendor_code",
             "estimated_amount": "gr.estimated_amount",
             "con_value": "gr.con_value",
             "gross_cost": "gr.gross_cost",
@@ -634,6 +637,9 @@ def search_grs(
             "last_delivery": "gr.last_delivery",
             "status": "gr.status",
             "created_at": "gr.created_at",
+            "updated_at": "gr.updated_at",
+            "submitted_date": "gr.submitted_date",
+            "finished_at": "gr.finished_at",
             "approved_at": "gr.approved_at",
             "cancelled_at": "gr.denied_at",
             "pending_date": "gr.pending_date",

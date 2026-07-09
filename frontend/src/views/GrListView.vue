@@ -30,62 +30,79 @@
       <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val" @sort-change="onSortChange" :default-sort="{ prop: 'created_at', order: 'descending' }">
-      <el-table-column type="selection" width="50" />
-      <el-table-column :label="$t('common.status')" width="100" prop="status" sortable>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border size="small" @selection-change="val => selectedRows = val" @sort-change="onSortChange" :default-sort="{ prop: 'created_at', order: 'descending' }">
+      <el-table-column type="selection" width="40" />
+      <el-table-column :label="$t('common.status')" width="90" prop="status" sortable>
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
       </el-table-column>
-      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="135" sortable>
+      <el-table-column prop="gr_id" :label="$t('gr.grId')" width="115" sortable>
         <template #default="{ row }">
           <el-tooltip :content="row.gr_id" placement="top" :disabled="!row.gr_id">
-            <span style="font-family:monospace;font-size:12px;cursor:default">{{ shortId(row.gr_id) }}</span>
+            <span class="mono-cell clickable">{{ shortId(row.gr_id) }}</span>
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="120" sortable>
+      <el-table-column prop="gr_no" :label="$t('gr.grNo')" width="105" sortable show-overflow-tooltip>
         <template #default="{ row }">{{ row.gr_no || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="po_no" :label="$t('gr.poNo')" width="130" sortable />
-      <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="130" sortable />
-      <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="150" show-overflow-tooltip sortable />
-      <el-table-column prop="requester_name" :label="$t('gr.requester')" width="120" show-overflow-tooltip sortable />
-      <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="120" sortable>
+      <el-table-column prop="po_no" :label="$t('gr.poNo')" width="115" sortable show-overflow-tooltip />
+      <el-table-column prop="sc_no" :label="$t('gr.scNo')" width="115" sortable show-overflow-tooltip />
+      <el-table-column prop="vendor_name" :label="$t('gr.vendor')" min-width="130" show-overflow-tooltip sortable>
+        <template #default="{ row }">
+          <span>{{ row.vendor_name || '-' }}</span>
+          <span v-if="row.ksrm_vendor_code" class="ksrm-code">{{ row.ksrm_vendor_code }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="requester_name" :label="$t('gr.requester')" width="100" show-overflow-tooltip sortable />
+      <el-table-column prop="estimated_amount" :label="$t('gr.estimated')" width="105" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.estimated_amount" /></template>
       </el-table-column>
-      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="80" align="center" sortable>
+      <el-table-column prop="tax_rate" :label="$t('gr.taxRate')" width="65" align="center" sortable>
         <template #default="{ row }">{{ row.tax_rate != null ? row.tax_rate + '%' : '-' }}</template>
       </el-table-column>
-      <el-table-column prop="gross_cost" :label="$t('gr.grossCost')" width="130" sortable>
+      <el-table-column prop="gross_cost" :label="$t('gr.grossCost')" width="110" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.gross_cost" /></template>
       </el-table-column>
-      <el-table-column prop="con_value" :label="$t('gr.conValue')" width="120" sortable>
+      <el-table-column prop="con_value" :label="$t('gr.conValue')" width="105" sortable>
         <template #default="{ row }"><AmountDisplay :value="row.con_value" /></template>
       </el-table-column>
-      <el-table-column prop="goods_service_description" :label="$t('gr.goodsServiceDescription')" min-width="150" show-overflow-tooltip sortable>
+      <el-table-column prop="goods_service_description" :label="$t('gr.goodsServiceDescription')" min-width="130" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.goods_service_description || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="confirmation_name" :label="$t('gr.confirmationName')" width="130" show-overflow-tooltip sortable>
-        <template #default="{ row }">{{ row.confirmation_name || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="100" sortable>
-        <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
-        <template #default="{ row }">{{ row.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</template>
-      </el-table-column>
-      <el-table-column prop="remark" :label="$t('gr.remark')" width="120" show-overflow-tooltip sortable>
+      <el-table-column prop="remark" :label="$t('gr.remark')" width="100" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.remark || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
-        <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
+      <el-table-column prop="confirmation_name" :label="$t('gr.confirmationName')" width="110" show-overflow-tooltip sortable>
+        <template #default="{ row }">{{ row.confirmation_name || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
-        <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="85" align="center" sortable>
+        <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="submitted_date" :label="$t('gr.submittedDate')" width="110" sortable>
+      <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="85" align="center" sortable>
+        <template #default="{ row }">{{ row.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</template>
+      </el-table-column>
+      <el-table-column prop="created_at" :label="$t('timestampLabel.created')" width="100" sortable>
+        <template #default="{ row }">{{ (row.created_at || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="submitted_date" :label="$t('gr.submittedDate')" width="100" sortable>
         <template #default="{ row }">{{ (row.submitted_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
-      <el-table-column :label="$t('common.actions')" width="70" fixed="right">
+      <el-table-column prop="confirmed_at" :label="$t('timestampLabel.confirmed')" width="100" sortable>
+        <template #default="{ row }">{{ (row.confirmed_at || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="100" sortable>
+        <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="100" sortable>
+        <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" width="100" sortable>
+        <template #default="{ row }">{{ (row.finished_at || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="updated_at" :label="$t('timestampLabel.updated')" width="100" sortable>
+        <template #default="{ row }">{{ (row.updated_at || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column :label="$t('common.actions')" width="60" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click.stop="goToDetail(row)">{{ $t('common.detail') }}</el-button>
         </template>
@@ -542,3 +559,24 @@ onMounted(async () => {
   await Promise.all([searchGrs(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
 })
 </script>
+
+<style scoped>
+.mono-cell {
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+.mono-cell.clickable {
+  cursor: default;
+}
+.ksrm-code {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.ksrm-code::before {
+  content: '(';
+}
+.ksrm-code::after {
+  content: ')';
+}
+</style>
