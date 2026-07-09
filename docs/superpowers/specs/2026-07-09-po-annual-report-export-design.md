@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add an admin-only annual report export button to the PO List page. The report exports PO rows selected by annual-report inclusion rules, in the standard annual-report layout represented by `docs/2025 C_EG-V GR_25.09.25_update.xlsx`, excluding the template total row.
+Add an admin-only annual report export button to the PO List page. The report exports annual-report rows selected by SC/PO inclusion rules, in the standard annual-report layout represented by `docs/2025 C_EG-V GR_25.09.25_update.xlsx`, excluding the template total row.
 
 The GR annual report export already has the intended UI pattern, but the current worktree has a broken backend gap: `GrListView.vue` calls `get_gr_annual_report`, while the backend service/API methods are missing. This work will also repair that GR path so the copied pattern is usable.
 
@@ -12,11 +12,11 @@ On PO List, admins see an annual-report export button near the existing export c
 
 Clicking the button opens a compact year-picker dialog, matching the GR annual report interaction. The selected year defaults to the current year. Confirming the dialog generates an Excel file named like `PO_Annual_Report_2025.xlsx`.
 
-The export is intentionally broader than "POs with GR this year" but narrower than "all finished POs". A PO is included when it matches at least one annual-report inclusion condition in the Data Scope section.
+The export is intentionally broader than "POs with GR this year" but narrower than "all finished POs". It includes qualifying PO rows plus SC-only rows for approved SCs that have no qualifying PO row.
 
 ## Data Scope
 
-The backend includes a PO when any of these conditions is true:
+The backend produces one row per qualifying PO when any of these conditions is true:
 
 1. The PO belongs to an SC whose status is `approved`, and the PO status is `active` or `finished`.
 2. The PO has at least one approved/finished GR whose report year equals the selected year.
@@ -28,6 +28,8 @@ This means historical finished POs are not included just because they are finish
 Draft POs under approved SCs do not enter the report through condition 1.
 
 Independent FC POs do not have a parent SC, so they enter the report through conditions 2, 3, or 4.
+
+The backend also produces one SC-only row for each approved SC that has no qualifying PO row. SC-only rows represent the approved SC itself, not any child PO. For SC-only rows, `PO number`, `PO amount`, previous-year GR, selected-year GR, provision, to-be-GR, FC GR, and `Remark` are blank. `Requester`, `SC no`, `Short Text`, and `SC amount` are filled from the SC.
 
 ## Report Columns
 
@@ -59,19 +61,25 @@ The following columns are intentionally left blank for every row:
 
 ## Data Mapping
 
-`Requester` comes from the PO requester user name. If the PO is SC-linked and its requester is inherited from the SC, the existing PO requester field is still used.
+For PO rows, `Requester` comes from the PO requester user name. If the PO is SC-linked and its requester is inherited from the SC, the existing PO requester field is still used.
 
-`SC no` and `SC amount` come from the linked SC. Independent FC POs have no linked SC, so these fields are blank.
+For SC-only rows, `Requester` comes from the SC requester user name.
 
-`Short Text` comes from `sc_records.description`. If the PO has no linked SC or the SC description is empty, `Short Text` is blank.
+For PO rows, `SC no` and `SC amount` come from the linked SC. Independent FC POs have no linked SC, so these fields are blank.
+
+For SC-only rows, `SC no` and `SC amount` come from the SC.
+
+`Short Text` comes from `sc_records.description`. If the row has no linked SC or the SC description is empty, `Short Text` is blank.
 
 `PO number` comes from `pos.po_no`.
 
 `PO amount` comes from `pos.po_amount`.
 
-`{previousYear} GR` is the sum of approved/finished GR `con_value` under that PO whose report year equals the previous year.
+For PO rows, `{previousYear} GR` is the sum of approved/finished GR `con_value` under that PO whose report year equals the previous year.
 
-`{selectedYear} GR` is the sum of approved/finished GR `con_value` under that PO whose report year equals the selected year.
+For PO rows, `{selectedYear} GR` is the sum of approved/finished GR `con_value` under that PO whose report year equals the selected year.
+
+For SC-only rows, both GR amount columns are blank.
 
 The GR report year follows the existing GR annual-report intent:
 
@@ -91,6 +99,7 @@ The PO annual report query must use `LEFT JOIN sc_records` so independent FC POs
 
 The PO annual report backend row contract uses stable keys:
 
+- `row_type`, with value `po` or `sc`
 - `requester`
 - `sc_no`
 - `po_no`
@@ -104,7 +113,7 @@ The PO annual report backend row contract uses stable keys:
 - `selected_year_fc_gr`
 - `remark`
 
-The blank columns return empty strings for `previous_year_provision`, `selected_year_to_be_gr`, `selected_year_fc_gr`, and `remark`.
+The blank columns return empty strings for `previous_year_provision`, `selected_year_to_be_gr`, `selected_year_fc_gr`, and `remark`. SC-only rows also return empty strings for `po_no`, `po_amount`, `previous_year_gr`, and `selected_year_gr`.
 
 Backend adds `ApiBridge.get_po_annual_report(payload)` beside the existing export endpoints. It defaults to the current year when omitted, calls the PO service, formats timestamps through existing helpers where relevant, and returns `{ rows }`.
 
@@ -156,6 +165,8 @@ Backend tests cover:
 - Non-admin users cannot fetch PO annual report data.
 - Active/finished POs under approved SCs are included even when selected-year GR is empty.
 - Draft POs under approved SCs are not included by the approved-SC rule.
+- Approved SCs with no qualifying PO rows produce SC-only rows.
+- SC-only rows leave PO and GR amount fields blank while keeping SC/requester fields.
 - POs with selected-year GRs are included even when their parent SC is not approved.
 - Active POs are included.
 - Finished POs are included only when finished in the selected year, unless included by another rule.
