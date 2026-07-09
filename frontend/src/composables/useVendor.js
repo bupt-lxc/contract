@@ -1,4 +1,3 @@
-import { readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
 import { useListSearch } from './useListSearch.js'
 
@@ -53,7 +52,7 @@ export function useVendor() {
   function onPageSizeChange(size) { list.changePageSize(size) }
 
   return {
-    state: readonly(list.state),
+    state: list.state,
     searchVendors: list.search,
     createVendor,
     updateVendor,

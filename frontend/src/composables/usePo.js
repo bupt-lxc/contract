@@ -1,4 +1,3 @@
-import { readonly } from 'vue'
 import { callApi } from '@/api/bridge.js'
 import { useListSearch } from './useListSearch.js'
 
@@ -37,7 +36,7 @@ export function usePo(pageSize = 10) {
   function onPageSizeChange(size) { list.changePageSize(size) }
 
   return {
-    state: readonly(list.state),
+    state: list.state,
     searchPos: list.search,
     createPo, updatePo, submitPo, finishPo,
     setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange,
