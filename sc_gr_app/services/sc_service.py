@@ -873,6 +873,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset = ?,
                         asset_nums = ?,
                         internal_system_number = ?,
+                        service_scope = ?,
                         currency = ?,
                         updated_at = ?
                     where sc_id = ?
@@ -892,6 +893,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset"),
                         merged.get("asset_nums"),
                         merged.get("internal_system_number"),
+                        merged.get("service_scope"),
                         merged.get("currency"),
                         timestamp,
                         sc_id,
