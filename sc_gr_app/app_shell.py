@@ -14,14 +14,15 @@ except ModuleNotFoundError:
 
 from sc_gr_app import __version__
 from sc_gr_app.api.bridge import ApiBridge
-from sc_gr_app.config import default_config
+from sc_gr_app.config import _detect_beta, default_config
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.services.user_service import seed_users
 
-MUTEX_NAME = "Local\\POMP_BETA_INSTANCE" if os.getenv("SC_GR_BETA") == "1" else "Local\\POMP_INSTANCE"
-WINDOW_TITLE = "PO Management Platform Beta" if os.getenv("SC_GR_BETA") == "1" else "PO Management Platform"
+
+MUTEX_NAME = "Local\\POMP_BETA_INSTANCE" if _detect_beta() else "Local\\POMP_INSTANCE"
+WINDOW_TITLE = "PO Management Platform Beta" if _detect_beta() else "PO Management Platform"
 DEV_MODE = os.getenv("SC_GR_DEV") == "1"
-BETA_MODE = os.getenv("SC_GR_BETA") == "1"
+BETA_MODE = _detect_beta()
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 DEFAULT_WIDTH, DEFAULT_HEIGHT = 1280, 820
 
