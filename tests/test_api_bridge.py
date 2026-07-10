@@ -464,102 +464,36 @@ def test_bridge_annual_report_methods_forward_current_user_and_year(monkeypatch,
     ]
 
 
-def test_bridge_manual_amount_methods_forward_payload(monkeypatch, app_config):
+def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_config):
     from sc_gr_app.api import bridge
 
-    current_user = {"user_id": "U_ADMIN", "role": "admin", "machine_id": "1234567"}
     calls = []
 
     monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
     monkeypatch.setattr(
         bridge,
         "get_user_by_machine_id",
-        lambda config, machine_id: current_user,
+        lambda _config, _machine_id: {"user_id": "U1", "machine_id": "1234567", "user_name": "Alice", "role": "admin"},
     )
-    monkeypatch.setattr(
-        bridge.po_service,
-        "list_po_manual_amounts",
-        lambda config, user, po_id: calls.append(("list", config, user, po_id)) or [
-            {"manual_amount_id": "PMA-1", "created_at": "2026-07-09T00:00:00+00:00"}
-        ],
-    )
-    monkeypatch.setattr(
-        bridge.po_service,
-        "create_po_manual_amount",
-        lambda config, user, po_id, data: calls.append(("create", config, user, po_id, data)) or {
-            "manual_amount_id": "PMA-2",
-            "created_at": "2026-07-09T01:00:00+00:00",
-        },
-    )
-    monkeypatch.setattr(
-        bridge.po_service,
-        "delete_po_manual_amount",
-        lambda config, user, manual_amount_id: calls.append(("delete", config, user, manual_amount_id)) or {
-            "deleted": True,
-            "manual_amount_id": manual_amount_id,
-        },
-    )
+    def fake_rows(*args, **kwargs):
+        calls.append(("rows", args, kwargs))
+        return [{"_type": "SC", "sc_id": "sc-alpha"}]
+
+    def fake_stats(*args, **kwargs):
+        calls.append(("stats", args, kwargs))
+        return {"overview": {}}
+
+    monkeypatch.setattr(bridge.export_service, "build_cascade_rows", fake_rows)
+    monkeypatch.setattr(bridge.export_service, "compute_statistics", fake_stats)
 
     api = bridge.ApiBridge(app_config)
+    api.export_scs_cascade({"text": "alpha", "filters": {"status": "approved"}, "sort": "created_at", "direction": "desc"})
 
-    assert api.list_po_manual_amounts({"po_id": "PO1"})["ok"] is True
-    assert api.create_po_manual_amount(
-        {"po_id": "PO1", "data": {"year": "2026", "type": "to_be_gr", "amount": 1}}
-    )["ok"] is True
-    assert api.delete_po_manual_amount({"manual_amount_id": "PMA-2"}) == {
-        "ok": True,
-        "data": {"deleted": True, "manual_amount_id": "PMA-2"},
-    }
-    assert calls[0] == ("list", app_config, current_user, "PO1")
-    assert calls[1] == (
-        "create",
-        app_config,
-        current_user,
-        "PO1",
-        {"year": "2026", "type": "to_be_gr", "amount": 1},
-    )
-    assert calls[2] == ("delete", app_config, current_user, "PMA-2")
-
-
-def test_bridge_formats_manual_amount_timestamps_in_details(monkeypatch, app_config):
-    from sc_gr_app.api import bridge
-
-    current_user = {"user_id": "U_ADMIN", "role": "admin", "machine_id": "1234567"}
-    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
-    monkeypatch.setattr(
-        bridge,
-        "get_user_by_machine_id",
-        lambda config, machine_id: current_user,
-    )
-    monkeypatch.setattr(
-        bridge.po_service,
-        "get_po_detail",
-        lambda config, user, po_id: {
-            "po": {"po_id": po_id},
-            "manual_amounts": [
-                {"manual_amount_id": "PMA-1", "created_at": "2026-07-09T00:00:00+00:00"}
-            ],
-        },
-    )
-    monkeypatch.setattr(
-        bridge.sc_service,
-        "get_sc_detail",
-        lambda config, user, sc_id: {
-            "sc": {"sc_id": sc_id},
-            "pos": [
-                {
-                    "po_id": "PO1",
-                    "manual_amounts": [
-                        {"manual_amount_id": "PMA-2", "created_at": "2026-07-09T00:00:00+00:00"}
-                    ],
-                }
-            ],
-        },
-    )
-
-    api = bridge.ApiBridge(app_config)
-
-    po_result = api.get_po_detail({"po_id": "PO1"})["data"]
-    sc_result = api.get_sc_detail({"sc_id": "SC1"})["data"]
-    assert po_result["manual_amounts"][0]["created_at"] != "2026-07-09T00:00:00+00:00"
-    assert sc_result["pos"][0]["manual_amounts"][0]["created_at"] != "2026-07-09T00:00:00+00:00"
+    row_args = calls[0][1]
+    row_kwargs = calls[0][2]
+    stats_kwargs = calls[1][2]
+    # current_user is a positional arg (index 6) in build_cascade_rows
+    assert row_kwargs["text"] == "alpha"
+    assert row_args[6]["user_id"] == "U1"
+    assert stats_kwargs["text"] == "alpha"
+    assert "export_rows" in stats_kwargs

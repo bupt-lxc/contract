@@ -35,7 +35,7 @@
         <el-descriptions :column="2" border size="small">
           <template v-if="hasSc">
             <el-descriptions-item :label="$t('sc.scId')">
-              <el-link type="primary" @click="$router.push(`/sc/${scDetail.sc?.sc_id}`)">{{ scDetail.sc?.sc_id }}</el-link>
+              <el-link type="primary" @click="goToParentScDetail">{{ scDetail.sc?.sc_id }}</el-link>
             </el-descriptions-item>
             <el-descriptions-item :label="$t('sc.scNo')">{{ scDetail.sc?.sc_no || '-' }}</el-descriptions-item>
             <el-descriptions-item :label="$t('sc.requester')">{{ scDetail.sc?.requester_name || scDetail.sc?.requester_id || '-' }}</el-descriptions-item>
@@ -78,8 +78,8 @@
         </div>
         <GrTable
           :rows="grs"
-          @row-click="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
-          @detail="row => $router.push(`/sc/${scId}/po/${poId}/gr/${row.gr_id}`)"
+          @row-click="goToGrDetail"
+          @detail="goToGrDetail"
           @edit="row => { grDialogRecord = { ...row, po_id: poId }; grDialogMode = 'edit'; grDialogVisible = true }"
           @approve="row => handleGrApprove(row)"
           @deny="row => handleGrDeny(row)"
@@ -96,7 +96,7 @@
             <el-icon><Plus /></el-icon> {{ $t('po.newCalloffSc') }}
           </el-button>
         </div>
-        <el-table :data="calloffScs" stripe border size="small" @row-click="row => $router.push(`/sc/${row.sc_id}`)">
+        <el-table :data="calloffScs" stripe border size="small" @row-click="goToScDetail">
           <el-table-column prop="sc_id" :label="$t('sc.scId')" />
           <el-table-column prop="sc_no" :label="$t('sc.scNo')" />
           <el-table-column prop="request_type" :label="$t('sc.requestType')" />
@@ -318,6 +318,7 @@ import { useNotification } from '@/composables/useNotification.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { formatDateTime } from '@/utils/format.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -541,6 +542,29 @@ async function loadCalloffData() {
 
 function openEditDialog() { editDialogVisible.value = true }
 
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+
+function listReturnPath(fallback) {
+  return sanitizeRedirectTarget(route.query.returnTo, fallback)
+}
+
+function goToParentScDetail() {
+  const id = scDetail.value.sc?.sc_id
+  if (id) {
+    router.push({ name: 'sc-detail', params: { id }, query: childReturnQuery() })
+  }
+}
+
+function goToGrDetail(row) {
+  router.push({ name: 'gr-detail', params: { scId: scId.value, poId: poId.value, grId: row.gr_id }, query: childReturnQuery() })
+}
+
+function goToScDetail(row) {
+  router.push({ name: 'sc-detail', params: { id: row.sc_id }, query: childReturnQuery() })
+}
+
 async function handleEditSave(data) {
   try {
     const { _attachments, ...formData } = data
@@ -584,9 +608,9 @@ async function handleDelete() {
     await callApi('delete_po', { po_id: poId.value })
     ElMessage.success(t('po.poDeleted'))
     if (hasSc.value) {
-      router.replace(`/sc/${scId.value}`)
+      router.replace(listReturnPath(`/sc/${scId.value}`))
     } else {
-      router.replace('/po')
+      router.replace(listReturnPath('/po'))
     }
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))

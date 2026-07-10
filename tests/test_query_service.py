@@ -798,3 +798,46 @@ def test_workbench_denied_gr_visibility(app_config):
     # Admin sees both denied GRs
     admin_data = workbench_data(app_config, ADMIN)
     assert admin_data["gr"]["denied"]["count"] == 2
+
+
+def test_po_advanced_text_filters_are_case_insensitive_contains(app_config):
+    seed_query_data(app_config)
+
+    assert search_pos(app_config, filters={"po_no": "alpha"}, current_user=ADMIN)["rows"][0]["po_no"] == "PO-ALPHA"
+    assert search_pos(app_config, filters={"vendor_name": "vendor"}, current_user=ADMIN)["rows"][0]["vendor_name"] == "Alpha Vendor"
+    assert search_pos(app_config, filters={"cost_center": "10"}, current_user=ADMIN)["rows"][0]["po_no"] == "PO-ALPHA"
+
+
+def test_sc_advanced_text_filters_are_case_insensitive_contains(app_config):
+    sc_id, _po_id, _gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_scs(app_config, filters={"sc_no": "alpha"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+    assert search_scs(app_config, filters={"description": "SERVICE"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+    assert search_scs(app_config, filters={"cost_center": "10"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+
+
+def test_gr_advanced_text_filters_are_case_insensitive_contains(app_config):
+    _sc_id, _po_id, gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_grs(app_config, filters={"gr_id": gr_id[-6:]}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id
+    assert search_grs(app_config, filters={"remark": "REMARK"}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id
+
+
+def test_vendor_advanced_text_filters_are_case_insensitive_contains(app_config):
+    seed_query_data(app_config)
+
+    assert search_vendors(app_config, filters={"vendor_name": "vendor"})["rows"][0]["vendor_name"] == "Alpha Vendor"
+    assert search_vendors(app_config, filters={"ksrm_vendor_code": "kv"})["rows"][0]["ksrm_vendor_code"] == "KV-1"
+
+
+def test_advanced_like_filters_treat_sql_wildcards_as_literals(app_config):
+    seed_query_data(app_config)
+
+    assert search_pos(app_config, filters={"po_no": "%"}, current_user=ADMIN)["rows"] == []
+    assert search_vendors(app_config, filters={"vendor_name": "_"})["rows"] == []
+
+
+def test_gr_is_cancellation_filter_is_supported(app_config):
+    _sc_id, _po_id, gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_grs(app_config, filters={"is_cancellation": "N"}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id

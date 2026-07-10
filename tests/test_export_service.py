@@ -184,3 +184,81 @@ def test_compute_statistics_no_budget_health_without_sc(app_config):
     stats = export_service.compute_statistics(app_config, {"PO"}, {})
     assert "budget_health" not in stats
     assert "overview" in stats
+
+
+def test_cascade_export_honors_text_search_for_rows(app_config):
+    migrate(app_config)
+    import sqlite3
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U1', 'M001', 'Alice', 'admin', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U2', 'M002', 'Bob', 'requester', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-alpha', 'SC-ALPHA', 'U2', 'new', 1000, 50000, 'CNY', '2026-01-01', '2026-06-30', 'approved', 'Alpha service', 'U2', '2026-01-15', '2026-01-15')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-beta', 'SC-BETA', 'U2', 'new', 2000, 30000, 'CNY', '2026-02-01', '2026-07-31', 'approved', 'Beta service', 'U2', '2026-02-01', '2026-02-01')")
+    conn.commit()
+    conn.close()
+
+    rows = export_service.build_cascade_rows(
+        app_config, "sc", {}, "created_at", "desc",
+        cascade_options={"po": False, "gr": False},
+        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
+        text="alpha",
+    )
+
+    assert [row["sc_no"] for row in rows] == ["SC-ALPHA"]
+
+
+def test_export_statistics_use_same_text_criteria_as_rows(app_config):
+    migrate(app_config)
+    import sqlite3
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U1', 'M001', 'Alice', 'admin', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U2', 'M002', 'Bob', 'requester', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-alpha', 'SC-ALPHA', 'U2', 'new', 1000, 50000, 'CNY', '2026-01-01', '2026-06-30', 'approved', 'Alpha service', 'U2', '2026-01-15', '2026-01-15')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-beta', 'SC-BETA', 'U2', 'new', 2000, 30000, 'CNY', '2026-02-01', '2026-07-31', 'approved', 'Beta service', 'U2', '2026-02-01', '2026-02-01')")
+    conn.commit()
+    conn.close()
+
+    rows = export_service.build_cascade_rows(
+        app_config, "sc", {}, "created_at", "desc",
+        cascade_options={"po": False, "gr": False},
+        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
+        text="alpha",
+    )
+    stats = export_service.compute_statistics(
+        app_config,
+        {"SC"},
+        {},
+        export_rows=rows,
+        text="alpha",
+    )
+
+    assert stats["overview"]["sc"]["total_count"] == 1
+    assert stats["overview"]["sc"]["total_amount"] == 50000
+
+
+def test_cascade_statistics_are_based_on_exported_child_rows(app_config):
+    migrate(app_config)
+    import sqlite3
+    conn = sqlite3.connect(app_config.db_path)
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U1', 'M001', 'Alice', 'admin', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO users (user_id, machine_id, user_name, role, status, created_at, updated_at) VALUES ('U2', 'M002', 'Bob', 'requester', 'active', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) VALUES ('VAlpha', 'Alpha Vendor', 'Parts', 'U1', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) VALUES ('VBeta', 'Beta Vendor', 'Parts', 'U1', '2026-01-01', '2026-01-01')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-alpha', 'SC-ALPHA', 'U2', 'new', 1000, 50000, 'CNY', '2026-01-01', '2026-06-30', 'approved', 'Alpha service', 'U2', '2026-01-15', '2026-01-15')")
+    conn.execute("INSERT INTO sc_records (sc_id, sc_no, requester_id, request_type, cost_center, sc_amount, currency, service_period_start, service_period_end, status, description, created_by, created_at, updated_at) VALUES ('sc-beta', 'SC-BETA', 'U2', 'new', 2000, 30000, 'CNY', '2026-02-01', '2026-07-31', 'approved', 'Beta service', 'U2', '2026-02-01', '2026-02-01')")
+    conn.execute("INSERT INTO pos (po_id, po_no, sc_id, vendor_id, po_amount, status, created_at, updated_at) VALUES ('po-alpha', 'PO-ALPHA', 'sc-alpha', 'VAlpha', 700, 'active', '2026-01-20', '2026-01-20')")
+    conn.execute("INSERT INTO pos (po_id, po_no, sc_id, vendor_id, po_amount, status, created_at, updated_at) VALUES ('po-beta', 'PO-BETA', 'sc-beta', 'VBeta', 900, 'active', '2026-02-10', '2026-02-10')")
+    conn.commit()
+    conn.close()
+
+    rows = export_service.build_cascade_rows(
+        app_config, "sc", {}, "created_at", "desc",
+        cascade_options={"po": True, "gr": False},
+        current_user={"user_id": "U1", "machine_id": "M001", "user_name": "Alice", "role": "admin"},
+        text="alpha",
+    )
+    stats = export_service.compute_statistics(app_config, {"SC", "PO"}, {}, export_rows=rows)
+
+    assert stats["overview"]["sc"]["total_count"] == 1
+    assert stats["overview"]["po"]["total_count"] == 1
+    assert stats["overview"]["po"]["total_amount"] == 700

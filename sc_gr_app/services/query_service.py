@@ -44,6 +44,20 @@ def _normalize_offset(offset: int) -> int:
     return normalized
 
 
+def _escape_like(value) -> str:
+    text = str(value)
+    return (
+        text
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def _contains_param(value) -> str:
+    return f"%{_escape_like(value).lower()}%"
+
+
 def _append_text_search(
     clauses: list[str],
     params: list,
@@ -52,13 +66,12 @@ def _append_text_search(
 ) -> None:
     if not text:
         return
-    like_text = f"%{text.lower()}%"
     search_clauses = (
-        f"lower(coalesce({column}, '')) like ?"
+        f"lower(coalesce({column}, '')) like ? escape '\\'"
         for column in columns
     )
     clauses.append("(" + " or ".join(search_clauses) + ")")
-    params.extend([like_text] * len(columns))
+    params.extend([_contains_param(text)] * len(columns))
 
 
 def _append_filters(
@@ -106,8 +119,8 @@ def _append_filters(
             column = allowed_filters.get(field)
             if column is None:
                 raise ValidationError("filter field is invalid")
-            clauses.append(f"{column} like ?")
-            params.append(f"%{value}%")
+            clauses.append(f"lower(coalesce({column}, '')) like ? escape '\\'")
+            params.append(_contains_param(value))
         else:
             column = allowed_filters.get(field)
             if column is None:
@@ -308,7 +321,11 @@ def search_scs(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
-        like_fields={"requester_id", "created_by", "requester_name", "created_by_name"},
+        like_fields={
+            "sc_id", "sc_no", "requester_id", "requester_name",
+            "created_by", "created_by_name", "cost_center",
+            "description",
+        },
     )
 
 
@@ -367,7 +384,11 @@ def search_vendors(
         offset=offset,
         base_clauses=["(status IS NULL OR status != 'disabled')"],
         base_params=[],
-        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "company_name_cn", "service_scope", "contact_person", "email"},
+        like_fields={
+            "vendor_id", "vendor_name", "ksrm_vendor_code",
+            "company_name_cn", "service_scope", "created_by",
+            "contact_person", "email", "phone", "description",
+        },
     )
 
 
@@ -520,6 +541,11 @@ def search_pos(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
+        like_fields={
+            "po_id", "po_no", "sc_id", "vendor_id", "vendor_name",
+            "requester_name", "contract_no", "payment_frequency",
+            "contract_pos", "cost_center", "purchaser",
+        },
     )
 
 
@@ -619,6 +645,7 @@ def search_grs(
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
+            "is_cancellation": "gr.is_cancellation",
         },
         sort=sort,
         allowed_sorts={
@@ -651,6 +678,11 @@ def search_grs(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
+        like_fields={
+            "gr_id", "gr_no", "po_id", "sc_id", "requester_id",
+            "vendor_id", "goods_service_description",
+            "confirmation_name", "remark",
+        },
     )
 
 

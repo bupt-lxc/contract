@@ -109,6 +109,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Loading, Setting, User } from '@element-plus/icons-vue'
 import { callApi, ApiError } from '@/api/bridge.js'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -198,7 +199,7 @@ function backToRoleSelect() {
 
 function enterApp() {
   stopRetry()
-  const redirect = router.currentRoute.value.query?.redirect || '/workbench'
+  const redirect = sanitizeRedirectTarget(router.currentRoute.value.query?.redirect)
   router.push(redirect)
 }
 

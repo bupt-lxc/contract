@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { callApi } from '@/api/bridge.js'
+import { fetchAllSearchRows } from '@/utils/exportPaging.js'
 
 /**
  * Reusable Excel export composable.
@@ -113,19 +114,7 @@ export function useExport() {
    * @param {string}  filename  – without extension
    */
   async function exportAll(apiMethod, params, columns, filename) {
-    const allRows = []
-    const limit = 500
-    let offset = 0
-
-    while (true) {
-      const result = await callApi(apiMethod, { ...params, limit, offset })
-      const rows = Array.isArray(result) ? result : (result.items || result.rows || [])
-      if (!rows.length) break
-      allRows.push(...rows)
-      if (rows.length < limit) break
-      offset += limit
-    }
-
+    const allRows = await fetchAllSearchRows(callApi, apiMethod, params)
     return await exportRows(allRows, columns, filename)
   }
 
@@ -168,19 +157,7 @@ export function useExport() {
    * Paginate through ALL search results and export as .csv.
    */
   async function exportAllCSV(apiMethod, params, columns, filename) {
-    const allRows = []
-    const limit = 500
-    let offset = 0
-
-    while (true) {
-      const result = await callApi(apiMethod, { ...params, limit, offset })
-      const rows = Array.isArray(result) ? result : (result.items || result.rows || [])
-      if (!rows.length) break
-      allRows.push(...rows)
-      if (rows.length < limit) break
-      offset += limit
-    }
-
+    const allRows = await fetchAllSearchRows(callApi, apiMethod, params)
     return await exportCSV(allRows, columns, filename)
   }
 

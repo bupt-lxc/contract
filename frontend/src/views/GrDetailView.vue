@@ -33,10 +33,10 @@
           <el-descriptions-item :label="$t('common.status')"><StatusBadge :status="gr.status" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.requesterId')">{{ gr.requester_name || gr.requester_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.poNo')">
-            <router-link :to="`/sc/${scId}/po/${gr.po_id}`">{{ po.po_no || gr.po_id }}</router-link>
+            <router-link :to="{ path: `/sc/${scId}/po/${gr.po_id}`, query: childReturnQuery() }">{{ po.po_no || gr.po_id }}</router-link>
           </el-descriptions-item>
           <el-descriptions-item :label="$t('gr.scNo')">
-            <router-link :to="`/sc/${scId}`">{{ scDetail?.sc?.sc_no || scId }}</router-link>
+            <router-link :to="{ path: `/sc/${scId}`, query: childReturnQuery() }">{{ scDetail?.sc?.sc_no || scId }}</router-link>
           </el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
@@ -115,6 +115,7 @@ import AttachmentList from '@/components/common/AttachmentList.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
 import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,6 +158,14 @@ const attachRefreshKey = ref(0)
 const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
+
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+
+function listReturnPath(fallback) {
+  return sanitizeRedirectTarget(route.query.returnTo, fallback)
+}
 
 async function handleSubmit() {
   try {
@@ -280,7 +289,7 @@ async function handleDelete() {
     await ElMessageBox.confirm(t('gr.confirmDeleteGr'), t('common.confirm'), { type: 'error' })
     await callApi('delete_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.grDeleted'))
-    router.replace(`/sc/${scId.value}/po/${poId.value}`)
+    router.replace(listReturnPath(`/sc/${scId.value}/po/${poId.value}`))
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }

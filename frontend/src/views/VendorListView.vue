@@ -2,6 +2,8 @@
   <div>
     <AdvancedFilterBar
       :filter-config="vendorFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     >
@@ -18,7 +20,7 @@
       </template>
     </AdvancedFilterBar>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border>
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @sort-change="handleSortChange">
       <el-table-column prop="vendor_id" :label="$t('vendor.vendorId')" width="120" />
       <el-table-column prop="vendor_name" :label="$t('vendor.vendor')" sortable="custom" min-width="160" />
       <el-table-column prop="company_name_cn" :label="$t('vendor.companyNameCn')" min-width="140">
@@ -49,6 +51,17 @@
       <template #empty><el-empty :description="state.error || $t('vendor.noRecords')" /></template>
     </el-table>
 
+    <el-pagination
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
+      :total="state.total"
+      layout="total, sizes, prev, pager, next, jumper"
+      @current-change="handlePageChange"
+      @size-change="handleSizeChange"
+      style="margin-top:12px;justify-content:flex-end"
+    />
+
     <VendorFormDialog
       v-model:visible="dialogVisible"
       :mode="dialogMode"
@@ -58,13 +71,14 @@
 
     <VendorImportDialog
       v-model:visible="importVisible"
-      @imported="onImported"
+      @imported="reload"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { useVendor } from '@/composables/useVendor.js'
@@ -74,9 +88,11 @@ import VendorFormDialog from '@/components/vendor/VendorFormDialog.vue'
 import VendorImportDialog from '@/components/vendor/VendorImportDialog.vue'
 import { ElMessage } from 'element-plus'
 
+const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
-const { state, searchVendors, createVendor, updateVendor, disableVendor, deleteVendor } = useVendor()
-const { exportRows } = useExport()
+const { state, searchVendors, createVendor, updateVendor, disableVendor, deleteVendor, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = useVendor()
+const { exportRows, exportAll } = useExport()
 const exporting = ref(false)
 
 const vendorFilterConfig = [
@@ -96,11 +112,24 @@ const dialogRecord = ref(null)
 const importVisible = ref(false)
 
 function handleFilter({ text, filters }) {
-  searchVendors(text, filters)
+  applyFilter(text || null, Object.keys(filters || {}).length ? filters : null)
 }
 
 function handleReset() {
-  searchVendors()
+  reset()
+}
+
+function handleSortChange(sort) {
+  changeSort(sort)
+  reload()
+}
+
+function handlePageChange(page) {
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  changePageSize(size)
 }
 
 async function handleExport() {
@@ -116,7 +145,8 @@ async function handleExport() {
       { key: 'phone', label: t('vendor.phone') },
       { key: 'email', label: t('vendor.email') }
     ]
-    await exportRows(state.rows, columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
+    const criteria = exportCriteria()
+    await exportAll('search_vendors', criteria, columns, `Vendors_${new Date().toISOString().slice(0, 10)}`)
     ElMessage.success(t('export.exported'))
   } catch (e) {
     ElMessage.error(e.message || t('export.failed'))
@@ -151,9 +181,25 @@ async function handleDelete(row) {
   } catch (e) { ElMessage.error(e.message) }
 }
 
-function onImported() {
-  searchVendors()
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
+  }
 }
 
-onMounted(() => searchVendors())
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
+onMounted(() => initializeFromRoute(route, router))
 </script>

@@ -26,11 +26,11 @@
         <!-- Select filter -->
         <el-select
           v-if="f.type === 'select'"
-          v-model="filterValues[f.name]"
+          :model-value="filters[f.name]"
           :placeholder="f.label"
           clearable
           style="width: 160px"
-          @change="emitFilters"
+          @update:model-value="value => updateFilter(f.name, value)"
         >
           <el-option
             v-for="opt in f.options"
@@ -43,54 +43,54 @@
         <!-- Input filter -->
         <el-input
           v-else-if="f.type === 'input'"
-          v-model="filterValues[f.name]"
+          :model-value="filters[f.name]"
           :placeholder="f.label"
           clearable
           style="width: 160px"
-          @change="emitFilters"
+          @update:model-value="value => updateFilter(f.name, value)"
         />
 
         <!-- Date range filter -->
         <template v-else-if="f.type === 'date-range'">
           <el-date-picker
-            v-model="filterValues[f.name + '_from']"
+            :model-value="filters[f.name + '_from']"
             :placeholder="f.label + ' ' + $t('common.from')"
             type="date"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             style="width: 160px"
-            @change="emitFilters"
+            @update:model-value="value => updateFilter(f.name + '_from', value)"
           />
           <el-date-picker
-            v-model="filterValues[f.name + '_to']"
+            :model-value="filters[f.name + '_to']"
             :placeholder="f.label + ' ' + $t('common.to')"
             type="date"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             style="width: 160px"
-            @change="emitFilters"
+            @update:model-value="value => updateFilter(f.name + '_to', value)"
           />
         </template>
 
         <!-- Amount range filter -->
         <template v-else-if="f.type === 'amount-range'">
           <el-input-number
-            v-model="filterValues[f.name + '_min']"
+            :model-value="filters[f.name + '_min']"
             :placeholder="f.label + ' ' + $t('common.min')"
             :precision="2"
             :min="0"
             controls-position="right"
             style="width: 160px"
-            @change="emitFilters"
+            @update:model-value="value => updateFilter(f.name + '_min', value)"
           />
           <el-input-number
-            v-model="filterValues[f.name + '_max']"
+            :model-value="filters[f.name + '_max']"
             :placeholder="f.label + ' ' + $t('common.max')"
             :precision="2"
             :min="0"
             controls-position="right"
             style="width: 160px"
-            @change="emitFilters"
+            @update:model-value="value => updateFilter(f.name + '_max', value)"
           />
         </template>
       </template>
@@ -101,43 +101,64 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 
 const props = defineProps({
-  filterConfig: { type: Array, default: () => [] }
+  filterConfig: { type: Array, default: () => [] },
+  text: { type: String, default: '' },
+  filters: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['filter', 'reset'])
+const emit = defineEmits(['update:text', 'update:filters', 'filter', 'reset'])
 
-const searchText = ref('')
+const searchText = computed({
+  get: () => props.text || '',
+  set: value => emit('update:text', value),
+})
+
 const showAdvanced = ref(false)
-const filterValues = reactive({})
-
 let debounceTimer = null
+let pendingText = props.text || ''
 
-function onSearchDebounced() {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => {
-    emitFilters()
-  }, 500)
+watch(
+  () => props.filters,
+  value => {
+    if (Object.keys(value || {}).length) showAdvanced.value = true
+  },
+  { immediate: true, deep: true },
+)
+
+watch(
+  () => props.text,
+  value => { pendingText = value || '' },
+)
+
+onUnmounted(() => clearTimeout(debounceTimer))
+
+function emitFilterPayload(text = props.text || '') {
+  emit('filter', { text: text || null, filters: props.filters || {} })
 }
 
-function emitFilters() {
-  const filters = {}
-  for (const [key, value] of Object.entries(filterValues)) {
-    if (value !== null && value !== '' && value !== undefined) {
-      filters[key] = value
-    }
-  }
-  emit('filter', { text: searchText.value || null, filters })
+function updateFilter(key, value) {
+  const next = { ...(props.filters || {}) }
+  if (value === null || value === '' || value === undefined) delete next[key]
+  else next[key] = value
+  emit('update:filters', next)
+  emit('filter', { text: pendingText || props.text || null, filters: next })
+}
+
+function onSearchDebounced(value) {
+  pendingText = value || ''
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => emitFilterPayload(pendingText), 500)
 }
 
 function handleReset() {
-  searchText.value = ''
-  for (const key of Object.keys(filterValues)) {
-    delete filterValues[key]
-  }
+  clearTimeout(debounceTimer)
+  pendingText = ''
+  emit('update:text', '')
+  emit('update:filters', {})
   emit('reset')
 }
 </script>
