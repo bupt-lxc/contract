@@ -12,7 +12,28 @@ from sc_gr_app.services.vendor_service import create_vendor
 
 config = default_config()
 BASE = os.path.dirname(os.path.abspath(__file__))
-ADMIN = {"user_id": "U-86183", "role": "admin", "machine_id": "86183"}
+
+def _get_admin(config):
+    """Find an existing admin user, or create one if needed."""
+    from sc_gr_app.db.connection import connect
+    with connect(config) as conn:
+        admin = conn.execute(
+            "SELECT user_id, machine_id FROM users WHERE role = 'admin' AND status = 'active' LIMIT 1"
+        ).fetchone()
+        if admin:
+            return {"user_id": admin["user_id"], "role": "admin", "machine_id": admin["machine_id"]}
+    # No admin exists — bootstrap one directly
+    with connect(config) as conn:
+        user_id = "U-86183"
+        conn.execute(
+            "INSERT INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            (user_id, "86183", "Import Admin", "admin", None, "active"),
+        )
+        conn.commit()
+    return {"user_id": user_id, "role": "admin", "machine_id": "86183"}
+
+ADMIN = _get_admin(config)
 
 def load_csv(filename):
     path = os.path.join(BASE, filename)
