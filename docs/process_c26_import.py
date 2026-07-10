@@ -1165,6 +1165,8 @@ if os.path.exists(DB_PATH):
         # Only resolve if calloff_po_id is empty but internal_system_number is set
         if sc.get("calloff_po_id", ""):
             continue
+        if sc.get("request_type") != "call_off":
+            continue
         isn = sc.get("internal_system_number", "")
         if not isn:
             continue
