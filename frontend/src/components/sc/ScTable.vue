@@ -8,6 +8,7 @@
     @sort-change="$emit('sort-change', $event)"
     @selection-change="$emit('selection-change', $event)"
     :row-class-name="rowClass"
+    :default-sort="{ prop: 'created_at', order: 'descending' }"
   >
     <el-table-column v-if="selectable" type="selection" width="40" />
     <el-table-column prop="status" :label="$t('sc.status')" width="90" sortable="custom">

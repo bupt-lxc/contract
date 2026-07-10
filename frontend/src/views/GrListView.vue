@@ -78,14 +78,17 @@
       <el-table-column prop="remark" :label="$t('gr.remark')" width="120" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.remark || '-' }}</template>
       </el-table-column>
+      <el-table-column prop="created_at" :label="$t('gr.created')" width="110" sortable>
+        <template #default="{ row }">{{ (row.created_at || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="submitted_date" :label="$t('gr.submittedDate')" width="110" sortable>
+        <template #default="{ row }">{{ (row.submitted_date || '').slice(0, 10) || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="pending_date" :label="$t('gr.pendingDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.pending_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
       <el-table-column prop="approved_date" :label="$t('gr.approvedDate')" width="110" sortable>
         <template #default="{ row }">{{ (row.approved_date || '').slice(0, 10) || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="submitted_date" :label="$t('gr.submittedDate')" width="110" sortable>
-        <template #default="{ row }">{{ (row.submitted_date || '').slice(0, 10) || '-' }}</template>
       </el-table-column>
       <el-table-column :label="$t('common.actions')" width="70" fixed="right">
         <template #default="{ row }">
