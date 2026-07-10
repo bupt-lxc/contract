@@ -1288,9 +1288,9 @@ def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> 
             left join users u on u.user_id = gr.requester_id
             where gr.status in ('approved', 'finished')
               and (
-                (gr.status = 'finished' and substr(gr.finished_at, 1, 4) = ?)
+                (gr.status = 'finished' and substr(coalesce(gr.finished_at, gr.created_at), 1, 4) = ?)
                 or
-                (gr.status = 'approved' and substr(gr.approved_date, 1, 4) = ?)
+                (gr.status = 'approved' and substr(coalesce(gr.approved_date, gr.approved_at, gr.created_at), 1, 4) = ?)
               )
             order by coalesce(gr.finished_at, gr.approved_date, gr.created_at) desc,
                      gr.gr_no

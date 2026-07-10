@@ -290,7 +290,7 @@ function handleFilter({ text, filters }) {
   }
   delete transformed.deadline
   selectedRows.value = []
-  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
+  applyFilter({ text: text || null, filters: Object.keys(transformed).length ? transformed : null }, router)
 }
 
 function handleReset() {

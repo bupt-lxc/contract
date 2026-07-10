@@ -6,7 +6,7 @@
     border
     size="small"
     :row-class-name="rowClass"
-    :default-sort="{ prop: 'po_no', order: 'ascending' }"
+    :default-sort="{ prop: 'created_at', order: 'descending' }"
     @selection-change="val => $emit('selection-change', val)"
     @sort-change="(sort) => $emit('sort-change', sort)"
   >

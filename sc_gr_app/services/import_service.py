@@ -148,6 +148,11 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                # Normalize: ISN "N/A" means no parent PO -> not a call-off
+                for row in rows:
+                    if (row.get("request_type") == "call_off"
+                            and str(row.get("internal_system_number", "")).strip().upper() == "N/A"):
+                        row["request_type"] = "new"
                 errors = _validate_sc_rows(conn, rows)
                 if errors:
                     conn.rollback()
@@ -173,8 +178,9 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           sc_id, sc_no, requester_id, request_type, cost_center,
                           sc_amount, service_period_start, service_period_end,
                           status, description, currency, internal_system_number,
+                          service_scope, calloff_po_id, asset_nums,
                           created_by, created_at, updated_at, asset
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
                         (
                             sc_id,
                             row.get("sc_no"),
@@ -188,6 +194,9 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("description"),
                             row.get("currency", "CNY"),
                             row.get("internal_system_number"),
+                            row.get("service_scope"),
+                            row.get("calloff_po_id"),
+                            row.get("asset_nums"),
                             current_user["user_id"],
                             timestamp,
                             timestamp,
@@ -223,7 +232,7 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
         if _is_template_meta_row(row, "po_id"):
             continue
         sc_error = _resolve_po_sc_id(conn, row)
-        if not row.get("sc_id") and not row.get("sc_no"):
+        if not row.get("sc_id") and not row.get("sc_no") and row.get("request_type") != "FC":
             errors.append({"row": i, "field": "sc_no", "message": "sc_no is required"})
         elif sc_error:
             errors.append({"row": i, "field": "sc_no", "message": sc_error})
@@ -286,8 +295,8 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           po_id, sc_id, vendor_id, po_no, requester_id,
                           po_amount, status, contract_from, contract_to, contract_no,
                           payment_frequency, contract_pos, contract_type, cost_center,
-                          purchaser, active_date, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          purchaser, request_type, active_date, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             po_id,
                             row["sc_id"],
@@ -304,6 +313,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("contract_type"),
                             row.get("cost_center"),
                             row.get("purchaser"),
+                            row.get("request_type"),
                             None if row.get("status") == "draft" else timestamp,
                             timestamp,
                             timestamp,
@@ -345,6 +355,10 @@ _SC_COLUMN_ALIASES = {
     "description": ["Description", "description"],
     "currency": ["Currency", "currency"],
     "internal_system_number": ["Internal System Number", "internal_system_number"],
+    "service_scope": ["Service Scope", "service_scope"],
+    "calloff_po_id": ["Call-off PO ID", "calloff_po_id"],
+    "asset_nums": ["Asset Nums", "asset_nums"],
+    "asset": ["Asset", "asset"],
 }
 
 _PO_COLUMN_ALIASES = {
@@ -560,7 +574,7 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
                 continue
             errors_list = []
             sc_error = _resolve_po_sc_id(conn, row)
-            if not row.get("sc_id") and not row.get("sc_no"):
+            if not row.get("sc_id") and not row.get("sc_no") and row.get("request_type") != "FC":
                 errors_list.append("sc_no is required")
             elif sc_error:
                 errors_list.append(sc_error)

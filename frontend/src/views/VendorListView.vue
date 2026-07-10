@@ -112,7 +112,7 @@ const dialogRecord = ref(null)
 const importVisible = ref(false)
 
 function handleFilter({ text, filters }) {
-  applyFilter(text || null, Object.keys(filters || {}).length ? filters : null)
+  applyFilter({ text: text || null, filters: Object.keys(filters || {}).length ? filters : null }, router)
 }
 
 function handleReset() {

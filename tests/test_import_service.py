@@ -317,6 +317,29 @@ class TestConfirmImport:
         assert result["ok"] is True
         assert result["count"] == 1
 
+    def test_import_sc_writes_service_scope_and_calloff_po_id(self, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn)
+            _seed_sc(conn)
+            _seed_vendor(conn)
+            _seed_po(conn, po_id="PO-TEST-001")
+        current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+        rows = [{"sc_no": "SC-NEW-COLS", "sc_amount": "50000", "status": "approved",
+                 "request_type": "call_off", "cost_center": "1000",
+                 "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+                 "service_scope": "Transportation", "calloff_po_id": "PO-TEST-001",
+                 "asset_nums": "ASSET-123"}]
+        result = import_service.import_scs(app_config, current_user, rows)
+        assert result["ok"] is True
+        with connect(app_config) as conn:
+            sc = conn.execute(
+                "SELECT service_scope, calloff_po_id, asset_nums FROM sc_records WHERE sc_no = ?",
+                ("SC-NEW-COLS",)).fetchone()
+        assert sc["service_scope"] == "Transportation"
+        assert sc["calloff_po_id"] == "PO-TEST-001"
+        assert sc["asset_nums"] == "ASSET-123"
+
     def test_confirm_po_import_with_required_fields(self, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
@@ -329,6 +352,23 @@ class TestConfirmImport:
         result = import_service.import_pos(app_config, current_user, rows)
         assert result["ok"] is True
         assert result["count"] == 1
+
+    def test_import_po_writes_request_type(self, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn)
+            _seed_sc(conn)
+            _seed_vendor(conn)
+        current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001",
+                 "po_no": "PO-REQ-TYPE", "po_amount": "50000", "status": "active",
+                 "request_type": "FC"}]
+        result = import_service.import_pos(app_config, current_user, rows)
+        assert result["ok"] is True
+        with connect(app_config) as conn:
+            po = conn.execute("SELECT request_type FROM pos WHERE po_no = ?",
+                              ("PO-REQ-TYPE",)).fetchone()
+        assert po["request_type"] == "FC"
 
     def test_confirm_gr_import_with_required_fields(self, app_config):
         migrate(app_config)
@@ -437,6 +477,14 @@ class TestParseDate:
     def test_returns_none_for_empty(self):
         assert import_service.parse_date("") is None
         assert import_service.parse_date(None) is None
+
+
+def test_normalize_header_maps_new_sc_aliases():
+    assert import_service._normalize_import_header("Service Scope") == "service_scope"
+    assert import_service._normalize_import_header("service_scope") == "service_scope"
+    assert import_service._normalize_import_header("Call-off PO ID") == "calloff_po_id"
+    assert import_service._normalize_import_header("Asset Nums") == "asset_nums"
+    assert import_service._normalize_import_header("Asset") == "asset"
 
 
 class TestScNoUniqueness:

@@ -59,6 +59,11 @@
       <el-card v-if="detail.parent_po" class="calloff-context-card section-card">
         <template #header>{{ $t('sc.calloffPoId') }}</template>
         <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('po.poNo')">
+            <el-button type="primary" link size="small" @click="goToParentPo">
+              {{ detail.parent_po.po_no || detail.parent_po.po_id }}
+            </el-button>
+          </el-descriptions-item>
           <el-descriptions-item :label="$t('po.poId')">
             {{ detail.parent_po.po_id }}
           </el-descriptions-item>
@@ -241,6 +246,10 @@ function listReturnPath(fallback) {
 
 function goToPoDetail(row) {
   router.push({ name: 'po-detail', params: { scId: scId.value, poId: row.po_id }, query: childReturnQuery() })
+}
+
+function goToParentPo() {
+  router.push({ name: 'po-detail-independent', params: { poId: detail.value.parent_po.po_id } })
 }
 
 async function handleEditSave(data) {

@@ -10,7 +10,7 @@ $projectRoot = Get-Location
 $projectEnv = Join-Path $projectRoot ".env"
 if (-not $PSBoundParameters.ContainsKey('Beta') -and (Test-Path $projectEnv)) {
     $envContent = Get-Content $projectEnv -Raw
-    if ($envContent -match 'SC_GR_BETA\s*=\s*1') {
+    if ($envContent -match '(?m)^\s*SC_GR_BETA\s*=\s*1\s*$') {
         $Beta = $true
     }
 }
@@ -127,10 +127,12 @@ $notifyPrefix = if ($Beta) { "POMP-Notification-Beta" } else { "POMP-Notificatio
 $notifySrcExe = Join-Path $distDir "POMP-Notification.exe"
 $notifyDstExe = Join-Path $distDir "$notifyPrefix-$version.exe"
 Copy-Item $notifySrcExe $notifyDstExe
-# For beta, place .env next to the notification EXE so it connects to the beta database
+# Notification .env: beta writes SC_GR_BETA=1, production cleans up leftover
+$notifyEnv = Join-Path $distDir ".env"
 if ($Beta) {
-    $notifyEnv = Join-Path $distDir ".env"
     "SC_GR_BETA=1" | Set-Content -NoNewline $notifyEnv
+} else {
+    if (Test-Path $notifyEnv) { Remove-Item $notifyEnv }
 }
 Write-Host "Notification executable: $notifyDstExe" -ForegroundColor Green
 

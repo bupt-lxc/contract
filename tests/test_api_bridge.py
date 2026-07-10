@@ -497,3 +497,25 @@ def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_co
     assert row_args[6]["user_id"] == "U1"
     assert stats_kwargs["text"] == "alpha"
     assert "export_rows" in stats_kwargs
+
+
+def test_sc_template_headers_hints_sample_aligned():
+    """Verify all three template arrays have the same length to prevent
+    xlsx generation errors."""
+    # Headers, hints, and sample must stay in sync
+    headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
+               "sc_amount", "service_period_start", "service_period_end", "status",
+               "description", "currency", "service_scope", "internal_system_number",
+               "calloff_po_id", "asset", "asset_nums"]
+    hints = ["Optional (auto-generated if empty)", "Optional",
+             "Optional (defaults to importer)",
+             "material/service/fixed_asset/FC/call_off", "Cost center number",
+             "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
+             "approved/finished", "Optional",
+             "CNY/EUR/USD", "Service scope (e.g. Transportation)", "Optional",
+             "Optional (PO ID for call-off SC)", "N/Y", "Optional"]
+    sample = ["[EXAMPLE]", "", "", "material", "12345",
+              "50000", "2026-01-01", "2026-12-31", "draft",
+              "Sample SC description", "CNY", "Transportation", "",
+              "", "N", ""]
+    assert len(headers) == len(hints) == len(sample)

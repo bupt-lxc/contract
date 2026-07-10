@@ -419,6 +419,16 @@ class TestScUpdate:
         with pytest.raises(ConflictError, match="SC amount cannot be below allocated PO amount"):
             update_sc(seeded_config, admin, sc["sc_id"], {"sc_amount": 30000})
 
+    def test_update_sc_persists_service_scope(self, seeded_config):
+        admin, requester = _resolve_users(seeded_config)
+        sc = create_sc_draft(seeded_config, admin, {"requester_id": requester["user_id"]})
+        result = update_sc(seeded_config, admin, sc["sc_id"], {
+            "service_scope": "Engineering Service",
+        })
+        assert result["service_scope"] == "Engineering Service"
+        detail = get_sc_detail(seeded_config, admin, sc["sc_id"])
+        assert detail["sc"]["service_scope"] == "Engineering Service"
+
 
 class TestScDeny:
     def test_deny_pending_sc(self, seeded_config):

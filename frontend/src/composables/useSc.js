@@ -22,7 +22,8 @@ export function useSc(pageSize = 10) {
       'sc_id', 'sc_no', 'requester_id', 'requester_name', 'request_type',
       'service_scope', 'cost_center', 'sc_amount', 'status', 'created_at',
       'updated_at', 'asset', 'pending_date', 'approved_date', 'confirmed_at',
-      'calloff_po_id',
+      'calloff_po_id', 'service_period_start', 'service_period_end',
+      'submitted_date', 'finished_at',
     ]),
   })
 

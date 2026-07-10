@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from sc_gr_app.api.schemas import fail, ok
-from sc_gr_app.config import AppConfig
+from sc_gr_app.config import _detect_beta, AppConfig
 from sc_gr_app.errors import NotFound, PermissionDenied, ValidationError
 from sc_gr_app.identity import get_7_digit_id
 from sc_gr_app.services import export_service, gr_service, notification_service, po_service, query_service, sc_service, vendor_service
@@ -58,7 +58,7 @@ class ApiBridge:
         return ok(os.getenv("SC_GR_DEV") == "1")
 
     def is_beta(self, _payload=None) -> dict:
-        return ok(os.getenv("SC_GR_BETA") == "1")
+        return ok(_detect_beta())
 
     def get_version(self, _payload=None) -> dict:
         from sc_gr_app import __version__
@@ -116,7 +116,7 @@ class ApiBridge:
 
     def switch_dev_role(self, payload) -> dict:
         """Switch the dev user's role between admin and requester. Dev mode only."""
-        if os.getenv("SC_GR_DEV") != "1" and os.getenv("SC_GR_BETA") != "1":
+        if os.getenv("SC_GR_DEV") != "1" and not _detect_beta():
             return fail(PermissionDenied("switch_dev_role is only available in dev or beta mode"))
         try:
             payload = self._required_payload(payload)
@@ -1884,16 +1884,19 @@ class ApiBridge:
 
         headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "internal_system_number"]
+                   "description", "currency", "service_scope", "internal_system_number",
+                   "calloff_po_id", "asset", "asset_nums"]
         hints = ["Optional (auto-generated if empty)", "Optional",
                  "Optional (defaults to importer)",
-                 "material/service/fixed_asset/FC", "Cost center number",
+                 "material/service/fixed_asset/FC/call_off", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "approved/finished", "Optional",
-                 "CNY/EUR/USD", "Optional (FC only)"]
+                 "CNY/EUR/USD", "Service scope (e.g. Transportation)", "Optional",
+                 "Optional (PO ID for call-off SC)", "N/Y", "Optional"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
-                  "Sample SC description", "CNY", ""]
+                  "Sample SC description", "CNY", "Transportation", "",
+                  "", "N", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""

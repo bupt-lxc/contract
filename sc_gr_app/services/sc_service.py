@@ -621,8 +621,9 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                       approved_date,
                       internal_system_number,
                       calloff_po_id,
-                      currency
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      currency,
+                      service_scope
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sc_id,
@@ -652,6 +653,7 @@ def create_sc_draft(config: AppConfig, current_user: dict, data: dict) -> dict:
                         data.get("internal_system_number"),
                         data.get("calloff_po_id"),
                         data.get("currency", "CNY"),
+                        data.get("service_scope"),
                     ),
                 )
                 created = _get_sc(conn, sc_id)
@@ -716,6 +718,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset = ?,
                         asset_nums = ?,
                         currency = ?,
+                        service_scope = ?,
                         status = 'manager_confirm',
                         submitted_date = ?,
                         updated_at = ?
@@ -732,6 +735,7 @@ def submit_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset", "N"),
                         merged.get("asset_nums"),
                         merged.get("currency", "CNY"),
+                        merged.get("service_scope"),
                         timestamp,
                         timestamp,
                         sc_id,
@@ -873,6 +877,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         asset = ?,
                         asset_nums = ?,
                         internal_system_number = ?,
+                        service_scope = ?,
                         currency = ?,
                         updated_at = ?
                     where sc_id = ?
@@ -892,6 +897,7 @@ def update_sc(config: AppConfig, current_user: dict, sc_id: str, data: dict) -> 
                         merged.get("asset"),
                         merged.get("asset_nums"),
                         merged.get("internal_system_number"),
+                        merged.get("service_scope"),
                         merged.get("currency"),
                         timestamp,
                         sc_id,
