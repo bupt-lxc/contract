@@ -116,7 +116,19 @@ line 38. Move `conn.close()` to after the resolution pass and CSV writing, so th
 connection is available for the resolution query. Alternatively, open a second
 connection specifically for the resolution pass.
 
-### Part 3: sc_service.py — fix update_sc to write service_scope
+### Part 3: import_service.py — fix import_pos INSERT to include request_type
+
+**File:** [sc_gr_app/services/import_service.py](sc_gr_app/services/import_service.py#L284)
+
+The `import_pos` INSERT has 18 columns but does not include `request_type`.
+Currently this is masked because `_validate_po_rows` requires `sc_no` (blocking
+independent PO import), but if the validator is ever relaxed, independent FC POs
+would silently lose their `request_type`, breaking `is_fc_po` checks everywhere.
+
+Add `request_type` to the INSERT columns and `row.get("request_type")` to the
+values tuple.
+
+### Part 5: sc_service.py — fix update_sc to write service_scope
 
 **File:** [sc_gr_app/services/sc_service.py](sc_gr_app/services/sc_service.py#L866)
 
@@ -125,7 +137,7 @@ Add `service_scope = ?` to the UPDATE SET columns and include
 in `OPTIONAL_UPDATE_FIELDS` (line 46) but is missing from the actual UPDATE
 statement.
 
-### Part 4: bridge.py — fix downloadable SC template
+### Part 6: bridge.py — fix downloadable SC template
 
 **File:** [sc_gr_app/api/bridge.py](sc_gr_app/api/bridge.py#L1885)
 
@@ -133,7 +145,7 @@ Add `service_scope`, `calloff_po_id`, `asset_nums`, and `asset` to the
 `download_sc_template` headers, hints, and sample arrays. Users who download the
 template and manually import SCs currently cannot populate these fields.
 
-### Part 5: Database clear and re-import
+### Part 7: Database clear and re-import
 
 Procedure:
 
@@ -149,7 +161,7 @@ Procedure:
 5. Verify: check SC detail shows parent PO, PO(FC) detail lists call-off SCs,
    budget amounts include call-off totals
 
-### Part 6: Frontend (already in progress, finish current work)
+### Part 8: Frontend (already in progress, finish current work)
 
 These three files have uncommitted changes that should be completed:
 
@@ -182,6 +194,7 @@ At runtime:
 ## Verification
 
 - [ ] `import_scs` INSERT includes service_scope, calloff_po_id, asset_nums
+- [ ] `import_pos` INSERT includes request_type
 - [ ] `_SC_COLUMN_ALIASES` includes service_scope, calloff_po_id, asset_nums, asset
 - [ ] `update_sc` UPDATE includes service_scope
 - [ ] `download_sc_template` includes service_scope, calloff_po_id, asset_nums, asset
