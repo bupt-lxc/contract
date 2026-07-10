@@ -1884,16 +1884,19 @@ class ApiBridge:
 
         headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
                    "sc_amount", "service_period_start", "service_period_end", "status",
-                   "description", "currency", "internal_system_number"]
+                   "description", "currency", "service_scope", "internal_system_number",
+                   "calloff_po_id", "asset", "asset_nums"]
         hints = ["Optional (auto-generated if empty)", "Optional",
                  "Optional (defaults to importer)",
-                 "material/service/fixed_asset/FC", "Cost center number",
+                 "material/service/fixed_asset/FC/call_off", "Cost center number",
                  "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
                  "approved/finished", "Optional",
-                 "CNY/EUR/USD", "Optional (FC only)"]
+                 "CNY/EUR/USD", "Service scope (e.g. Transportation)", "Optional",
+                 "Optional (PO ID for call-off SC)", "N/Y", "Optional"]
         sample = ["[EXAMPLE]", "", "", "material", "12345",
                   "50000", "2026-01-01", "2026-12-31", "draft",
-                  "Sample SC description", "CNY", ""]
+                  "Sample SC description", "CNY", "Transportation", "",
+                  "", "N", ""]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
