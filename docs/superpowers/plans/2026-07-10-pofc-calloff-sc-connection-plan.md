@@ -27,7 +27,7 @@ Replace the INSERT statement at lines 171-194:
                           status, description, currency, internal_system_number,
                           service_scope, calloff_po_id, asset_nums,
                           created_by, created_at, updated_at, asset
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
                         (
                             sc_id,
                             row.get("sc_no"),
@@ -59,10 +59,46 @@ cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_import_serv
 
 Expected: All existing import tests pass (the new columns accept NULL/default values for tests that don't set them).
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Add test verifying new columns are written**
+
+Add to `tests/test_import_service.py`:
+
+```python
+def test_import_sc_writes_service_scope_and_calloff_po_id(self, app_config):
+    migrate(app_config)
+    with connect(app_config) as conn:
+        _seed_user(conn)
+    current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+    rows = [{"sc_no": "SC-NEW-COLS", "sc_amount": "50000", "status": "approved",
+             "request_type": "call_off", "cost_center": "1000",
+             "service_period_start": "2026-01-01", "service_period_end": "2026-12-31",
+             "service_scope": "Transportation", "calloff_po_id": "PO-TEST-001",
+             "asset_nums": "ASSET-123"}]
+    result = import_service.import_scs(app_config, current_user, rows)
+    assert result["ok"] is True
+    with connect(app_config) as conn:
+        sc = conn.execute(
+            "SELECT service_scope, calloff_po_id, asset_nums FROM sc_records WHERE sc_no = ?",
+            ("SC-NEW-COLS",)).fetchone()
+    assert sc["service_scope"] == "Transportation"
+    assert sc["calloff_po_id"] == "PO-TEST-001"
+    assert sc["asset_nums"] == "ASSET-123"
+```
+
+- [ ] **Step 4: Run the new test**
 
 ```bash
-git add sc_gr_app/services/import_service.py
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_import_service.py::TestImportService::test_import_sc_writes_service_scope_and_calloff_po_id -v
+```
+
+Expected: PASS.
+
+Note: The `calloff_po_id` column is added by migration v34 and exists after `migrate()`. The current codebase is at migration v36+. No additional migration is needed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add sc_gr_app/services/import_service.py tests/test_import_service.py
 git commit -m "fix: import_scs INSERT includes service_scope, calloff_po_id, asset_nums"
 ```
 
@@ -84,7 +120,28 @@ Add after line 347 (`"internal_system_number": ...`):
     "asset": ["Asset", "asset"],
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Add test for new aliases**
+
+In `tests/test_import_service.py`, add:
+
+```python
+def test_normalize_header_maps_new_sc_aliases(self):
+    assert import_service._normalize_import_header("Service Scope") == "service_scope"
+    assert import_service._normalize_import_header("service_scope") == "service_scope"
+    assert import_service._normalize_import_header("Call-off PO ID") == "calloff_po_id"
+    assert import_service._normalize_import_header("Asset Nums") == "asset_nums"
+    assert import_service._normalize_import_header("Asset") == "asset"
+```
+
+- [ ] **Step 3: Run the alias test**
+
+```bash
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_import_service.py::TestImportService::test_normalize_header_maps_new_sc_aliases -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add sc_gr_app/services/import_service.py
@@ -142,7 +199,40 @@ cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_import_serv
 
 Expected: All tests pass.
 
-- [ ] **Step 3: Commit**
+Note: `pos.request_type` CHECK constraint was relaxed by migration v36 to accept `('FC', 'call_off', 'new')`. Current DB is at v36+ so this is satisfied.
+
+- [ ] **Step 3: Add test verifying request_type is written on import**
+
+In `tests/test_import_service.py`, add:
+
+```python
+def test_import_po_writes_request_type(self, app_config):
+    migrate(app_config)
+    with connect(app_config) as conn:
+        _seed_user(conn)
+        _seed_sc(conn)
+        _seed_vendor(conn)
+    current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+    rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001",
+             "po_no": "PO-REQ-TYPE", "po_amount": "50000", "status": "active",
+             "request_type": "FC"}]
+    result = import_service.import_pos(app_config, current_user, rows)
+    assert result["ok"] is True
+    with connect(app_config) as conn:
+        po = conn.execute("SELECT request_type FROM pos WHERE po_no = ?",
+                          ("PO-REQ-TYPE",)).fetchone()
+    assert po["request_type"] == "FC"
+```
+
+- [ ] **Step 4: Run the new test**
+
+```bash
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_import_service.py::TestImportService::test_import_po_writes_request_type -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add sc_gr_app/services/import_service.py
@@ -154,7 +244,9 @@ git commit -m "fix: import_pos INSERT includes request_type column"
 ### Task 4: Fix update_sc to write service_scope
 
 **Files:**
-- Modify: `sc_gr_app/services/sc_service.py:863-898`
+- Modify: `sc_gr_app/services/sc_service.py:862-899`
+
+**Context:** `service_scope` is already in `OPTIONAL_UPDATE_FIELDS` (line 46), so the `update_sc` function accepts it in the inbound data dict and passes the allowed-field filter. However, the actual UPDATE SQL (lines 863-878) never included `service_scope` in the SET columns, so the value is silently discarded — no error, but no persistence. This fix closes that gap.
 
 - [ ] **Step 1: Add `service_scope = ?` to the UPDATE SET columns**
 
@@ -213,10 +305,34 @@ cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_sc_service.
 
 Expected: All update-related tests pass.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Add test verifying service_scope is persisted on update**
+
+In `tests/test_sc_service.py`, add:
+
+```python
+def test_update_sc_persists_service_scope(self, seeded_config):
+    admin, requester = _resolve_users(seeded_config)
+    sc = create_sc_draft(seeded_config, admin, {"requester_id": requester["user_id"]})
+    result = update_sc(seeded_config, admin, sc["sc_id"], {
+        "service_scope": "Engineering Service",
+    })
+    assert result["service_scope"] == "Engineering Service"
+    detail = get_sc_detail(seeded_config, admin, sc["sc_id"])
+    assert detail["sc"]["service_scope"] == "Engineering Service"
+```
+
+- [ ] **Step 4: Run the new test**
 
 ```bash
-git add sc_gr_app/services/sc_service.py
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_sc_service.py::test_update_sc_persists_service_scope -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add sc_gr_app/services/sc_service.py tests/test_sc_service.py
 git commit -m "fix: update_sc writes service_scope to database"
 ```
 
@@ -249,10 +365,45 @@ Replace lines 1885-1896:
                   "", "N", ""]
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Add test for header/hint/sample alignment**
+
+In `tests/test_api_bridge.py`, add:
+
+```python
+def test_sc_template_headers_hints_sample_aligned():
+    """Verify all three template arrays have the same length to prevent
+    xlsx generation errors."""
+    # Headers, hints, and sample must stay in sync
+    headers = ["sc_id", "sc_no", "requester_id", "request_type", "cost_center",
+               "sc_amount", "service_period_start", "service_period_end", "status",
+               "description", "currency", "service_scope", "internal_system_number",
+               "calloff_po_id", "asset", "asset_nums"]
+    hints = ["Optional (auto-generated if empty)", "Optional",
+             "Optional (defaults to importer)",
+             "material/service/fixed_asset/FC/call_off", "Cost center number",
+             "Required (e.g. 50000)", "YYYY-MM-DD", "YYYY-MM-DD",
+             "approved/finished", "Optional",
+             "CNY/EUR/USD", "Service scope (e.g. Transportation)", "Optional",
+             "Optional (PO ID for call-off SC)", "N/Y", "Optional"]
+    sample = ["[EXAMPLE]", "", "", "material", "12345",
+              "50000", "2026-01-01", "2026-12-31", "draft",
+              "Sample SC description", "CNY", "Transportation", "",
+              "", "N", ""]
+    assert len(headers) == len(hints) == len(sample)
+```
+
+- [ ] **Step 3: Run the alignment test**
 
 ```bash
-git add sc_gr_app/api/bridge.py
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_api_bridge.py::test_sc_template_headers_hints_sample_aligned -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add sc_gr_app/api/bridge.py tests/test_api_bridge.py
 git commit -m "fix: downloadable SC template includes service_scope, calloff_po_id, asset, asset_nums"
 ```
 
@@ -336,7 +487,96 @@ cd c:\Users\V2SE7PP\Projects\contract\docs && head -20 import_sc.csv | cut -d, -
 
 Expected: Rows that are call-off SCs with a matching PO should show non-empty `calloff_po_id` in column 14.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Add integration test for resolution + post-import update**
+
+Add to `tests/test_fc_calloff_flow.py`:
+
+```python
+def test_internal_system_number_resolves_to_calloff_po_id(app_config):
+    """Simulate import scenario: SC created with internal_system_number
+    (PO NO) but no calloff_po_id. After POs exist, post-import UPDATE
+    resolves the link."""
+    from sc_gr_app.db.connection import connect
+    migrate(app_config)
+    seed_users(app_config)
+
+    # 1. Create SC(FC) and PO(FC) — the parent framework
+    sc_fc = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-FC-RESOLVE",
+        "requester_id": USER["user_id"],
+        "request_type": "FC",
+        "cost_center": 1000,
+        "sc_amount": 100000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+    })
+    sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+    vendor_id = _create_vendor_and_link(app_config, sc_fc["sc_id"])
+    po_fc = create_po(app_config, ADMIN, {
+        "sc_id": sc_fc["sc_id"],
+        "vendor_id": vendor_id,
+        "po_amount": 80000,
+    })
+    # PO gets a po_no that matches the internal_system_number we'll set
+    with connect(app_config) as conn:
+        conn.execute("UPDATE pos SET po_no = ? WHERE po_id = ?",
+                     ("7600-RESOLVE-TEST", po_fc["po_id"]))
+        conn.commit()
+
+    # 2. Create call-off SC as if from import: internal_system_number set,
+    #    but calloff_po_id is NOT set (simulating the bug)
+    calloff = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-CO-RESOLVE",
+        "requester_id": USER["user_id"],
+        "request_type": "call_off",
+        "cost_center": 1000,
+        "sc_amount": 30000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+        "calloff_po_id": None,
+        "internal_system_number": "7600-RESOLVE-TEST",
+    })
+    assert calloff["calloff_po_id"] is None
+
+    # 3. Run post-import UPDATE (same SQL as Task 8 Step 5)
+    with connect(app_config) as conn:
+        updated = conn.execute(
+            """UPDATE sc_records
+               SET calloff_po_id = (
+                 SELECT po_id FROM pos
+                 WHERE pos.po_no = sc_records.internal_system_number
+                   AND pos.po_no IS NOT NULL AND pos.po_no != ''
+                 ORDER BY pos.created_at DESC
+                 LIMIT 1
+               )
+               WHERE request_type = 'call_off'
+                 AND (calloff_po_id IS NULL OR calloff_po_id = '')
+                 AND internal_system_number IS NOT NULL
+                 AND internal_system_number != ''"""
+        ).rowcount
+        conn.commit()
+    assert updated >= 1
+
+    # 4. Verify calloff_po_id is now resolved
+    detail = get_sc_detail(app_config, ADMIN, calloff["sc_id"])
+    assert detail["sc"]["calloff_po_id"] == po_fc["po_id"]
+    assert detail["parent_po"] is not None
+    assert detail["parent_po"]["po_id"] == po_fc["po_id"]
+
+    # 5. Verify budget includes the resolved call-off
+    fc_budget = compute_po_fc_budget(app_config, po_fc["po_id"])
+    assert fc_budget["allocated_calloff_amount"] == 30000.0
+```
+
+- [ ] **Step 5: Run the resolution integration test**
+
+```bash
+cd c:\Users\V2SE7PP\Projects\contract && python -m pytest tests/test_fc_calloff_flow.py::test_internal_system_number_resolves_to_calloff_po_id -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add docs/process_c26_import.py
