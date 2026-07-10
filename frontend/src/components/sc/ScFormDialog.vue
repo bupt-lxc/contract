@@ -138,7 +138,7 @@
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item v-if="form.request_type === 'FC'" :label="$t('sc.internalSystemNumber')">
+      <el-form-item v-if="form.request_type === 'call_off'" :label="$t('sc.internalSystemNumber')">
         <el-input v-model="form.internal_system_number" />
       </el-form-item>
       <el-form-item :label="$t('attachment.attachments')">
