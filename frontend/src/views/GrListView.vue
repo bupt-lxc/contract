@@ -487,11 +487,12 @@ async function handleAnnualExport() {
       { key: 'po_no', label: 'PO number' },
       { key: 'confirmation_name', label: 'Confirmation number' },
       { key: 'gr_no', label: 'GR NO' },
+      { key: 'estimated_amount', label: 'GR Estimated Amount' },
       { key: 'con_value', label: 'GR Value' },
       { key: 'goods_service_description', label: 'GR Description' },
       { key: 'requester_name', label: 'GR Requester' },
-      { key: '__sending_gr_date', label: 'Sending GR date', getValue: () => '' },
-      { key: '__finished_date', label: 'Finished Date', getValue: () => '' },
+      { key: '__sending_gr_date', label: 'Sending GR date', getValue: (row) => (row.approved_date || '').slice(0, 10) },
+      { key: '__finished_date', label: 'Finished Date', getValue: (row) => (row.finished_at || '').slice(0, 10) },
       { key: '__provision', label: 'provision', getValue: () => '' },
       { key: '__provision_net', label: 'Provision amount NET', getValue: () => '' },
     ]
@@ -499,8 +500,8 @@ async function handleAnnualExport() {
     // Collect remaining GR field names, excluding those already in templateColumns
     const usedKeys = new Set([
       'cost_center', 'status', 'po_no', 'confirmation_name', 'gr_no',
-      'con_value', 'goods_service_description', 'requester_name',
-      'sc_id',
+      'estimated_amount', 'con_value', 'goods_service_description', 'requester_name',
+      'sc_id', 'approved_date', 'finished_at',
     ])
     let remainingKeys = []
     if (rows.length > 0) {
