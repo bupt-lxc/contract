@@ -349,6 +349,10 @@ _SC_COLUMN_ALIASES = {
     "description": ["Description", "description"],
     "currency": ["Currency", "currency"],
     "internal_system_number": ["Internal System Number", "internal_system_number"],
+    "service_scope": ["Service Scope", "service_scope"],
+    "calloff_po_id": ["Call-off PO ID", "calloff_po_id"],
+    "asset_nums": ["Asset Nums", "asset_nums"],
+    "asset": ["Asset", "asset"],
 }
 
 _PO_COLUMN_ALIASES = {

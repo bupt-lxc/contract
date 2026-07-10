@@ -462,6 +462,14 @@ class TestParseDate:
         assert import_service.parse_date(None) is None
 
 
+def test_normalize_header_maps_new_sc_aliases():
+    assert import_service._normalize_import_header("Service Scope") == "service_scope"
+    assert import_service._normalize_import_header("service_scope") == "service_scope"
+    assert import_service._normalize_import_header("Call-off PO ID") == "calloff_po_id"
+    assert import_service._normalize_import_header("Asset Nums") == "asset_nums"
+    assert import_service._normalize_import_header("Asset") == "asset"
+
+
 class TestScNoUniqueness:
     def test_rejects_duplicate_sc_no_in_db(self, app_config):
         migrate(app_config)
