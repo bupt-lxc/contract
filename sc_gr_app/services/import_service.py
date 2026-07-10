@@ -290,8 +290,8 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           po_id, sc_id, vendor_id, po_no, requester_id,
                           po_amount, status, contract_from, contract_to, contract_no,
                           payment_frequency, contract_pos, contract_type, cost_center,
-                          purchaser, active_date, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          purchaser, request_type, active_date, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             po_id,
                             row["sc_id"],
@@ -308,6 +308,7 @@ def import_pos(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("contract_type"),
                             row.get("cost_center"),
                             row.get("purchaser"),
+                            row.get("request_type"),
                             None if row.get("status") == "draft" else timestamp,
                             timestamp,
                             timestamp,

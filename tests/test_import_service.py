@@ -353,6 +353,23 @@ class TestConfirmImport:
         assert result["ok"] is True
         assert result["count"] == 1
 
+    def test_import_po_writes_request_type(self, app_config):
+        migrate(app_config)
+        with connect(app_config) as conn:
+            _seed_user(conn)
+            _seed_sc(conn)
+            _seed_vendor(conn)
+        current_user = {"user_id": "U000001", "machine_id": "M000001", "role": "requester"}
+        rows = [{"sc_no": "SCNO-SC-0000001-20260701-001", "vendor_id": "V000001",
+                 "po_no": "PO-REQ-TYPE", "po_amount": "50000", "status": "active",
+                 "request_type": "FC"}]
+        result = import_service.import_pos(app_config, current_user, rows)
+        assert result["ok"] is True
+        with connect(app_config) as conn:
+            po = conn.execute("SELECT request_type FROM pos WHERE po_no = ?",
+                              ("PO-REQ-TYPE",)).fetchone()
+        assert po["request_type"] == "FC"
+
     def test_confirm_gr_import_with_required_fields(self, app_config):
         migrate(app_config)
         with connect(app_config) as conn:
