@@ -173,8 +173,9 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                           sc_id, sc_no, requester_id, request_type, cost_center,
                           sc_amount, service_period_start, service_period_end,
                           status, description, currency, internal_system_number,
+                          service_scope, calloff_po_id, asset_nums,
                           created_by, created_at, updated_at, asset
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')""",
                         (
                             sc_id,
                             row.get("sc_no"),
@@ -188,6 +189,9 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
                             row.get("description"),
                             row.get("currency", "CNY"),
                             row.get("internal_system_number"),
+                            row.get("service_scope"),
+                            row.get("calloff_po_id"),
+                            row.get("asset_nums"),
                             current_user["user_id"],
                             timestamp,
                             timestamp,
