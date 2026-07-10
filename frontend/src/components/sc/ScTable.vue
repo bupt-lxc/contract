@@ -10,7 +10,7 @@
     :row-class-name="rowClass"
   >
     <el-table-column v-if="selectable" type="selection" width="40" />
-    <el-table-column :label="$t('sc.status')" width="90">
+    <el-table-column prop="status" :label="$t('sc.status')" width="90" sortable="custom">
       <template #default="{ row }">
         <StatusBadge :status="row.status" />
       </template>
@@ -37,13 +37,13 @@
       </template>
     </el-table-column>
     <el-table-column prop="cost_center" :label="$t('sc.costCenter')" sortable="custom" width="95" />
-    <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="130" show-overflow-tooltip>
+    <el-table-column prop="service_scope" :label="$t('vendor.serviceScope')" width="130" show-overflow-tooltip sortable="custom">
       <template #default="{ row }">
         <span>{{ row.service_scope || '-' }}</span>
       </template>
     </el-table-column>
     <el-table-column prop="asset" :label="$t('sc.asset')" sortable="custom" width="55" align="center" />
-    <el-table-column prop="asset_nums" :label="$t('sc.assetNums')" sortable="custom" width="85" show-overflow-tooltip>
+    <el-table-column prop="asset_nums" :label="$t('sc.assetNums')" width="85" show-overflow-tooltip>
       <template #default="{ row }">{{ row.asset_nums || '-' }}</template>
     </el-table-column>
     <el-table-column prop="sc_amount" :label="$t('sc.scAmount')" sortable="custom" width="115">
@@ -51,16 +51,16 @@
         <AmountDisplay :value="row.sc_amount" :currency="row.currency" />
       </template>
     </el-table-column>
-    <el-table-column prop="service_period_start" :label="$t('sc.startDate')" sortable="custom" width="100">
+    <el-table-column prop="service_period_start" :label="$t('sc.startDate')" width="100">
       <template #default="{ row }">{{ formatDate(row.service_period_start) }}</template>
     </el-table-column>
-    <el-table-column prop="service_period_end" :label="$t('sc.endDate')" sortable="custom" width="100">
+    <el-table-column prop="service_period_end" :label="$t('sc.endDate')" width="100">
       <template #default="{ row }">{{ formatDate(row.service_period_end) }}</template>
     </el-table-column>
     <el-table-column prop="created_at" :label="$t('sc.created')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
     </el-table-column>
-    <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" sortable="custom" width="100">
+    <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" width="100">
       <template #default="{ row }">{{ formatDate(row.submitted_date) }}</template>
     </el-table-column>
     <el-table-column prop="confirmed_at" :label="$t('timestampLabel.confirmed')" sortable="custom" width="100">
@@ -72,7 +72,7 @@
     <el-table-column prop="approved_date" :label="$t('sc.approvedDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
     </el-table-column>
-    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" sortable="custom" width="100">
+    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" width="100">
       <template #default="{ row }">{{ formatDate(row.finished_at) }}</template>
     </el-table-column>
     <el-table-column prop="description" :label="$t('sc.description')" min-width="120" show-overflow-tooltip />
