@@ -2,7 +2,7 @@
 ; Run after PyInstaller build: dist/PO Management Platform/
 
 #define MyAppName "PO Management Platform"
-#define MyAppVersion "2.3.6"
+#define MyAppVersion "2.3.7"
 #define MyAppPublisher "Audi C/EV-L"
 #define MyAppURL ""
 #define MyAppExeName "PO Management Platform.exe"
@@ -16,7 +16,7 @@ DefaultDirName={localappdata}\PO Management Platform
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist\installer
-OutputBaseFilename=POMP-2.3.6-Setup
+OutputBaseFilename=POMP-2.3.7-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
