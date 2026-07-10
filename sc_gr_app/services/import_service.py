@@ -148,6 +148,11 @@ def import_scs(config: AppConfig, current_user: dict, rows: list[dict]) -> dict:
         with connect(config) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                # Normalize: ISN "N/A" means no parent PO -> not a call-off
+                for row in rows:
+                    if (row.get("request_type") == "call_off"
+                            and str(row.get("internal_system_number", "")).strip().upper() == "N/A"):
+                        row["request_type"] = "new"
                 errors = _validate_sc_rows(conn, rows)
                 if errors:
                     conn.rollback()
