@@ -1145,6 +1145,55 @@ for _gr in unique_gr:
                 a["auto_fix"] = (a.get("auto_fix", "") + f"; estimated_amount filled from con_value ({_cv})").strip("; ")
                 break
 
+# ── Resolve internal_system_number -> calloff_po_id for SCs ────────────
+# For call-off SCs where calloff_po_id is empty but internal_system_number
+# (Supplier column, contains PO external number) is set, look up the
+# corresponding PO by po_no and fill in calloff_po_id.
+resolved_calloff = 0
+unresolved_calloff = 0
+if os.path.exists(DB_PATH):
+    po_lookup_conn = sqlite3.connect(DB_PATH)
+    po_lookup_conn.row_factory = sqlite3.Row
+    po_by_no = {}
+    for po_row in po_lookup_conn.execute(
+        "SELECT po_id, po_no, created_at FROM pos WHERE po_no IS NOT NULL AND po_no != '' ORDER BY created_at DESC"
+    ):
+        po_by_no.setdefault(po_row["po_no"], []).append(dict(po_row))
+    po_lookup_conn.close()
+
+    for sc in unique_sc:
+        # Only resolve if calloff_po_id is empty but internal_system_number is set
+        if sc.get("calloff_po_id", ""):
+            continue
+        isn = sc.get("internal_system_number", "")
+        if not isn:
+            continue
+
+        matches = po_by_no.get(isn, [])
+        if len(matches) == 1:
+            sc["calloff_po_id"] = matches[0]["po_id"]
+            resolved_calloff += 1
+        elif len(matches) > 1:
+            # Multiple POs with same po_no — data integrity issue
+            sc["calloff_po_id"] = matches[0]["po_id"]  # most recent by created_at DESC
+            resolved_calloff += 1
+            # Record warning in audit
+            for a in audit_rows:
+                if a["_row"] == sc["_row"] and a["record_type"] == "SC":
+                    a["auto_fix"] = (a.get("auto_fix", "") +
+                        f"; Multiple POs with po_no={isn}, used most recent {matches[0]['po_id']}").strip("; ")
+                    break
+        else:
+            unresolved_calloff += 1
+            # Record in audit
+            for a in audit_rows:
+                if a["_row"] == sc["_row"] and a["record_type"] == "SC":
+                    a["problem"] = (a.get("problem", "") +
+                        f"; No PO found with po_no={isn}, calloff_po_id left empty").strip("; ")
+                    break
+
+    print(f"  [calloff_po_id resolution]: {resolved_calloff} resolved, {unresolved_calloff} unresolved")
+
 # ── write import CSVs (columns match download template exactly) ─────────
 
 SC_FIELDS = ["sc_no", "vendor_id", "requester_id", "request_type", "cost_center",

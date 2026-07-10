@@ -406,3 +406,93 @@ def test_denied_calloff_still_blocks_budget(app_config):
         "calloff_po_id": po_fc["po_id"],
     })
     assert new_co["calloff_po_id"] == po_fc["po_id"]
+
+
+def test_internal_system_number_resolves_to_calloff_po_id(app_config):
+    """Simulate import scenario: SC created with internal_system_number
+    (PO NO) but no calloff_po_id. After POs exist, post-import UPDATE
+    resolves the link."""
+    from datetime import datetime, timezone
+
+    migrate(app_config)
+    seed_users(app_config)
+
+    # 1. Create SC(FC) and PO(FC) - the parent framework
+    sc_fc = create_sc(app_config, ADMIN, {
+        "sc_no": "SC-FC-RESOLVE",
+        "requester_id": USER["user_id"],
+        "request_type": "FC",
+        "cost_center": 1000,
+        "sc_amount": 100000,
+        "service_period_start": "2026-01-01",
+        "service_period_end": "2026-12-31",
+    })
+    sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+    vendor_id = _create_vendor_and_link(app_config, sc_fc["sc_id"])
+
+    po_fc = create_po(app_config, ADMIN, {
+        "sc_id": sc_fc["sc_id"],
+        "vendor_id": vendor_id,
+        "po_amount": 80000,
+        "po_no": "7600-RESOLVE-TEST",
+    })
+
+    # 2. Insert call-off SC via raw SQL as if from import:
+    #    internal_system_number set, but calloff_po_id is NULL
+    ts = datetime.now(timezone.utc).isoformat()
+    calloff_sc_id = f"SC-CO-RESOLVE-{ts[:10].replace('-','')}-001"
+    with connect(app_config) as conn:
+        conn.execute(
+            """INSERT INTO sc_records (
+                sc_id, sc_no, requester_id, request_type, cost_center,
+                sc_amount, service_period_start, service_period_end,
+                status, description, created_by, created_at, updated_at,
+                asset, internal_system_number, calloff_po_id, currency
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                calloff_sc_id, "SC-CO-RESOLVE", USER["user_id"], "call_off",
+                1000, 30000, "2026-01-01", "2026-12-31",
+                "pending", "Test call-off", USER["user_id"], ts, ts,
+                "N", "7600-RESOLVE-TEST", None, "CNY",
+            ),
+        )
+        conn.commit()
+
+    # 3. Verify calloff_po_id is initially NULL
+    with connect(app_config) as conn:
+        row = conn.execute(
+            "SELECT calloff_po_id FROM sc_records WHERE sc_id = ?",
+            (calloff_sc_id,),
+        ).fetchone()
+        assert row["calloff_po_id"] is None
+
+    # 4. Run post-import UPDATE (same SQL as Task 8 Step 5)
+    with connect(app_config) as conn:
+        updated = conn.execute(
+            """UPDATE sc_records
+               SET calloff_po_id = (
+                 SELECT po_id FROM pos
+                 WHERE pos.po_no = sc_records.internal_system_number
+                   AND pos.po_no IS NOT NULL AND pos.po_no != ''
+                 ORDER BY pos.created_at DESC
+                 LIMIT 1
+               )
+               WHERE request_type = 'call_off'
+                 AND (calloff_po_id IS NULL OR calloff_po_id = '')
+                 AND internal_system_number IS NOT NULL
+                 AND internal_system_number != ''"""
+        ).rowcount
+        conn.commit()
+    assert updated >= 1
+
+    # 5. Verify calloff_po_id is now resolved
+    with connect(app_config) as conn:
+        row = conn.execute(
+            "SELECT calloff_po_id FROM sc_records WHERE sc_id = ?",
+            (calloff_sc_id,),
+        ).fetchone()
+        assert row["calloff_po_id"] == po_fc["po_id"]
+
+    # 6. Verify budget includes the resolved call-off
+    fc_budget = compute_po_fc_budget(app_config, po_fc["po_id"])
+    assert fc_budget["allocated_calloff_amount"] == 30000.0
