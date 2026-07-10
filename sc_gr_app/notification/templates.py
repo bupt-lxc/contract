@@ -96,6 +96,7 @@ _GR_RENAMES = {
     "estimated_amount": "GR Application Amount (Net)",
     "gross_cost": "GR Application Amount (Gross)",
     "con_value": "GR Value",
+    "is_cancellation": "Cancellation GR",
 }
 _PO_RENAMES = {
     "pending_total": "Pending GR amount (Net)",
@@ -112,7 +113,7 @@ _PO_ORDER = ["po_id", "po_no", "sc_id", "requester_id", "vendor_id", "vendor_nam
 _GR_ORDER = ["gr_id", "gr_no", "po_id", "requester_id",
              "estimated_amount", "gross_cost", "tax_rate", "con_value",
              "goods_service_description", "remark", "confirmation_name",
-             "delivery_from", "delivery_to", "last_delivery"]
+             "last_delivery", "is_cancellation"]
 
 # ---------------------------------------------------------------
 # Helper functions
@@ -267,8 +268,7 @@ def _entity_detail_rows(entity_type: str, entity_info: dict) -> list[tuple[str, 
                        "sc_available_amount", "pending_total", "pending_total_incl_tax"):
                 val = _fmt_amount(val)
             elif key in ("service_period_start", "service_period_end",
-                        "contract_from", "contract_to", "delivery_from",
-                        "delivery_to", "last_delivery"):
+                        "contract_from", "contract_to", "last_delivery"):
                 val = _fmt_datetime(val)
             elif key == "status":
                 if val == "manager_confirm":
@@ -332,6 +332,8 @@ def build_subject(entry: dict, entity_info: dict, actor_name: str = "") -> str:
     Example: [POMP] Submitted SC 0629-002 from LiXingchen
     """
     entity_id = _short_entity_id(entry.get("entity_id", ""))
+    if entry.get("entity_type") == "gr" and entity_info.get("is_cancellation") == "Y":
+        entity_id = entity_id.replace("GR", "(Cancellation) GR", 1)
     event_type = entry.get("event_type", "")
     event_key = entry.get("event_key", "")
 
@@ -377,8 +379,14 @@ def build_body(entry: dict, entity_info: dict, user_emails: dict,
     attachments = entity_info.get("_attachments", [])
     attachment_str = ", ".join(attachments) if attachments else "None"
 
-    # Table 1: Notification Info
+    operator = _abbreviate_name(actor_name) if actor_name else "System"
+    greeting = f"{operator} performed {event_desc} on {_short_entity_id(entity_id)}"
+
     lines = []
+    lines.append(f'<p style="font-family:Arial,sans-serif;font-size:14px">{greeting}</p>')
+    lines.append('<p style="font-family:Arial,sans-serif;font-size:14px">Details below:</p>')
+
+    # Table 1: Notification Info
     lines.append('<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;margin-bottom:20px">')
     lines.append('<tr><th colspan="2" style="background:#f5f5f5;padding:8px;text-align:left;border:1px solid #ddd">Notification Info</th></tr>')
     for label, value in [

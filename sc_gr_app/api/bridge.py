@@ -225,7 +225,67 @@ class ApiBridge:
                 for key in ("pos", "grs", "operation_records"):
                     if key in result:
                         result[key] = _format_list_timestamps(result[key])
+                for po in result.get("pos", []):
+                    if isinstance(po, dict) and "manual_amounts" in po:
+                        po["manual_amounts"] = _format_list_timestamps(po["manual_amounts"])
             return ok(result)
+        except Exception as exc:
+            return fail(exc)
+
+    def get_po(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            return ok(_format_entity_timestamps(
+                po_service.get_po(self.config, current_user, po_id)
+            ))
+        except Exception as exc:
+            return fail(exc)
+
+    def get_po_detail(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            result = po_service.get_po_detail(self.config, current_user, po_id)
+            if isinstance(result, dict):
+                if "po" in result:
+                    result["po"] = _format_entity_timestamps(result["po"])
+                for key in ("manual_amounts", "calloff_scs", "operation_records"):
+                    if key in result:
+                        result[key] = _format_list_timestamps(result[key])
+            return ok(result)
+        except Exception as exc:
+            return fail(exc)
+
+    def list_po_manual_amounts(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            rows = po_service.list_po_manual_amounts(self.config, current_user, po_id)
+            return ok(_format_list_timestamps(rows))
+        except Exception as exc:
+            return fail(exc)
+
+    def create_po_manual_amount(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            po_id = _require_payload_field(payload, "po_id")
+            data = _require_payload_field(payload, "data")
+            result = po_service.create_po_manual_amount(self.config, current_user, po_id, data)
+            return ok(_format_entity_timestamps(result))
+        except Exception as exc:
+            return fail(exc)
+
+    def delete_po_manual_amount(self, payload) -> dict:
+        try:
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            manual_amount_id = _require_payload_field(payload, "manual_amount_id")
+            return ok(po_service.delete_po_manual_amount(self.config, current_user, manual_amount_id))
         except Exception as exc:
             return fail(exc)
 
@@ -829,6 +889,7 @@ class ApiBridge:
             direction = payload.get("direction", "desc")
             cascade = payload.get("cascade", {"po": False, "gr": False})
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_options = {"po": bool(cascade.get("po")), "gr": bool(cascade.get("gr"))}
             entity_types = {"SC"}
@@ -840,9 +901,11 @@ class ApiBridge:
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "sc", filters, sort, direction,
                 cascade_options, current_user, selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -857,6 +920,7 @@ class ApiBridge:
             direction = payload.get("direction", "desc")
             cascade = payload.get("cascade", {"gr": False})
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_options = {"gr": bool(cascade.get("gr"))}
             entity_types = {"PO"}
@@ -866,9 +930,11 @@ class ApiBridge:
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "po", filters, sort, direction,
                 cascade_options, current_user=current_user, selected_ids=selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, entity_types, filters, selected_ids,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
         except Exception as exc:
@@ -882,15 +948,42 @@ class ApiBridge:
             sort = payload.get("sort", "created_at")
             direction = payload.get("direction", "desc")
             selected_ids = payload.get("selected_ids")
+            text = payload.get("text")
 
             cascade_rows = export_service.build_cascade_rows(
                 self.config, "gr", filters, sort, direction,
                 cascade_options={}, current_user=current_user, selected_ids=selected_ids,
+                text=text,
             )
             statistics = export_service.compute_statistics(
                 self.config, {"GR"}, filters, selected_ids,
+                export_rows=cascade_rows, text=text,
             )
             return ok({"cascade_rows": cascade_rows, "statistics": statistics})
+        except Exception as exc:
+            return fail(exc)
+
+    def get_po_annual_report(self, payload=None) -> dict:
+        try:
+            from datetime import datetime
+
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            year = payload.get("year") or str(datetime.now().year)
+            rows = po_service.get_annual_report_data(self.config, year, current_user)
+            return ok({"rows": _format_list_timestamps(rows)})
+        except Exception as exc:
+            return fail(exc)
+
+    def get_gr_annual_report(self, payload=None) -> dict:
+        try:
+            from datetime import datetime
+
+            payload = self._payload(payload)
+            current_user = self._require_current_user()
+            year = payload.get("year") or str(datetime.now().year)
+            rows = gr_service.get_annual_report_data(self.config, year, current_user)
+            return ok({"rows": _format_list_timestamps(rows)})
         except Exception as exc:
             return fail(exc)
 
@@ -926,6 +1019,43 @@ class ApiBridge:
                 f.write(file_bytes)
 
             return ok({"path": file_path})
+        except Exception as exc:
+            return fail(exc)
+
+    def get_sender_email(self, _payload=None) -> dict:
+        """Get the configured sender email, with default for notification emails."""
+        try:
+            self._require_current_user()
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                row = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
+                ).fetchone()
+                if row and row["setting_value"]:
+                    return ok({"email": row["setting_value"]})
+                return ok({"email": "pomp@audi.com.cn"})
+        except Exception as exc:
+            return fail(exc)
+
+    def set_sender_email(self, payload) -> dict:
+        """Save the sender email to app_settings."""
+        try:
+            from datetime import datetime, timezone
+
+            payload = self._required_payload(payload)
+            current_user = self._require_current_user()
+            from sc_gr_app.rbac import require_admin
+            require_admin(current_user)
+            email = _require_payload_field(payload, "email")
+            timestamp = datetime.now(timezone.utc).isoformat()
+            from sc_gr_app.db.connection import connect
+            with connect(self.config) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)",
+                    ("notify.sender_email", email.strip(), timestamp),
+                )
+                conn.commit()
+            return ok({"email": email.strip()})
         except Exception as exc:
             return fail(exc)
 
@@ -1965,17 +2095,17 @@ class ApiBridge:
         headers = ["gr_id", "po_id", "gr_no", "requester_id",
                    "estimated_amount", "con_value", "status", "remark", "tax_rate",
                    "gross_cost", "goods_service_description", "confirmation_name",
-                   "delivery_from", "delivery_to", "last_delivery"]
+                   "last_delivery", "is_cancellation"]
         hints = ["Optional (auto-generated if empty)", "Required (must exist)",
                  "Optional", "Optional (defaults to importer)",
-                 "Required", "Optional",
+                 "Optional", "Optional",
                  "approved/finished", "Optional",
                  "Optional (e.g. 13)", "Optional", "Optional", "Optional",
-                 "Required (YYYY-MM-DD)", "Required (YYYY-MM-DD)", "YYYY-MM-DD"]
+                 "YYYY-MM-DD", "Optional (Y/N, default N)"]
         sample = ["[EXAMPLE]", "PO-0000000-20260601-001", "", "",
                   "10000", "10000", "approved", "", "13",
                   "", "Sample goods description", "",
-                  "2026-01-01", "2026-12-31", ""]
+                  "", "N"]
 
         def _col_letter(i):
             """Convert 0-based column index to Excel column letter(s)."""
@@ -2000,8 +2130,9 @@ class ApiBridge:
         last_col = _col_letter(len(headers) - 1)
         info_text = (
             "Import Rules: Only GR records with status \"approved\" or \"finished\" can be imported. "
-            "Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. "
-            "Leave GR ID empty to auto-generate."
+            "Required fields: PO ID, GR NO, Con Value, Status. "
+            "Leave GR ID empty to auto-generate. "
+            "is_cancellation: set \"Y\" for Cancellation GR (negative amounts), default \"N\"."
         )
         info_cell = f'<c r="A1" t="inlineStr"><is><t>{_xml_escape(info_text)}</t></is></c>'
 

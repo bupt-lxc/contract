@@ -140,7 +140,7 @@ def test_vendor_snapshot_on_submit(app_config):
     sc_id = sc["sc_id"]
     submit_sc(app_config, USER, sc_id, {
         "sc_no": "SC-TEST",
-        "request_type": "service",
+        "request_type": "new",
         "cost_center": 1001,
         "sc_amount": 5000,
         "service_period_start": "2026-01-01",

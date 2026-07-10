@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from sc_gr_app.config import default_config
 from sc_gr_app.db.connection import connect
 from sc_gr_app.db.migrations import migrate
-from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, approve_sc, close_sc
+from sc_gr_app.services.sc_service import create_sc_draft, submit_sc, approve_sc, finish_sc
 from sc_gr_app.services.po_service import create_po, finish_po
 from sc_gr_app.services.user_service import seed_users
 from sc_gr_app.services.vendor_service import create_vendor
@@ -43,16 +43,16 @@ print("\n=== Vendors ===")
 mid = admin["machine_id"]
 vendor_data = [
     {"vendor_id": f"V-{mid}-001", "vendor_name": "Siemens Ltd.", "ksrm_vendor_code": "V-SIE-001",
-     "contact_person": "Zhang Wei", "phone": "13800001001", "service_scope": "engineering Service",
+     "contact_person": "Zhang Wei", "phone": "13800001001", "service_scope": "Engineering Service",
      "email": "zhangwei@siemens.com", "description": "Automation and control systems"},
     {"vendor_id": f"V-{mid}-002", "vendor_name": "Bosch Automotive", "ksrm_vendor_code": "V-BOS-002",
      "contact_person": "Li Ming", "phone": "13800001002", "service_scope": "Equipment",
      "email": "liming@bosch.com", "description": "Testing equipment and validation services"},
     {"vendor_id": f"V-{mid}-003", "vendor_name": "Dassault Systemes", "ksrm_vendor_code": "V-DAS-003",
-     "contact_person": "Wang Fang", "phone": "13800001003", "service_scope": "engineering Service",
+     "contact_person": "Wang Fang", "phone": "13800001003", "service_scope": "Engineering Service",
      "email": "wangfang@3ds.com", "description": "CAD/CAE software and consulting"},
     {"vendor_id": f"V-{mid}-004", "vendor_name": "TUV Rheinland", "ksrm_vendor_code": "V-TUV-004",
-     "contact_person": "Chen Jie", "phone": "13800001004", "service_scope": "engineering Service",
+     "contact_person": "Chen Jie", "phone": "13800001004", "service_scope": "Engineering Service",
      "email": "chenjie@tuv.com", "description": "Homologation and certification services"},
     {"vendor_id": f"V-{mid}-005", "vendor_name": "AVL List GmbH", "ksrm_vendor_code": "V-AVL-005",
      "contact_person": "Liu Yang", "phone": "13800001005", "service_scope": "Equipment",
@@ -107,19 +107,19 @@ print(f"  {po1['po_id']} (draft)")
 
 # SC-2: Pending
 sc2 = make_sc(req2, "SC-2: test equipment calibration")
-sc2 = submit(sc2["sc_id"], req2, "service", 1002, 300000, "2026-03-01", "2026-08-31", "SC-2: test equipment calibration")
+sc2 = submit(sc2["sc_id"], req2, "new", 1002, 300000, "2026-03-01", "2026-08-31", "SC-2: test equipment calibration")
 _link_vendors(sc2["sc_id"], [v_ids[0], v_ids[1]])
 print(f"  {sc2['sc_id']} (pending)")
 
 # SC-3: Pending
 sc3 = make_sc(req1, "SC-3: chassis components testing")
-sc3 = submit(sc3["sc_id"], req1, "material", 1003, 800000, "2026-02-01", "2026-10-31", "SC-3: chassis components testing")
+sc3 = submit(sc3["sc_id"], req1, "new", 1003, 800000, "2026-02-01", "2026-10-31", "SC-3: chassis components testing")
 _link_vendors(sc3["sc_id"], [v_ids[1]])
 print(f"  {sc3['sc_id']} (pending)")
 
 # SC-4: Approved
 sc4 = make_sc(req2, "SC-4: NVH testing services")
-sc4 = submit(sc4["sc_id"], req2, "service", 1004, 600000, "2026-04-01", "2026-09-30", "SC-4: NVH testing services")
+sc4 = submit(sc4["sc_id"], req2, "new", 1004, 600000, "2026-04-01", "2026-09-30", "SC-4: NVH testing services")
 sc4 = approve_sc(config, admin, sc4["sc_id"])
 _link_vendors(sc4["sc_id"], [v_ids[1], v_ids[2]])
 print(f"  {sc4['sc_id']} (approved)")
@@ -132,7 +132,7 @@ print(f"  {po2['po_id']} (active)")
 
 # SC-5: Approved
 sc5 = make_sc(req3, "SC-5: powertrain calibration tools")
-sc5 = submit(sc5["sc_id"], req3, "fixed_asset", 1005, 450000, "2026-05-01", "2026-12-31", "SC-5: powertrain calibration tools")
+sc5 = submit(sc5["sc_id"], req3, "new", 1005, 450000, "2026-05-01", "2026-12-31", "SC-5: powertrain calibration tools")
 sc5 = approve_sc(config, admin, sc5["sc_id"])
 _link_vendors(sc5["sc_id"], [v_ids[3]])
 print(f"  {sc5['sc_id']} (approved)")
@@ -159,7 +159,7 @@ print(f"  {po5['po_id']} (active)")
 
 # SC-7: Create + approve + PO + GR, THEN close
 sc7 = make_sc(req2, "SC-7: brake system testing (completed)")
-sc7 = submit(sc7["sc_id"], req2, "service", 1007, 200000, "2026-01-01", "2026-03-31", "SC-7: brake system testing (completed)")
+sc7 = submit(sc7["sc_id"], req2, "new", 1007, 200000, "2026-01-01", "2026-03-31", "SC-7: brake system testing (completed)")
 sc7 = approve_sc(config, admin, sc7["sc_id"])
 
 po4 = create_po(config, req2, {"sc_id": sc7["sc_id"], "vendor_id": v_ids[3],
@@ -175,7 +175,7 @@ print(f"  {gr4['gr_id']} (approved)")
 po4 = finish_po(config, req2, po4["po_id"])
 print(f"  {po4['po_id']} (finished)")
 
-sc7 = close_sc(config, admin, sc7["sc_id"])
+sc7 = finish_sc(config, admin, sc7["sc_id"])
 _link_vendors(sc7["sc_id"], [v_ids[3]])
 print(f"  {sc7['sc_id']} (closed)")
 

@@ -85,7 +85,7 @@ export default {
     importFile: '文件',
     importSelectFile: '选择文件',
     importDropHint: '将文件拖到此处或点击上传',
-    importFormatHint: '仅支持 .xlsx/.xls 文件',
+    importFormatHint: '仅支持 .xlsx/.xls/.csv 文件',
     importRecords: '导入 {entity}',
     importValidation: '校验结果',
     template: '模板'
@@ -108,6 +108,19 @@ export default {
     requester: '申请人',
     Admin: '管理员',
     Requester: '申请人'
+  },
+
+  processSummary: '流程摘要',
+
+  timestampLabel: {
+    confirmed: '确认',
+    created: '创建',
+    finished: '完成',
+    submitted: '提交',
+    pending: '待处理',
+    approved: '批准',
+    updated: '更新',
+    active: '生效'
   },
 
   login: {
@@ -152,7 +165,10 @@ home: {
     colStartDay: 'Start Day',
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
+    colAmount: '金额',
+    colType: '类型',
     viewAllOfType: '查看此类全部',
+    denied: '已驳回',
   },
 
   sc: {
@@ -246,6 +262,18 @@ home: {
     ownerTransferred: '所有者已转移',
     currency: '货币',
     importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的SC记录。必填字段：SC NO（SC编号）、SC Amount（SC金额）、Status（状态）。SC ID留空将自动生成。',
+    topLevel: '顶层',
+    calloffBadge: '外委',
+    newCalloffSc: '新建外委 SC',
+    calloffPoId: '外委来源 PO',
+    scAmountExceedsOpenPoAmount: 'SC 金额超过所选 FC PO 的可用金额。',
+    allocatedPo: '已分配 PO 总额',
+    unallocated: '未分配金额',
+    downstreamCalloff: '下游外委 SC',
+    pendingCalloff: '进行中外委 SC',
+    assignees: '协作者',
+    assigneesPlaceholder: '选择协作者',
+    transferAssigneesNote: '协作者将保持不变',
   },
 
   po: {
@@ -264,6 +292,7 @@ home: {
     vendorName: '供应商名称',
     poAmount: '采购订单金额',
     openPoAmount: '可用采购订单金额',
+    budgetSummary: '预算概览',
     startDate: '开始日期',
     contractEndDate: '合同结束日期',
     consumedAmount: '已消费金额',
@@ -308,6 +337,34 @@ home: {
     poNotFound: '未找到PO记录。',
     draftSaved: '草稿已保存',
     importRules: '仅允许导入状态为"Active（进行中）"或"Finished（已完成）"的PO记录。必填字段：SC ID（关联SC编号）、PO NO（PO编号）、PO Amount（PO金额）、Status（状态）。PO ID留空将自动生成。',
+    annualReport: '年报导出',
+    annualReportTitle: '导出年报',
+    selectYear: '选择年份',
+    openPoAmountFc: 'PO 可用金额',
+    allocatedCalloff: '已分配外委总额',
+    pendingCalloff: '进行中外委',
+    downstreamConsumed: '下游已验收',
+    downstreamPendingGr: '下游待验收 GR',
+    downstreamPendingGrIncl: '下游待批准收货（含税）',
+    newCalloffSc: '新建外委 SC',
+    newRegularPo: '新建常规PO',
+    newFcPo: '新建FC PO',
+    manualAnnualAmounts: '手工年度金额',
+    addManualAmount: '新增记录',
+    manualAmountYear: '年份',
+    manualAmountType: '类型',
+    manualAmountAmount: '金额',
+    manualAmountCreatedBy: '记录人',
+    manualAmountCreatedAt: '记录时间',
+    manualAmountProvision: 'Provision',
+    manualAmountToBeGr: 'To be GR',
+    deleteManualAmountConfirm: '确认删除 {year} {type} 手工年度金额 {amount}？',
+    manualAmountSaved: '手工年度金额已保存',
+    manualAmountDeleted: '手工年度金额已删除',
+    manualAmountNoRecords: '暂无手工年度金额记录',
+    manualAmountInvalidYear: '年份必须是四位数字',
+    manualAmountAmountRequired: '金额必填',
+    manualAmountRefreshFailed: '已保存，但刷新失败。请刷新详情页查看最新记录。',
   },
 
   gr: {
@@ -355,6 +412,10 @@ home: {
     grFinished: '收货记录已完成',
     finishGr: '完成收货记录',
     finishGrConfirm: '确认此收货记录已完成？货物已验收/服务已完成。',
+    lastDeliveryCascadeTitle: '最后交付确认',
+    lastDeliveryCascadeMessage: '此 GR 为最后交付，以下 GR 将被一并完成：{list}。完成后 PO 也将自动完成。是否继续？',
+    lastDeliveryNoCascadeMessage: '此 GR 为最后交付。完成后 PO 也将自动完成。是否继续？',
+    grAndPoFinished: 'GR 已完成，PO 已自动完成',
     approveGr: '批准收货记录',
     enterConValue: '请输入确认金额（留空则根据预估金额和增值税率自动计算）：',
     enterValidNumber: '请输入有效的正数',
@@ -382,12 +443,15 @@ home: {
     activeDate: '生效日期',
     goodsServiceDescription: '货物/服务描述',
     confirmationName: '确认名称',
-    deliveryFrom: '交付从',
-    deliveryTo: '交付至',
     lastDelivery: '最后交付',
+    isCancellation: '是否取消类型',
     confirmSubmit: '确认提交此验收申请？',
     grSubmitted: '验收申请已提交',
     importRules: '仅允许导入状态为"Approved（已审批）"或"Finished（已完成）"的GR记录。必填字段：PO ID（关联PO编号）、GR NO（GR编号）、Estimated Amount（预估金额）、Con Value（合同金额）、Delivery From（交付开始日期）、Delivery To（交付结束日期）、Status（状态）。GR ID留空将自动生成。',
+    annualReport: '年报导出',
+    annualReportTitle: '导出年报',
+    selectYear: '选择年份',
+    exportingAnnual: '正在导出...',
   },
 
   vendor: {
@@ -617,6 +681,10 @@ home: {
     allRows: '全部数据 (共 {count} 条)',
     filename: '文件名',
     dialogTitle: '导出 {type} 数据',
+    format: '导出格式',
+    xlsx: 'Excel (.xlsx)',
+    csv: 'CSV (.csv)',
+    formatCSVHint: 'CSV 仅导出数据工作表（不含统计图表）',
     entryType: '条目类型',
     sheetData: '数据',
     sheetOverview: '概览',
@@ -692,12 +760,16 @@ home: {
     within4Months: '四个月内',
     within3Months: '三个月内',
     within2Months: '两个月内',
-    within1Month: '一个月内'
+    within1Month: '一个月内',
+    isCalloff: '外委 SC',
+    isFcPo: 'FC 类型 PO',
   },
 
   settings: {
     attachmentsDir: '附件存储位置',
-    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。'
+    attachmentsDirHint: '修改后，已有附件保留在原位置不受影响，新附件将存储到新位置。',
+    senderEmail: '发件邮箱',
+    senderEmailHint: '通知邮件将使用此 Outlook 账户发送。留空则使用默认账户。'
   },
 
   confirm: {
@@ -797,6 +869,7 @@ home: {
     contractPos: '合同项',
     contractType: '合同类型',
     costCenter: '成本中心',
+    calloffPoId: 'Call-off PO ID',
     purchaser: '采购员'
   }
 }

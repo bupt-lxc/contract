@@ -17,14 +17,14 @@ def test_filter_with_range_suffixes(app_config):
         conn.execute(
             "INSERT INTO sc_records (sc_id, requester_id, request_type, cost_center, sc_amount, "
             "service_period_start, service_period_end, status, created_by, created_at, updated_at) "
-            "VALUES ('SC-A', 'U-1', 'service', 1001, 100, "
+            "VALUES ('SC-A', 'U-1', 'new', 1001, 100, "
             "'2026-01-01', '2026-12-31', 'pending', 'U-1', ?, ?)",
             (timestamp, timestamp),
         )
         conn.execute(
             "INSERT INTO sc_records (sc_id, requester_id, request_type, cost_center, sc_amount, "
             "service_period_start, service_period_end, status, created_by, created_at, updated_at) "
-            "VALUES ('SC-B', 'U-1', 'service', 1001, 200, "
+            "VALUES ('SC-B', 'U-1', 'new', 1001, 200, "
             "'2026-06-01', '2026-12-31', 'approved', 'U-1', ?, ?)",
             (timestamp, timestamp),
         )

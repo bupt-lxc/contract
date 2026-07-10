@@ -14,7 +14,7 @@ from sc_gr_app.services.lock_service import LeaseLock
 REQUIRED_FIELDS = ("vendor_name", "service_scope")
 SUPPORTED_SERVICE_SCOPES = {
     "Transportation",
-    "engineering Service",
+    "Engineering Service",
     "Equipment",
     "Parts",
     "Driver",
@@ -24,9 +24,11 @@ SUPPORTED_SERVICE_SCOPES = {
     "Import&Export&cusoms clearance",
     "Insurance",
     "Harness",
-    "Maintenance",
+    "Maintenance&Calibration",
     "Security",
     "Testing support",
+    "Fix asset",
+    "Materials",
     "Others",
 }
 OPTIONAL_FIELDS = (
@@ -260,6 +262,16 @@ def delete_vendor(config: AppConfig, current_user: dict, vendor_id: str) -> dict
                         f"it is referenced by {dep_count} purchase order(s). "
                         f"Please delete the related POs first."
                     )
+                sc_vendor_count = conn.execute(
+                    "select count(*) from sc_vendors where vendor_id = ?",
+                    (vendor_id,),
+                ).fetchone()[0]
+                if sc_vendor_count > 0:
+                    raise ValidationError(
+                        f"Cannot delete vendor '{before['vendor_name']}': "
+                        f"it is referenced by {sc_vendor_count} SC(s) via sc_vendors. "
+                        f"Please remove the vendor from those SCs first."
+                    )
                 conn.execute("delete from vendors where vendor_id = ?", (vendor_id,))
                 write_operation_record(
                     conn,
@@ -299,20 +311,46 @@ def check_ksrm_duplicate(config: AppConfig, ksrm_code: str, exclude_vendor_id: s
 
 # ── Vendor import ──
 
-VENDOR_COLUMN_MAP = {
-    "vendor_id": "供应商ID",
-    "vendor_name": "供应商名称",
-    "ksrm_vendor_code": "KSRM代码",
-    "company_name_cn": "公司中文名",
-    "contact_person": "联系人",
-    "phone": "电话",
-    "service_scope": "服务范围",
-    "email": "邮箱",
-    "description": "描述",
-    "inquiry_history": "询价历史",
+# Each internal field maps to a list of recognized header names (English + Chinese).
+VENDOR_COLUMN_ALIASES = {
+    "vendor_id":          ["Vendor ID", "vendor_id", "供应商ID"],
+    "vendor_name":        ["Vendor Name", "vendor_name", "供应商名称"],
+    "ksrm_vendor_code":   ["KSRM Code", "KSRM Vendor Code", "ksrm_vendor_code", "KSRM代码"],
+    "company_name_cn":    ["Company Name (CN)", "Company Name CN", "Chinese Name", "company_name_cn", "公司中文名"],
+    "contact_person":     ["Contact", "Contact Person", "contact_person", "联系人"],
+    "phone":              ["Phone", "Phone Number", "phone", "电话"],
+    "service_scope":      ["Service Scope", "service_scope", "服务范围"],
+    "email":              ["Email", "email", "邮箱"],
+    "description":        ["Description", "description", "描述"],
+    "inquiry_history":    ["Inquiry History", "inquiry_history", "询价历史"],
 }
 
-VENDOR_IMPORT_FIELDS = list(VENDOR_COLUMN_MAP.keys())
+VENDOR_IMPORT_FIELDS = list(VENDOR_COLUMN_ALIASES.keys())
+
+
+def _normalize_header(h: str) -> str:
+    """Normalize header text for fuzzy matching: lowercase, strip parentheses,
+    collapse whitespace and underscores into single underscores."""
+    import re
+    h = h.strip().lower()
+    h = re.sub(r'[()（）]', '', h)
+    h = re.sub(r'[\s_]+', '_', h)
+    return h.strip('_')
+
+
+def _build_column_map(header: list[str]) -> dict[int, str]:
+    """Map column index → internal field name by matching normalized headers."""
+    col_map: dict[int, str] = {}
+    for idx, col_name in enumerate(header):
+        norm = _normalize_header(col_name)
+        for field_key, aliases in VENDOR_COLUMN_ALIASES.items():
+            for alias in aliases:
+                if norm == _normalize_header(alias):
+                    col_map[idx] = field_key
+                    break
+            if idx in col_map:
+                break
+    return col_map
 
 
 def parse_vendor_file(file_path: str) -> list[dict]:
@@ -341,19 +379,12 @@ def _parse_excel(file_path: str) -> list[dict]:
         wb.close()
         raise ValidationError("File is empty")
 
-    col_map = {}
-    for idx, col_name in enumerate(header):
-        col_lower = col_name.lower().replace(" ", "_")
-        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
-            if col_lower == field_key.lower() or col_name.strip() == cn_label:
-                col_map[idx] = field_key
-                break
-
+    col_map = _build_column_map(header)
     if not col_map:
         wb.close()
         raise ValidationError(
             "No recognized columns found. Expected headers: "
-            + ", ".join(VENDOR_COLUMN_MAP.keys())
+            + ", ".join(VENDOR_IMPORT_FIELDS)
         )
 
     rows = []
@@ -377,18 +408,11 @@ def _parse_csv(file_path: str) -> list[dict]:
         except StopIteration:
             raise ValidationError("File is empty")
 
-    col_map = {}
-    for idx, col_name in enumerate(header):
-        col_lower = col_name.lower().replace(" ", "_")
-        for field_key, cn_label in VENDOR_COLUMN_MAP.items():
-            if col_lower == field_key.lower() or col_name.strip() == cn_label:
-                col_map[idx] = field_key
-                break
-
+    col_map = _build_column_map(header)
     if not col_map:
         raise ValidationError(
             "No recognized columns found. Expected headers: "
-            + ", ".join(VENDOR_COLUMN_MAP.keys())
+            + ", ".join(VENDOR_IMPORT_FIELDS)
         )
 
     rows = []
@@ -424,8 +448,11 @@ def preview_import(config: AppConfig, file_path: str) -> list[dict]:
         warnings_list = []
         if not rec.get("vendor_name", "").strip():
             errors_list.append("vendor_name is required")
-        if not rec.get("service_scope", "").strip():
+        scope = rec.get("service_scope", "").strip()
+        if not scope:
             errors_list.append("service_scope is required")
+        elif scope not in SUPPORTED_SERVICE_SCOPES:
+            errors_list.append(f"service_scope '{scope}' is not a valid value")
 
         vid = rec.get("vendor_id", "").strip()
         if vid and vid in existing_ids:
@@ -492,6 +519,11 @@ def execute_import(
             if not vname or not scope:
                 skipped += 1
                 errors.append(f"Row {i + 1}: missing required fields, skipped")
+                continue
+
+            if scope and scope not in SUPPORTED_SERVICE_SCOPES:
+                skipped += 1
+                errors.append(f"Row {i + 1}: service_scope '{scope}' is invalid, skipped")
                 continue
 
             try:

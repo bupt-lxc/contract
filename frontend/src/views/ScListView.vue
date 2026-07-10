@@ -2,13 +2,24 @@
   <div>
     <AdvancedFilterBar
       :filter-config="scFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     >
       <template #actions>
-        <el-button type="primary" :disabled="loadingState.count > 0" @click="scDialogVisible = true; scDialogMode = 'create'">
-          <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
-        </el-button>
+        <el-dropdown @command="handleCreateScCommand">
+          <el-button type="primary" :disabled="loadingState.count > 0">
+            <el-icon><Plus /></el-icon> {{ $t('sc.newSc') }}
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="new">{{ $t('sc.newSc') }}</el-dropdown-item>
+              <el-dropdown-item command="calloff">{{ $t('sc.newCalloffSc') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button :disabled="loadingState.count > 0" @click="importVisible = true">
           <el-icon><Upload /></el-icon> Import
         </el-button>
@@ -34,13 +45,14 @@
       :empty-text="state.error || $t('sc.noRecords')"
       selectable
       @sort-change="handleSortChange"
-      @detail="row => $router.push(`/sc/${row.sc_id}`)"
+      @detail="openScDetail"
       @selection-change="val => selectedRows = val"
     />
 
     <el-pagination
-      :current-page="state.currentPage"
-      :page-size="state.pageSize"
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
       :total="state.total"
       layout="total, sizes, prev, pager, next, jumper"
       @current-change="handlePageChange"
@@ -54,8 +66,15 @@
       :record="scDialogRecord"
       :users="activeUsers"
       :vendors="vendors"
+      :calloff-po-id="calloffPoId"
+      :calloff-po-info="calloffPoInfo"
       @save-draft="handleSaveDraft"
       @save-submit="handleSaveSubmit"
+    />
+
+    <PoFcSelectorDialog
+      v-model:visible="poFcSelectorVisible"
+      @select="onPoFcSelect"
     />
 
     <BatchProgressModal
@@ -70,12 +89,13 @@
       entity-type="SC"
       :columns="scImportColumns"
       :rules-text="$t('sc.importRules')"
-      @imported="searchScs"
+      @imported="reload"
     />
 
     <ExportDialog
       v-model:visible="exportDialogVisible"
       entity-type="sc"
+      :text="state.text"
       :filters="state.filters"
       :sort="state.sort"
       :direction="state.direction"
@@ -87,10 +107,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, ArrowDown } from '@element-plus/icons-vue'
+import PoFcSelectorDialog from '@/components/sc/PoFcSelectorDialog.vue'
 import { useSc } from '@/composables/useSc.js'
 import { useVendor } from '@/composables/useVendor.js'
 import { useExport } from '@/composables/useExport.js'
@@ -104,9 +125,11 @@ import BatchProgressModal from '@/components/common/BatchProgressModal.vue'
 import ImportPreviewDialog from '@/components/common/ImportPreviewDialog.vue'
 import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { requestTypeLabel } from '@/composables/useRequestType.js'
 
 const route = useRoute()
-const { state, searchScs, createDraft, submitSc, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useSc()
+const router = useRouter()
+const { state, searchScs, createDraft, submitSc, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = useSc()
 const { state: vendorState, searchVendors } = useVendor()
 const { exportAll } = useExport()
 const { t } = useI18n()
@@ -119,7 +142,12 @@ const scStatuses = [
   { label: t('status.pending'), value: 'pending' }, { label: t('status.approved'), value: 'approved' },
   { label: t('status.denied'), value: 'denied' }, { label: t('status.finished'), value: 'finished' }
 ]
-const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
+const requestTypes = ['FC', 'call_off', 'new']
+const serviceScopes = [
+  'Transportation', 'Engineering Service', 'Equipment', 'Parts', 'Driver',
+  'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
+  'Insurance', 'Harness', 'Maintenance&Calibration', 'Security', 'Testing support', 'Others'
+]
 const activeUsers = ref([])
 const vendors = computed(() => vendorState.rows)
 
@@ -154,7 +182,7 @@ async function handleBatchSubmit() {
   const summary = await runBatch(selectedRows.value, 'submit', async (row) => {
     await callApi('submit_sc', { sc_id: row.sc_id, data: {} })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'submit')
 }
 
@@ -163,16 +191,16 @@ async function handleBatchConfirm() {
   const summary = await runBatch(selectedRows.value, 'confirm', async (row) => {
     await callApi('confirm_sc', { sc_id: row.sc_id })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'confirm')
 }
 
 async function handleBatchApprove() {
   batchTitle.value = t('batch.titleApprove')
   const summary = await runBatch(selectedRows.value, 'approve', async (row) => {
-    await callApi('approve_sc', { sc_id: row.sc_id, cascade_pos: false })
+    await callApi('approve_sc', { sc_id: row.sc_id })
   }, t)
-  if (summary) await searchScs()
+  if (summary) await reload()
   showBatchResult(summary, 'approve')
 }
 
@@ -202,7 +230,9 @@ function computeDeadlineEnd(value) {
 
 const scFilterConfig = [
   { name: 'status', label: t('filter.status'), type: 'select', options: scStatuses },
-  { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: t, value: t })) },
+  { name: 'request_type', label: t('filter.requestType'), type: 'select', options: requestTypes.map(t => ({ label: requestTypeLabel(t) || t, value: t })) },
+  { name: 'service_scope', label: t('vendor.serviceScope'), type: 'select', options: serviceScopes.map(s => ({ label: s, value: s })) },
+  { name: 'is_calloff', label: t('filter.isCalloff'), type: 'select', options: [{ label: t('sc.topLevel'), value: '0' }, { label: t('sc.calloffBadge'), value: '1' }] },
   { name: 'asset', label: t('filter.asset'), type: 'select', options: [{label:'Y',value:'Y'},{label:'N',value:'N'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
@@ -221,6 +251,33 @@ const scFilterConfig = [
 const scDialogVisible = ref(false)
 const scDialogMode = ref('create')
 const scDialogRecord = ref(null)
+const calloffPoId = ref(null)
+const calloffPoInfo = ref(null)
+const poFcSelectorVisible = ref(false)
+
+function handleCreateScCommand(command) {
+  if (command === 'new') {
+    calloffPoId.value = null
+    calloffPoInfo.value = null
+    scDialogMode.value = 'create'
+    scDialogRecord.value = null
+    scDialogVisible.value = true
+  } else if (command === 'calloff') {
+    poFcSelectorVisible.value = true
+  }
+}
+
+function onPoFcSelect(po) {
+  calloffPoId.value = po.po_id
+  calloffPoInfo.value = po
+  scDialogMode.value = 'create'
+  scDialogRecord.value = null
+  scDialogVisible.value = true
+}
+
+function openScDetail(row) {
+  router.push({ name: 'sc-detail', params: { id: row.sc_id }, query: { returnTo: route.fullPath } })
+}
 
 function handleFilter({ text, filters }) {
   const transformed = { ...filters }
@@ -232,21 +289,29 @@ function handleFilter({ text, filters }) {
     }
   }
   delete transformed.deadline
-  searchScs(text, transformed)
+  selectedRows.value = []
+  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
 }
 
 function handleReset() {
-  resetFilters()
-  searchScs()
+  selectedRows.value = []
+  reset()
 }
 
 function handleSortChange({ prop, order }) {
-  onSortChange({ prop, order })
-  searchScs()
+  changeSort({ prop, order })
+  reload()
 }
 
-function handlePageChange(page) { onPageChange(page); searchScs() }
-function handleSizeChange(size) { onPageSizeChange(size); searchScs() }
+function handlePageChange(page) {
+  selectedRows.value = []
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  selectedRows.value = []
+  changePageSize(size)
+}
 
 async function handleSaveDraft(data) {
   try {
@@ -257,7 +322,7 @@ async function handleSaveDraft(data) {
     }
     ElMessage.success(t('sc.draftSaved'))
     scDialogVisible.value = false
-    await searchScs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -274,7 +339,7 @@ async function handleSaveSubmit(data) {
     await submitSc(created.sc_id, formData)
     ElMessage.success(t('common.saved'))
     scDialogVisible.value = false
-    await searchScs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -289,10 +354,12 @@ function handleExport() {
 const importVisible = ref(false)
 
 const scImportColumns = [
-  { prop: 'sc_id', label: 'SC ID', width: '160' },
   { prop: 'sc_no', label: t('sc.scNo'), width: '120' },
+  { prop: 'vendor_id', label: t('vendor.vendorId'), width: '120' },
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
   { prop: 'request_type', label: t('sc.requestType'), width: '100' },
+  { prop: 'calloff_po_id', label: t('sc.calloffPoId'), width: '130' },
+  { prop: 'service_scope', label: t('sc.serviceScope'), width: '120' },
   { prop: 'cost_center', label: t('sc.costCenter'), width: '100' },
   { prop: 'sc_amount', label: t('sc.scAmount'), width: '100' },
   { prop: 'currency', label: t('sc.currency'), width: '70' },
@@ -316,15 +383,31 @@ async function downloadTemplate() {
   }
 }
 
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
+  }
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
 onMounted(async () => {
   try {
     activeUsers.value = await callApi('list_users')
   } catch { /* ignore — user list is non-critical */ }
-  const filters = {}
-  if (route.query.status) {
-    filters.status = route.query.status
-    setFilters(filters)
-  }
-  await Promise.all([searchScs(null, Object.keys(filters).length ? filters : null), searchVendors()])
+  await Promise.all([initializeFromRoute(route, router), searchVendors()])
 })
 </script>

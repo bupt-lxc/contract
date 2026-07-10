@@ -25,6 +25,10 @@ class LockError(AppError):
 class ConflictError(AppError):
     code = "CONFLICT_ERROR"
 
+    def __init__(self, message: str, conflicts: list = None):
+        super().__init__(message)
+        self.conflicts = conflicts
+
 
 class DatabaseError(AppError):
     code = "DATABASE_ERROR"

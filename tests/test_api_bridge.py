@@ -422,3 +422,78 @@ def test_run_app_initializes_database_and_starts_pywebview(monkeypatch, tmp_path
     assert window_kwargs["height"] == 820
     assert window_kwargs["min_size"] == (1100, 700)
     assert calls[3] == ("start", {"debug": False})
+
+
+def test_bridge_annual_report_methods_forward_current_user_and_year(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    current_user = {"user_id": "U_ADMIN", "role": "admin", "machine_id": "1234567"}
+    calls = []
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda config, machine_id: current_user,
+    )
+
+    def fake_po_report(config, year, user):
+        calls.append(("po", config, year, user))
+        return [{"row_type": "po", "po_no": "PO-1"}]
+
+    def fake_gr_report(config, year, user):
+        calls.append(("gr", config, year, user))
+        return [{"gr_no": "GR-1"}]
+
+    monkeypatch.setattr(bridge.po_service, "get_annual_report_data", fake_po_report)
+    monkeypatch.setattr(bridge.gr_service, "get_annual_report_data", fake_gr_report)
+
+    api = bridge.ApiBridge(app_config)
+
+    assert api.get_po_annual_report({"year": "2025"}) == {
+        "ok": True,
+        "data": {"rows": [{"row_type": "po", "po_no": "PO-1"}]},
+    }
+    assert api.get_gr_annual_report({"year": "2026"}) == {
+        "ok": True,
+        "data": {"rows": [{"gr_no": "GR-1"}]},
+    }
+    assert calls == [
+        ("po", app_config, "2025", current_user),
+        ("gr", app_config, "2026", current_user),
+    ]
+
+
+def test_bridge_export_methods_forward_text_and_current_user(monkeypatch, app_config):
+    from sc_gr_app.api import bridge
+
+    calls = []
+
+    monkeypatch.setattr(bridge, "get_7_digit_id", lambda: "1234567")
+    monkeypatch.setattr(
+        bridge,
+        "get_user_by_machine_id",
+        lambda _config, _machine_id: {"user_id": "U1", "machine_id": "1234567", "user_name": "Alice", "role": "admin"},
+    )
+    def fake_rows(*args, **kwargs):
+        calls.append(("rows", args, kwargs))
+        return [{"_type": "SC", "sc_id": "sc-alpha"}]
+
+    def fake_stats(*args, **kwargs):
+        calls.append(("stats", args, kwargs))
+        return {"overview": {}}
+
+    monkeypatch.setattr(bridge.export_service, "build_cascade_rows", fake_rows)
+    monkeypatch.setattr(bridge.export_service, "compute_statistics", fake_stats)
+
+    api = bridge.ApiBridge(app_config)
+    api.export_scs_cascade({"text": "alpha", "filters": {"status": "approved"}, "sort": "created_at", "direction": "desc"})
+
+    row_args = calls[0][1]
+    row_kwargs = calls[0][2]
+    stats_kwargs = calls[1][2]
+    # current_user is a positional arg (index 6) in build_cascade_rows
+    assert row_kwargs["text"] == "alpha"
+    assert row_args[6]["user_id"] == "U1"
+    assert stats_kwargs["text"] == "alpha"
+    assert "export_rows" in stats_kwargs

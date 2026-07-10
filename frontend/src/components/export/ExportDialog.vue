@@ -7,6 +7,17 @@
     @close="handleClose"
   >
     <el-form label-position="top">
+      <!-- Format selector -->
+      <el-form-item :label="$t('export.format')">
+        <el-radio-group v-model="exportFormat">
+          <el-radio value="xlsx">{{ $t('export.xlsx') }}</el-radio>
+          <el-radio value="csv">{{ $t('export.csv') }}</el-radio>
+        </el-radio-group>
+        <div v-if="exportFormat === 'csv'" style="color:#909399;font-size:12px;margin-top:4px">
+          {{ $t('export.formatCSVHint') }}
+        </div>
+      </el-form-item>
+
       <!-- Cascade options -->
       <template v-if="entityType === 'sc'">
         <el-form-item :label="$t('export.cascadeOptions')">
@@ -64,11 +75,12 @@ import { useExport } from '@/composables/useExport.js'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
-const { exportMultiSheet } = useExport()
+const { exportMultiSheet, exportCSV } = useExport()
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
   entityType: { type: String, required: true },
+  text: { type: String, default: '' },
   filters: { type: Object, default: () => ({}) },
   sort: { type: String, default: 'created_at' },
   direction: { type: String, default: 'desc' },
@@ -82,12 +94,13 @@ const emit = defineEmits(['update:visible', 'exported'])
 const cascadePo = ref(false)
 const cascadeGr = ref(false)
 const dataScope = ref(initScope())
+const exportFormat = ref('xlsx')
 const filename = ref(defaultFilename())
 const exporting = ref(false)
 
 function initScope() {
   if (props.selectedIds.length) return 'selected'
-  if (Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null)) return 'filtered'
+  if (hasActiveCriteria()) return 'filtered'
   return 'all'
 }
 
@@ -99,7 +112,10 @@ function defaultFilename() {
 
 const dialogTitle = computed(() => t('export.dialogTitle', { type: { sc: 'SC', po: 'PO', gr: 'GR' }[props.entityType] }))
 const selectedCount = computed(() => props.selectedIds.length)
-const hasFilters = computed(() => Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null))
+function hasActiveCriteria() {
+  return Boolean(props.text) || Object.keys(props.filters).some(k => props.filters[k] !== '' && props.filters[k] != null)
+}
+const hasFilters = computed(() => hasActiveCriteria())
 
 function onCascadePoChange(val) {
   if (!val) cascadeGr.value = false
@@ -127,10 +143,12 @@ const CASCADE_COLUMNS = [
   { key: 'request_type', label: t('export.type') },
   { key: 'sc_amount', label: t('export.scAmount') },
   { key: 'currency', label: t('sc.currency') },
+  { key: 'calloff_po_id', label: t('exportCol.calloffPoId') },
   { key: 'service_period_start', label: t('sc.startDate'), getValue: r => (r.service_period_start || '').slice(0, 10) },
   { key: 'service_period_end', label: t('sc.endDate'), getValue: r => (r.service_period_end || '').slice(0, 10) },
   { key: 'asset_nums', label: t('exportCol.assetNums') },
   { key: 'internal_system_number', label: t('exportCol.internalSystemNumber') },
+  { key: 'service_scope', label: t('vendor.serviceScope') },
   // PO-specific
   { key: 'vendor_name', label: t('export.vendorName') },
   { key: 'ksrm_vendor_code', label: t('export.ksrmCode') },
@@ -153,9 +171,8 @@ const CASCADE_COLUMNS = [
   { key: 'tax_rate', label: t('gr.taxRate') },
   { key: 'goods_service_description', label: t('gr.goodsServiceDescription') },
   { key: 'confirmation_name', label: t('gr.confirmationName') },
-  { key: 'delivery_from', label: t('gr.deliveryFrom'), getValue: r => (r.delivery_from || '').slice(0, 10) },
-  { key: 'delivery_to', label: t('gr.deliveryTo'), getValue: r => (r.delivery_to || '').slice(0, 10) },
   { key: 'last_delivery', label: t('gr.lastDelivery') },
+  { key: 'is_cancellation', label: t('gr.isCancellation') },
   // Common timestamps
   { key: 'created_at', label: t('export.created'), getValue: r => {
     if (r.created_at && r.created_at.includes('T')) {
@@ -318,7 +335,8 @@ async function doExport() {
     }
 
     const payload = {
-      filters: dataScope.value === 'all' ? {} : props.filters,
+      text: dataScope.value === 'selected' ? null : (props.text || null),
+      filters: dataScope.value === 'selected' ? {} : props.filters,
       sort: props.sort,
       direction: props.direction,
       cascade: { po: cascadePo.value, gr: cascadeGr.value },
@@ -328,8 +346,12 @@ async function doExport() {
     const result = await callApi(apiMethod, payload)
     const { cascade_rows, statistics } = result
 
-    const sheets = buildSheets(cascade_rows, statistics)
-    await exportMultiSheet(sheets, filename.value)
+    if (exportFormat.value === 'csv') {
+      await exportCSV(cascade_rows, CASCADE_COLUMNS, filename.value)
+    } else {
+      const sheets = buildSheets(cascade_rows, statistics)
+      await exportMultiSheet(sheets, filename.value)
+    }
 
     ElMessage.success(t('export.exported'))
     emit('update:visible', false)

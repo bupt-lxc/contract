@@ -2,14 +2,24 @@
   <div>
     <AdvancedFilterBar
       :filter-config="poFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     />
 
     <div style="margin-bottom:12px;display:flex;gap:8px">
-      <el-button type="primary" @click="openCreatePoDialog">
-        <el-icon><Plus /></el-icon> {{ $t('po.addPo') }}
-      </el-button>
+      <el-dropdown @command="handleCreatePoCommand" style="margin-right:8px">
+        <el-button type="primary">
+          <el-icon><Plus /></el-icon> {{ $t('po.addPo') }} <el-icon><ArrowDown /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="regular">{{ $t('po.newRegularPo') }}</el-dropdown-item>
+            <el-dropdown-item command="fc">{{ $t('po.newFcPo') }}</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button @click="importVisible = true">
         <el-icon><Upload /></el-icon> Import
       </el-button>
@@ -19,6 +29,9 @@
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
+      <el-button v-if="isAdmin" @click="openAnnualReportDialog">
+        <el-icon><Download /></el-icon> {{ $t('po.annualReport') }}
+      </el-button>
     </div>
 
     <PoTable
@@ -26,15 +39,17 @@
       :loading="state.loading"
       selectable
       @selection-change="val => selectedRows = val"
-      @detail="row => $router.push(`/sc/${row.sc_id}/po/${row.po_id}`)"
+      @sort-change="handleSortChange"
+      @detail="openPoDetail"
       @edit="row => { poDialogRecord = row; poDialogMode = 'edit'; poDialogVisible = true }"
       @submit="row => handleSubmitPo(row)"
       @finish="row => handleFinishPo(row)"
     />
 
     <el-pagination
-      :current-page="state.currentPage"
-      :page-size="state.pageSize"
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
       :total="state.total"
       layout="total, sizes, prev, pager, next, jumper"
       @current-change="handlePageChange"
@@ -83,12 +98,13 @@
       entity-type="PO"
       :columns="poImportColumns"
       :rules-text="$t('po.importRules')"
-      @imported="searchPos"
+      @imported="reload"
     />
 
     <ExportDialog
       v-model:visible="exportDialogVisible"
       entity-type="po"
+      :text="state.text"
       :filters="state.filters"
       :sort="state.sort"
       :direction="state.direction"
@@ -96,14 +112,39 @@
       :filtered-count="state.total"
       :total-count="state.total"
     />
+    <el-dialog
+      v-model="annualReportVisible"
+      :title="$t('po.annualReportTitle')"
+      width="360px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('po.selectYear')">
+          <el-date-picker
+            v-model="annualReportYear"
+            type="year"
+            placeholder="YYYY"
+            format="YYYY"
+            value-format="YYYY"
+            :clearable="false"
+            style="width:100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="annualReportVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="annualExporting" @click="handleAnnualExport">
+          {{ $t('common.export') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Download, Upload } from '@element-plus/icons-vue'
+import { Plus, ArrowDown, Download, Upload } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
 import { usePo } from '@/composables/usePo.js'
 import { useExport } from '@/composables/useExport.js'
@@ -115,13 +156,18 @@ import ExportDialog from '@/components/export/ExportDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
+const isAdmin = computed(() => window.__currentUser?.role === 'admin')
 
-const { state, searchPos, createPo, updatePo, submitPo, finishPo, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = usePo()
-const { exportAll } = useExport()
+const { state, searchPos, createPo, updatePo, submitPo, finishPo, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = usePo()
+const { exportRows } = useExport()
 const exporting = ref(false)
 const selectedRows = ref([])
 const exportDialogVisible = ref(false)
+const annualReportVisible = ref(false)
+const annualReportYear = ref(new Date().getFullYear().toString())
+const annualExporting = ref(false)
 
 const scLinkedVendors = ref([])
 
@@ -162,6 +208,7 @@ const poFilterConfig = [
   { name: 'sc_id', label: t('filter.scId'), type: 'input' },
   { name: 'vendor_id', label: t('filter.vendorId'), type: 'input' },
   { name: 'vendor_name', label: t('filter.vendorName'), type: 'input' },
+  { name: 'is_fc_po', label: t('filter.isFcPo'), type: 'select', options: [{ label: 'FC PO', value: '1' }, { label: 'Regular PO', value: '0' }] },
   { name: 'contract_type', label: t('filter.contractType'), type: 'select', options: [{label:'PO',value:'PO'},{label:'Contract',value:'Contract'}] },
   { name: 'cost_center', label: t('filter.costCenter'), type: 'input' },
   { name: 'purchaser', label: t('filter.purchaser'), type: 'input' },
@@ -199,6 +246,27 @@ function openCreatePoDialog() {
   scSelectVisible.value = true
 }
 
+function handleCreatePoCommand(command) {
+  if (command === 'regular') {
+    openCreatePoDialog()
+  } else if (command === 'fc') {
+    openCreateFcPoDialog()
+  }
+}
+
+async function openCreateFcPoDialog() {
+  selectedScId.value = ''
+  selectedScRecord.value = null
+  scSelectVisible.value = false
+  try {
+    const result = await callApi('search_vendors', { limit: 500 })
+    scLinkedVendors.value = result.rows || []
+  } catch { scLinkedVendors.value = [] }
+  poDialogMode.value = 'create'
+  poDialogRecord.value = null
+  poDialogVisible.value = true
+}
+
 async function confirmScSelection() {
   if (!selectedScId.value) return
   selectedScRecord.value = eligibleScs.value.find(s => s.sc_id === selectedScId.value) || null
@@ -212,6 +280,14 @@ async function confirmScSelection() {
   poDialogVisible.value = true
 }
 
+function openPoDetail(row) {
+  if (row.sc_id) {
+    router.push({ name: 'po-detail', params: { scId: row.sc_id, poId: row.po_id }, query: { returnTo: route.fullPath } })
+  } else {
+    router.push({ name: 'po-detail-independent', params: { poId: row.po_id }, query: { returnTo: route.fullPath } })
+  }
+}
+
 function handleFilter({ text, filters }) {
   const transformed = { ...filters }
   if (transformed.deadline) {
@@ -222,12 +298,28 @@ function handleFilter({ text, filters }) {
     }
   }
   delete transformed.deadline
-  searchPos(text, transformed)
+  selectedRows.value = []
+  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
 }
 
 function handleReset() {
-  resetFilters()
-  searchPos()
+  selectedRows.value = []
+  reset()
+}
+
+function handleSortChange(sort) {
+  changeSort(sort)
+  reload()
+}
+
+function handlePageChange(page) {
+  selectedRows.value = []
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  selectedRows.value = []
+  changePageSize(size)
 }
 
 async function handleSubmitPo(row) {
@@ -235,7 +327,7 @@ async function handleSubmitPo(row) {
     await ElMessageBox.confirm(t('common.submit') + ' this PO?', t('common.confirm'), { type: 'warning' })
     await submitPo(row.po_id)
     ElMessage.success(t('common.submit') + ' ' + t('msg.saved'))
-    await searchPos()
+    await reload()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -246,7 +338,7 @@ async function handleFinishPo(row) {
     await ElMessageBox.confirm(t('confirm.finishPo'), t('common.confirm'), { type: 'warning' })
     await finishPo(row.po_id)
     ElMessage.success(t('msg.poFinished'))
-    await searchPos()
+    await reload()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }
@@ -255,9 +347,15 @@ async function handleFinishPo(row) {
 async function handlePoSave(data) {
   try {
     const { _attachments, ...formData } = data
+    const isFcPo = !selectedScRecord.value
     let poId, scId
     if (poDialogMode.value === 'create') {
-      const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id }
+      const payload = { ...formData }
+      if (isFcPo) {
+        payload.request_type = 'FC'
+      } else {
+        payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
+      }
       const created = await createPo(payload)
       poId = created.po_id
       scId = created.sc_id || payload.sc_id
@@ -267,11 +365,14 @@ async function handlePoSave(data) {
       await updatePo(poId, formData)
     }
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: poId, file_paths: _attachments, parent_sc_id: scId })
+      await callApi('add_attachments', {
+        entity_type: 'po', entity_id: poId,
+        file_paths: _attachments, parent_sc_id: scId || null
+      })
     }
     ElMessage.success(t('common.saved'))
     poDialogVisible.value = false
-    await searchPos()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -281,33 +382,75 @@ async function handlePoSave(data) {
 async function handlePoSaveDraft(data) {
   try {
     const { _attachments, ...formData } = data
-    const payload = { ...formData, sc_id: selectedScRecord.value?.sc_id || formData.sc_id, status: 'draft' }
+    const isFcPo = !selectedScRecord.value
+    const payload = { ...formData, status: 'draft' }
+    if (isFcPo) {
+      payload.request_type = 'FC'
+    } else {
+      payload.sc_id = selectedScRecord.value?.sc_id || formData.sc_id
+    }
     const created = await createPo(payload)
     if (_attachments?.length) {
-      await callApi('add_attachments', { entity_type: 'po', entity_id: created.po_id, file_paths: _attachments, parent_sc_id: created.sc_id })
+      await callApi('add_attachments', {
+        entity_type: 'po', entity_id: created.po_id,
+        file_paths: _attachments, parent_sc_id: created.sc_id || null
+      })
     }
     ElMessage.success(t('po.draftSaved'))
     poDialogVisible.value = false
-    await searchPos()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
   }
 }
 
-function handlePageChange(page) { onPageChange(page); searchPos() }
-function handleSizeChange(size) { onPageSizeChange(size); searchPos() }
-
 function handleExport() {
   exportDialogVisible.value = true
+}
+
+function openAnnualReportDialog() {
+  annualReportYear.value = new Date().getFullYear().toString()
+  annualReportVisible.value = true
+}
+
+async function handleAnnualExport() {
+  annualExporting.value = true
+  try {
+    const year = annualReportYear.value || new Date().getFullYear().toString()
+    const previousYear = String(Number(year) - 1)
+    const result = await callApi('get_po_annual_report', { year })
+    const rows = result.rows || []
+    const columns = [
+      { key: 'requester', label: 'Requester' },
+      { key: 'sc_no', label: 'SC no' },
+      { key: 'po_no', label: 'PO number' },
+      { key: 'short_text', label: 'Short Text' },
+      { key: 'sc_amount', label: 'SC amount' },
+      { key: 'po_amount', label: 'PO amount' },
+      { key: 'previous_year_gr', label: `${previousYear} GR` },
+      { key: 'previous_year_provision', label: `${previousYear} Provision` },
+      { key: 'selected_year_gr', label: `${year} GR` },
+      { key: 'selected_year_to_be_gr', label: `${year} to be GR` },
+      { key: 'selected_year_fc_gr', label: `${year} FC GR` },
+      { key: 'remark', label: 'Remark' },
+    ]
+    const saveResult = await exportRows(rows, columns, `PO_Annual_Report_${year}`)
+    if (saveResult?.cancelled) return
+    ElMessage.success(t('msg.exportedSuccessfully'))
+    annualReportVisible.value = false
+  } catch (e) {
+    ElMessage.error(e.message || t('msg.exportFailed'))
+  } finally {
+    annualExporting.value = false
+  }
 }
 
 // PO import
 const importVisible = ref(false)
 
 const poImportColumns = [
-  { prop: 'po_id', label: 'PO ID', width: '160' },
-  { prop: 'sc_id', label: 'SC ID', width: '160' },
+  { prop: 'sc_no', label: t('sc.scNo'), width: '120' },
   { prop: 'vendor_id', label: t('po.vendor'), width: '100' },
   { prop: 'po_no', label: t('po.poNo'), width: '120' },
   { prop: 'requester_id', label: t('sc.requester'), width: '100' },
@@ -321,6 +464,7 @@ const poImportColumns = [
   { prop: 'contract_type', label: t('po.contractType'), width: '100' },
   { prop: 'cost_center', label: t('po.costCenter'), width: '100' },
   { prop: 'purchaser', label: t('po.purchaser'), width: '100' },
+  { prop: 'active_date', label: t('po.activeDate'), width: '110' },
 ]
 
 async function downloadTemplate() {
@@ -334,12 +478,28 @@ async function downloadTemplate() {
   }
 }
 
-onMounted(async () => {
-  const filters = {}
-  if (route.query.status) {
-    filters.status = route.query.status
-    setFilters(filters)
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
   }
-  await Promise.all([searchPos(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
+onMounted(async () => {
+  await Promise.all([initializeFromRoute(route, router), loadEligibleScs()])
 })
 </script>

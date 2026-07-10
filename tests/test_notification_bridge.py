@@ -20,7 +20,7 @@ def _seed_sc_and_po(conn, sc_id="SC1", po_id="PO1", requester_id="U1", sc_status
     conn.execute(
         """INSERT OR REPLACE INTO sc_records (sc_id, requester_id, status, request_type, cost_center,
            sc_amount, service_period_start, service_period_end, description, created_by, created_at, updated_at, asset)
-           VALUES (?, ?, ?, 'material', 'CC1', 100000, '2025-01-01', '2026-12-31', '', ?, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')""",
+           VALUES (?, ?, ?, 'new', 'CC1', 100000, '2025-01-01', '2026-12-31', '', ?, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'N')""",
         (sc_id, requester_id, sc_status, requester_id),
     )
     conn.execute(

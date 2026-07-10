@@ -1,4 +1,5 @@
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -6,7 +7,7 @@ from sc_gr_app.config import AppConfig
 from sc_gr_app.db.connection import connect
 
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 40
 
 V1_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS sc_records (
   sc_id TEXT PRIMARY KEY,
   sc_no TEXT,
   requester_id TEXT NOT NULL REFERENCES users(user_id),
-  request_type TEXT NOT NULL CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+  request_type TEXT CHECK (request_type IN ('FC', 'call_off', 'new')),
   cost_center INTEGER NOT NULL,
   sc_amount REAL NOT NULL CHECK (sc_amount > 0),
   service_period_start TEXT NOT NULL,
@@ -43,7 +44,8 @@ CREATE TABLE IF NOT EXISTS sc_records (
   updated_at TEXT NOT NULL,
   approved_by TEXT REFERENCES users(user_id),
   approved_at TEXT,
-  closed_at TEXT
+  closed_at TEXT,
+  service_scope TEXT
 );
 
 CREATE TABLE IF NOT EXISTS vendors (
@@ -54,7 +56,7 @@ CREATE TABLE IF NOT EXISTS vendors (
   phone TEXT,
   service_scope TEXT NOT NULL CHECK (service_scope IN (
     'Transportation',
-    'engineering Service',
+    'Engineering Service',
     'Equipment',
     'Parts',
     'Driver',
@@ -64,7 +66,7 @@ CREATE TABLE IF NOT EXISTS vendors (
     'Import&Export&cusoms clearance',
     'Insurance',
     'Harness',
-    'Maintenance',
+    'Maintenance&Calibration',
     'Security',
     'Testing support',
     'Others'
@@ -167,6 +169,14 @@ def _record(conn, version: int) -> None:
         "insert or ignore into schema_migrations(version, applied_at) values (?, ?)",
         (version, utc_now()),
     )
+
+
+def _has_recorded_later_version(conn, version: int) -> bool:
+    row = conn.execute(
+        "select 1 from schema_migrations where version > ? limit 1",
+        (version,),
+    ).fetchone()
+    return row is not None
 
 
 def _sc_records_sql(conn) -> str:
@@ -1327,8 +1337,933 @@ def _migrate_v30(conn) -> None:
     _record(conn, 30)
 
 
+def _migrate_v31(conn) -> None:
+    """Add calloff_po_id column to sc_records for framework-contract call-off SCs."""
+    if _table_exists(conn, "sc_records"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        if "calloff_po_id" not in existing:
+            conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
+    _record(conn, 31)
+
+
+def _migrate_v32(conn) -> None:
+    """Add finished_at to pos, updated_at to gr_requests."""
+    if _table_exists(conn, "pos"):
+        existing_po = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
+        if "finished_at" not in existing_po:
+            conn.execute("ALTER TABLE pos ADD COLUMN finished_at TEXT")
+    if _table_exists(conn, "gr_requests"):
+        existing_gr = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+        if "updated_at" not in existing_gr:
+            conn.execute("ALTER TABLE gr_requests ADD COLUMN updated_at TEXT")
+    _record(conn, 32)
+
+
+def _migrate_v33(conn) -> None:
+    """Add finished_by column to pos table for PO finish audit trail."""
+    if _table_exists(conn, "pos"):
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(pos)")}
+        if "finished_by" not in existing:
+            conn.execute("ALTER TABLE pos ADD COLUMN finished_by TEXT REFERENCES users(user_id)")
+    _record(conn, 33)
+
+
+def _migrate_v34(conn) -> None:
+    """Rebuild pos with nullable sc_id and add request_type column (FC).
+    All tables with FKs to pos or sc_records must be rebuilt because SQLite
+    updates FK references when a table is renamed (pos->pos_old makes FKs
+    point to pos_old which is then dropped)."""
+    has_pos = _table_exists(conn, "pos")
+    has_sc = _table_exists(conn, "sc_records")
+    has_gr = _table_exists(conn, "gr_requests")
+    has_sv = _table_exists(conn, "sc_vendors")
+
+    # Phase 1: Rename all affected tables
+    if has_pos:
+        conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    if has_sc:
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+        sc_old_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records_old)")}
+        sc_has_submitted = "submitted_date" in sc_old_cols
+        sc_has_calloff = "calloff_po_id" in sc_old_cols
+    if has_gr:
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    if has_sv:
+        conn.execute("ALTER TABLE sc_vendors RENAME TO sc_vendors_old")
+        sv_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_vendors_old)")}
+        sv_has_snapshot = "vendor_snapshot" in sv_cols
+
+    # Phase 2: Create all new tables (FKs all point to new tables now)
+    if has_pos:
+        conn.execute("""
+            CREATE TABLE pos (
+              po_id TEXT PRIMARY KEY,
+              sc_id TEXT REFERENCES sc_records(sc_id),
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+              po_no TEXT,
+              requester_id TEXT,
+              po_amount REAL NOT NULL CHECK (po_amount > 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','active','finished')),
+              contract_from TEXT,
+              contract_to TEXT,
+              contract_no TEXT,
+              payment_frequency TEXT,
+              contract_pos TEXT,
+              contract_type TEXT,
+              cost_center TEXT,
+              purchaser TEXT,
+              active_date TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              finished_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('FC'))
+            )
+        """)
+
+    if has_sc:
+        sc_sql = """
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              finished_at TEXT,
+              confirmed_at TEXT,
+              asset TEXT NOT NULL DEFAULT 'N',
+              asset_nums TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              internal_system_number TEXT,
+              currency TEXT NOT NULL DEFAULT 'CNY'
+        """
+        if sc_has_submitted:
+            sc_sql += ",\n              submitted_date TEXT"
+        if sc_has_calloff:
+            sc_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
+        sc_sql += """,
+              CHECK (
+                status = 'draft'
+                OR status = 'manager_confirm'
+                OR (
+                  request_type IS NOT NULL
+                  AND cost_center IS NOT NULL
+                  AND sc_amount IS NOT NULL
+                  AND service_period_start IS NOT NULL
+                  AND service_period_end IS NOT NULL
+                )
+              )
+            )
+        """
+        conn.execute(sc_sql)
+
+    if has_gr:
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              gr_no TEXT,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              gross_cost REAL,
+              tax_rate REAL,
+              status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              denied_by TEXT REFERENCES users(user_id),
+              denied_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              finished_at TEXT,
+              confirmed_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              submitted_date TEXT,
+              goods_service_description TEXT,
+              confirmation_name TEXT,
+              delivery_from TEXT,
+              delivery_to TEXT,
+              last_delivery TEXT,
+              updated_at TEXT
+            )
+        """)
+
+    if has_sv:
+        sv_sql = """
+            CREATE TABLE sc_vendors (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id)
+        """
+        if sv_has_snapshot:
+            sv_sql += ",\n              vendor_snapshot TEXT"
+        sv_sql += """,
+              UNIQUE(sc_id, vendor_id)
+            )
+        """
+        conn.execute(sv_sql)
+
+    # Phase 3: Copy data
+    if has_pos:
+        conn.execute("""
+            INSERT INTO pos (
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              request_type
+            )
+            SELECT
+              po_id, sc_id, vendor_id, po_no, requester_id, po_amount, status,
+              contract_from, contract_to, contract_no, payment_frequency,
+              contract_pos, contract_type, cost_center, purchaser,
+              active_date, created_at, updated_at, finished_at, finished_by,
+              NULL
+            FROM pos_old
+        """)
+    if has_sc:
+        conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
+    if has_gr:
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            )
+            SELECT
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            FROM gr_requests_old
+        """)
+    if has_sv:
+        conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
+
+    # Phase 4: Drop old tables
+    if has_pos:
+        conn.execute("DROP TABLE pos_old")
+    if has_sc:
+        conn.execute("DROP TABLE sc_records_old")
+    if has_gr:
+        conn.execute("DROP TABLE gr_requests_old")
+    if has_sv:
+        conn.execute("DROP TABLE sc_vendors_old")
+
+    # Phase 5: Create indexes
+    if has_pos:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+    if has_sc:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+    if has_gr:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    if has_sv:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_sc ON sc_vendors(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_vendor ON sc_vendors(vendor_id)")
+
+    _record(conn, 34)
+
+
+def _migrate_v35(conn) -> None:
+    """Adjust service_scope values, remap request_type, add service_scope to sc_records."""
+    # Step A: Data cleanup — vendor service_scope rename
+    if _table_exists(conn, "vendors"):
+        conn.execute(
+            "UPDATE vendors SET service_scope = 'Engineering Service' "
+            "WHERE service_scope = 'engineering Service'"
+        )
+        conn.execute(
+            "UPDATE vendors SET service_scope = 'Maintenance&Calibration' "
+            "WHERE service_scope = 'Maintenance'"
+        )
+
+    # Step B: Data cleanup — sc_vendors snapshot JSON update
+    if _table_exists(conn, "sc_vendors"):
+        conn.execute(
+            "UPDATE sc_vendors SET vendor_snapshot = json_set("
+            "  vendor_snapshot, '$.service_scope', 'Engineering Service'"
+            ") WHERE json_extract(vendor_snapshot, '$.service_scope') = 'engineering Service'"
+        )
+        conn.execute(
+            "UPDATE sc_vendors SET vendor_snapshot = json_set("
+            "  vendor_snapshot, '$.service_scope', 'Maintenance&Calibration'"
+            ") WHERE json_extract(vendor_snapshot, '$.service_scope') = 'Maintenance'"
+        )
+
+    # Step C: request_type old→new mapping is done inline during Phase 3 INSERT
+    # Step D: Four-table rebuild (follows v34 pattern)
+    has_pos = _table_exists(conn, "pos")
+    has_sc = _table_exists(conn, "sc_records")
+    has_gr = _table_exists(conn, "gr_requests")
+    has_sv = _table_exists(conn, "sc_vendors")
+
+    # Phase 1: Rename all affected tables
+    if has_pos:
+        conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    if has_sc:
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+        sc_old_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records_old)")}
+        sc_has_submitted = "submitted_date" in sc_old_cols
+        sc_has_calloff = "calloff_po_id" in sc_old_cols
+    if has_gr:
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    if has_sv:
+        conn.execute("ALTER TABLE sc_vendors RENAME TO sc_vendors_old")
+        sv_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_vendors_old)")}
+        sv_has_snapshot = "vendor_snapshot" in sv_cols
+
+    # Phase 2: Create new tables
+    if has_pos:
+        conn.execute("""
+            CREATE TABLE pos (
+              po_id TEXT PRIMARY KEY,
+              sc_id TEXT REFERENCES sc_records(sc_id),
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+              po_no TEXT,
+              requester_id TEXT,
+              po_amount REAL NOT NULL CHECK (po_amount > 0),
+              status TEXT NOT NULL CHECK (status IN ('draft','active','finished')),
+              contract_from TEXT,
+              contract_to TEXT,
+              contract_no TEXT,
+              payment_frequency TEXT,
+              contract_pos TEXT,
+              contract_type TEXT,
+              cost_center TEXT,
+              purchaser TEXT,
+              active_date TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              finished_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('FC'))
+            )
+        """)
+
+    if has_sc:
+        sc_sql = """
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('FC', 'call_off', 'new')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              finished_at TEXT,
+              confirmed_at TEXT,
+              asset TEXT NOT NULL DEFAULT 'N',
+              asset_nums TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              internal_system_number TEXT,
+              currency TEXT NOT NULL DEFAULT 'CNY',
+              service_scope TEXT
+        """
+        if sc_has_submitted:
+            sc_sql += ",\n              submitted_date TEXT"
+        if sc_has_calloff:
+            sc_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
+        sc_sql += """,
+              CHECK (
+                status = 'draft'
+                OR status = 'manager_confirm'
+                OR (
+                  request_type IS NOT NULL
+                  AND cost_center IS NOT NULL
+                  AND sc_amount IS NOT NULL
+                  AND service_period_start IS NOT NULL
+                  AND service_period_end IS NOT NULL
+                )
+              )
+            )
+        """
+        conn.execute(sc_sql)
+
+    if has_gr:
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              gr_no TEXT,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              gross_cost REAL,
+              tax_rate REAL,
+              status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              denied_by TEXT REFERENCES users(user_id),
+              denied_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              finished_at TEXT,
+              confirmed_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              submitted_date TEXT,
+              goods_service_description TEXT,
+              confirmation_name TEXT,
+              delivery_from TEXT,
+              delivery_to TEXT,
+              last_delivery TEXT,
+              updated_at TEXT
+            )
+        """)
+
+    if has_sv:
+        sv_sql = """
+            CREATE TABLE sc_vendors (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id)
+        """
+        if sv_has_snapshot:
+            sv_sql += ",\n              vendor_snapshot TEXT"
+        sv_sql += """,
+              UNIQUE(sc_id, vendor_id)
+            )
+        """
+        conn.execute(sv_sql)
+
+    # Phase 3: Copy data
+    if has_pos:
+        conn.execute("INSERT INTO pos SELECT * FROM pos_old")
+    if has_sc:
+        # Explicit column list needed because new table has service_scope which old lacks.
+        # Transform request_type inline because old CHECK constraint rejects 'new'.
+        conn.execute("""
+            INSERT INTO sc_records (
+              sc_id, sc_no, requester_id, request_type, cost_center,
+              sc_amount, service_period_start, service_period_end,
+              status, description, created_by, created_at, updated_at,
+              approved_by, approved_at, finished_at, confirmed_at,
+              asset, asset_nums, pending_date, approved_date,
+              internal_system_number, currency
+        """
+        + (", submitted_date" if sc_has_submitted else "") +
+        (", calloff_po_id" if sc_has_calloff else "") +
+        """)
+            SELECT
+              sc_id, sc_no, requester_id,
+              CASE WHEN request_type IN ('material', 'service', 'fixed_asset')
+                   THEN 'new' ELSE request_type END,
+              cost_center,
+              sc_amount, service_period_start, service_period_end,
+              status, description, created_by, created_at, updated_at,
+              approved_by, approved_at, finished_at, confirmed_at,
+              asset, asset_nums, pending_date, approved_date,
+              internal_system_number, currency
+        """
+        + (", submitted_date" if sc_has_submitted else "") +
+        (", calloff_po_id" if sc_has_calloff else "") +
+        " FROM sc_records_old"
+        )
+    if has_gr:
+        conn.execute("""
+            INSERT INTO gr_requests (
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            )
+            SELECT
+              gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+              gross_cost, tax_rate, status, remark, created_by, created_at,
+              approved_by, approved_at, denied_by, denied_at, finished_by,
+              finished_at, confirmed_at, pending_date, approved_date,
+              submitted_date, goods_service_description, confirmation_name,
+              delivery_from, delivery_to, last_delivery, updated_at
+            FROM gr_requests_old
+        """)
+    if has_sv:
+        conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
+
+    # Phase 4: Drop old tables
+    if has_pos:
+        conn.execute("DROP TABLE pos_old")
+    if has_sc:
+        conn.execute("DROP TABLE sc_records_old")
+    if has_gr:
+        conn.execute("DROP TABLE gr_requests_old")
+    if has_sv:
+        conn.execute("DROP TABLE sc_vendors_old")
+
+    # Phase 5: Recreate indexes
+    if has_pos:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+    if has_sc:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+    if has_gr:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    if has_sv:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_sc ON sc_vendors(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_vendor ON sc_vendors(vendor_id)")
+
+    _record(conn, 35)
+
+
+def _migrate_v36(conn) -> None:
+    """Fix pos.request_type CHECK constraint to accept call_off and new in addition to FC.
+    All tables with FKs to pos must be rebuilt because SQLite renames FK targets
+    when pos is renamed."""
+    if not _table_exists(conn, "pos"):
+        _record(conn, 36)
+        return
+
+    has_gr = _table_exists(conn, "gr_requests")
+    has_sc = _table_exists(conn, "sc_records")
+    has_sv = _table_exists(conn, "sc_vendors")
+
+    # Collect sc_records column presence before rename
+    sc_has_submitted = False
+    sc_has_calloff = False
+    if has_sc:
+        sc_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+        sc_has_submitted = "submitted_date" in sc_cols
+        sc_has_calloff = "calloff_po_id" in sc_cols
+
+    # Phase 1: Rename all affected tables
+    conn.execute("ALTER TABLE pos RENAME TO pos_old")
+    if has_sc:
+        conn.execute("ALTER TABLE sc_records RENAME TO sc_records_old")
+    if has_gr:
+        conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    if has_sv:
+        conn.execute("ALTER TABLE sc_vendors RENAME TO sc_vendors_old")
+        sv_cols = {row["name"] for row in conn.execute("PRAGMA table_info(sc_vendors_old)")}
+        sv_has_snapshot = "vendor_snapshot" in sv_cols
+
+    # Phase 2: Create all new tables
+    conn.execute("""
+        CREATE TABLE pos (
+          po_id TEXT PRIMARY KEY,
+          sc_id TEXT REFERENCES sc_records(sc_id),
+          vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
+          po_no TEXT,
+          requester_id TEXT,
+          po_amount REAL NOT NULL CHECK (po_amount > 0),
+          status TEXT NOT NULL CHECK (status IN ('draft','active','finished')),
+          contract_from TEXT,
+          contract_to TEXT,
+          contract_no TEXT,
+          payment_frequency TEXT,
+          contract_pos TEXT,
+          contract_type TEXT,
+          cost_center TEXT,
+          purchaser TEXT,
+          active_date TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          finished_at TEXT,
+          finished_by TEXT REFERENCES users(user_id),
+          request_type TEXT CHECK (request_type IN ('FC', 'call_off', 'new'))
+        )
+    """)
+
+    if has_sc:
+        sc_sql = """
+            CREATE TABLE sc_records (
+              sc_id TEXT PRIMARY KEY,
+              sc_no TEXT,
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              request_type TEXT CHECK (request_type IN ('FC', 'call_off', 'new')),
+              cost_center INTEGER,
+              sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
+              service_period_start TEXT,
+              service_period_end TEXT,
+              status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
+              description TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              finished_at TEXT,
+              confirmed_at TEXT,
+              asset TEXT NOT NULL DEFAULT 'N',
+              asset_nums TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              internal_system_number TEXT,
+              currency TEXT NOT NULL DEFAULT 'CNY',
+              service_scope TEXT
+        """
+        if sc_has_submitted:
+            sc_sql += ",\n              submitted_date TEXT"
+        if sc_has_calloff:
+            sc_sql += ",\n              calloff_po_id TEXT REFERENCES pos(po_id)"
+        sc_sql += """,
+              CHECK (
+                status = 'draft'
+                OR status = 'manager_confirm'
+                OR (
+                  request_type IS NOT NULL
+                  AND cost_center IS NOT NULL
+                  AND sc_amount IS NOT NULL
+                  AND service_period_start IS NOT NULL
+                  AND service_period_end IS NOT NULL
+                )
+              )
+            )
+        """
+        conn.execute(sc_sql)
+
+    if has_gr:
+        conn.execute("""
+            CREATE TABLE gr_requests (
+              gr_id TEXT PRIMARY KEY,
+              gr_no TEXT,
+              po_id TEXT NOT NULL REFERENCES pos(po_id),
+              requester_id TEXT NOT NULL REFERENCES users(user_id),
+              estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
+              con_value REAL CHECK (con_value >= 0),
+              gross_cost REAL,
+              tax_rate REAL,
+              status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+              remark TEXT,
+              created_by TEXT NOT NULL REFERENCES users(user_id),
+              created_at TEXT NOT NULL,
+              approved_by TEXT REFERENCES users(user_id),
+              approved_at TEXT,
+              denied_by TEXT REFERENCES users(user_id),
+              denied_at TEXT,
+              finished_by TEXT REFERENCES users(user_id),
+              finished_at TEXT,
+              confirmed_at TEXT,
+              pending_date TEXT,
+              approved_date TEXT,
+              submitted_date TEXT,
+              goods_service_description TEXT,
+              confirmation_name TEXT,
+              delivery_from TEXT,
+              delivery_to TEXT,
+              last_delivery TEXT,
+              updated_at TEXT
+            )
+        """)
+
+    if has_sv:
+        sv_sql = """
+            CREATE TABLE sc_vendors (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+              vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id)
+        """
+        if sv_has_snapshot:
+            sv_sql += ",\n              vendor_snapshot TEXT"
+        sv_sql += """,
+              UNIQUE(sc_id, vendor_id)
+            )
+        """
+        conn.execute(sv_sql)
+
+    # Phase 3: Copy data
+    conn.execute("INSERT INTO pos SELECT * FROM pos_old")
+    if has_sc:
+        conn.execute("INSERT INTO sc_records SELECT * FROM sc_records_old")
+    if has_gr:
+        conn.execute("INSERT INTO gr_requests SELECT * FROM gr_requests_old")
+    if has_sv:
+        conn.execute("INSERT INTO sc_vendors SELECT * FROM sc_vendors_old")
+
+    # Phase 4: Drop old tables
+    conn.execute("DROP TABLE pos_old")
+    if has_sc:
+        conn.execute("DROP TABLE sc_records_old")
+    if has_gr:
+        conn.execute("DROP TABLE gr_requests_old")
+    if has_sv:
+        conn.execute("DROP TABLE sc_vendors_old")
+
+    # Phase 5: Recreate indexes
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_sc ON pos(sc_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_vendor ON pos(vendor_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_status ON pos(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pos_requester ON pos(requester_id)")
+    if has_sc:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_requester ON sc_records(requester_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_records_status ON sc_records(status)")
+    if has_gr:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    if has_sv:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_sc ON sc_vendors(sc_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sc_vendors_vendor ON sc_vendors(vendor_id)")
+
+    _record(conn, 36)
+
+
+def _migrate_v37(conn) -> None:
+    """Create sc_assignees junction table for SC multi-assignee support."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sc_assignees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sc_id TEXT NOT NULL REFERENCES sc_records(sc_id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(user_id),
+            UNIQUE(sc_id, user_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_assignees_sc ON sc_assignees(sc_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sc_assignees_user ON sc_assignees(user_id)"
+    )
+    _record(conn, 37)
+
+
+def _migrate_v38(conn) -> None:
+    """v38: Add is_cancellation column + update amount CHECK constraints for Cancellation GR.
+
+    Cancellation GRs (is_cancellation='Y') allow negative estimated_amount (< 0)
+    and non-positive con_value (<= 0). Normal GRs keep the existing constraints.
+    """
+    has_gr = _table_exists(conn, "gr_requests")
+    if not has_gr:
+        _record(conn, 38)
+        return
+
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(gr_requests)")}
+    has_is_cancellation = "is_cancellation" in existing
+
+    if not has_is_cancellation:
+        conn.execute(
+            "ALTER TABLE gr_requests ADD COLUMN is_cancellation TEXT NOT NULL DEFAULT 'N'"
+            " CHECK (is_cancellation IN ('N', 'Y'))"
+        )
+
+    conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+
+    conn.execute("""
+        CREATE TABLE gr_requests (
+          gr_id TEXT PRIMARY KEY,
+          gr_no TEXT,
+          po_id TEXT NOT NULL REFERENCES pos(po_id),
+          requester_id TEXT NOT NULL REFERENCES users(user_id),
+          estimated_amount REAL CHECK (
+            estimated_amount IS NULL OR
+            (is_cancellation = 'N' AND estimated_amount >= 0) OR
+            (is_cancellation = 'Y' AND estimated_amount < 0)
+          ),
+          con_value REAL CHECK (
+            con_value IS NULL OR
+            (is_cancellation = 'N' AND con_value >= 0) OR
+            (is_cancellation = 'Y' AND con_value <= 0)
+          ),
+          gross_cost REAL,
+          tax_rate REAL,
+          status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+          remark TEXT,
+          created_by TEXT NOT NULL REFERENCES users(user_id),
+          created_at TEXT NOT NULL,
+          approved_by TEXT REFERENCES users(user_id),
+          approved_at TEXT,
+          denied_by TEXT REFERENCES users(user_id),
+          denied_at TEXT,
+          finished_by TEXT REFERENCES users(user_id),
+          finished_at TEXT,
+          confirmed_at TEXT,
+          pending_date TEXT,
+          approved_date TEXT,
+          submitted_date TEXT,
+          goods_service_description TEXT,
+          confirmation_name TEXT,
+          delivery_from TEXT,
+          delivery_to TEXT,
+          last_delivery TEXT,
+          updated_at TEXT,
+          is_cancellation TEXT NOT NULL DEFAULT 'N' CHECK (is_cancellation IN ('N', 'Y'))
+        )
+    """)
+
+    conn.execute("""
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery, updated_at,
+          is_cancellation
+        )
+        SELECT
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery, updated_at,
+          is_cancellation
+        FROM gr_requests_old
+    """)
+
+    conn.execute("DROP TABLE gr_requests_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    _record(conn, 38)
+
+
+def _migrate_v39(conn) -> None:
+    """Relax estimated_amount CHECK: allow zero (>= 0) instead of (> 0)."""
+    has_gr = _table_exists(conn, "gr_requests")
+    if not has_gr:
+        _record(conn, 39)
+        return
+    conn.execute("ALTER TABLE gr_requests RENAME TO gr_requests_old")
+    conn.execute("""
+        CREATE TABLE gr_requests (
+          gr_id TEXT PRIMARY KEY,
+          gr_no TEXT,
+          po_id TEXT NOT NULL REFERENCES pos(po_id),
+          requester_id TEXT NOT NULL REFERENCES users(user_id),
+          estimated_amount REAL CHECK (
+            estimated_amount IS NULL OR
+            (is_cancellation = 'N' AND estimated_amount >= 0) OR
+            (is_cancellation = 'Y' AND estimated_amount < 0)
+          ),
+          con_value REAL CHECK (
+            con_value IS NULL OR
+            (is_cancellation = 'N' AND con_value >= 0) OR
+            (is_cancellation = 'Y' AND con_value <= 0)
+          ),
+          gross_cost REAL,
+          tax_rate REAL,
+          status TEXT NOT NULL CHECK (status IN ('draft','manager_confirm','pending','approved','denied','finished')),
+          remark TEXT,
+          created_by TEXT NOT NULL REFERENCES users(user_id),
+          created_at TEXT NOT NULL,
+          approved_by TEXT REFERENCES users(user_id),
+          approved_at TEXT,
+          denied_by TEXT REFERENCES users(user_id),
+          denied_at TEXT,
+          finished_by TEXT REFERENCES users(user_id),
+          finished_at TEXT,
+          confirmed_at TEXT,
+          pending_date TEXT,
+          approved_date TEXT,
+          submitted_date TEXT,
+          goods_service_description TEXT,
+          confirmation_name TEXT,
+          delivery_from TEXT,
+          delivery_to TEXT,
+          last_delivery TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          is_cancellation TEXT NOT NULL DEFAULT 'N' CHECK (is_cancellation IN ('N', 'Y'))
+        )
+    """)
+    conn.execute("""
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery, updated_at,
+          is_cancellation
+        )
+        SELECT
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          gross_cost, tax_rate, status, remark, created_by, created_at,
+          approved_by, approved_at, denied_by, denied_at, finished_by,
+          finished_at, confirmed_at, pending_date, approved_date,
+          submitted_date, goods_service_description, confirmation_name,
+          delivery_from, delivery_to, last_delivery,
+          COALESCE(updated_at, datetime('now')),
+          is_cancellation
+        FROM gr_requests_old
+    """)
+    conn.execute("DROP TABLE gr_requests_old")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_po ON gr_requests(po_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_status ON gr_requests(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gr_requester ON gr_requests(requester_id)")
+    _record(conn, 39)
+
+
+def _migrate_v40(conn) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS po_manual_amounts (
+            manual_amount_id TEXT PRIMARY KEY,
+            po_id TEXT NOT NULL REFERENCES pos(po_id),
+            year TEXT NOT NULL CHECK (year GLOB '[0-9][0-9][0-9][0-9]'),
+            type TEXT NOT NULL CHECK (type IN ('provision', 'to_be_gr')),
+            amount REAL NOT NULL,
+            created_by TEXT NOT NULL REFERENCES users(user_id),
+            created_at TEXT NOT NULL,
+            UNIQUE(po_id, year, type)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id "
+        "ON po_manual_amounts(po_id)"
+    )
+    _record(conn, 40)
+
+
+def _get_initial_db_path() -> Path:
+    """Path to the seed database, works in dev and PyInstaller frozen builds."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "sc_gr_app" / "db" / "initial.sqlite3"
+    return Path(__file__).parent / "initial.sqlite3"
+
+
 def migrate(config: AppConfig) -> None:
     db_path = Path(config.db_path)
+
+    # Seed from initial template DB if no DB exists yet
+    if not db_path.exists():
+        initial_db = _get_initial_db_path()
+        if initial_db.exists():
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(initial_db, db_path)
 
     # Auto-backup before running any pending migrations
     if db_path.exists():
@@ -1489,6 +2424,72 @@ def migrate(config: AppConfig) -> None:
                 _migrate_v30(conn)
                 conn.commit()
                 conn.execute("PRAGMA foreign_keys = ON")
+            if 31 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v31(conn)
+                conn.commit()
+            elif _table_exists(conn, "sc_records"):
+                existing = {row["name"] for row in conn.execute("PRAGMA table_info(sc_records)")}
+                if "calloff_po_id" not in existing:
+                    conn.execute("BEGIN")
+                    conn.execute("ALTER TABLE sc_records ADD COLUMN calloff_po_id TEXT REFERENCES pos(po_id)")
+                    conn.commit()
+            if 32 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v32(conn)
+                conn.commit()
+            if 33 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v33(conn)
+                conn.commit()
+            if 34 not in _applied_versions(conn):
+                if _has_recorded_later_version(conn, 34):
+                    conn.execute("BEGIN")
+                    _record(conn, 34)
+                    conn.commit()
+                else:
+                    conn.execute("PRAGMA foreign_keys = OFF")
+                    conn.execute("BEGIN")
+                    _migrate_v34(conn)
+                    conn.commit()
+                    conn.execute("PRAGMA foreign_keys = ON")
+            if 35 not in _applied_versions(conn):
+                if _has_recorded_later_version(conn, 35):
+                    conn.execute("BEGIN")
+                    _record(conn, 35)
+                    conn.commit()
+                else:
+                    conn.execute("PRAGMA foreign_keys = OFF")
+                    conn.execute("BEGIN")
+                    _migrate_v35(conn)
+                    conn.commit()
+                    conn.execute("PRAGMA foreign_keys = ON")
+            if 36 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v36(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 37 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v37(conn)
+                conn.commit()
+            if 38 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v38(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 39 not in _applied_versions(conn):
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("BEGIN")
+                _migrate_v39(conn)
+                conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
+            if 40 not in _applied_versions(conn):
+                conn.execute("BEGIN")
+                _migrate_v40(conn)
+                conn.commit()
         except Exception:
             conn.rollback()
             conn.execute("PRAGMA legacy_alter_table = OFF")

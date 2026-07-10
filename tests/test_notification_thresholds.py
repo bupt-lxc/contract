@@ -22,7 +22,7 @@ def _seed_sc(conn, sc_id, requester_id, status="approved", sc_amount=100000, ser
     conn.execute(
         """INSERT OR REPLACE INTO sc_records (sc_id, requester_id, status, request_type, cost_center,
            sc_amount, service_period_start, service_period_end, description, created_by, created_at, updated_at)
-           VALUES (?, ?, ?, 'material', 'CC1', ?, '2025-01-01', ?, '', ?, ?, ?)""",
+           VALUES (?, ?, ?, 'new', 'CC1', ?, '2025-01-01', ?, '', ?, ?, ?)""",
         (sc_id, requester_id, status, sc_amount, service_period_end or "2026-12-31", requester_id, TIMESTAMP, TIMESTAMP),
     )
 

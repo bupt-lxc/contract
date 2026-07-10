@@ -33,10 +33,10 @@
           <el-descriptions-item :label="$t('common.status')"><StatusBadge :status="gr.status" /></el-descriptions-item>
           <el-descriptions-item :label="$t('gr.requesterId')">{{ gr.requester_name || gr.requester_id }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.poNo')">
-            <router-link :to="`/sc/${scId}/po/${gr.po_id}`">{{ po.po_no || gr.po_id }}</router-link>
+            <router-link :to="{ path: `/sc/${scId}/po/${gr.po_id}`, query: childReturnQuery() }">{{ po.po_no || gr.po_id }}</router-link>
           </el-descriptions-item>
           <el-descriptions-item :label="$t('gr.scNo')">
-            <router-link :to="`/sc/${scId}`">{{ scDetail?.sc?.sc_no || scId }}</router-link>
+            <router-link :to="{ path: `/sc/${scId}`, query: childReturnQuery() }">{{ scDetail?.sc?.sc_no || scId }}</router-link>
           </el-descriptions-item>
           <el-descriptions-item :label="$t('common.vendor')">{{ po.vendor_name || po.vendor_id || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.estimatedAmount')"><AmountDisplay :value="gr.estimated_amount" /></el-descriptions-item>
@@ -46,17 +46,17 @@
           <el-descriptions-item :label="$t('gr.goodsServiceDescription')" :span="2">{{ gr.goods_service_description || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.confirmationName')">{{ gr.confirmation_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.lastDelivery')">{{ gr.last_delivery === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.deliveryFrom')">{{ (gr.delivery_from || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.deliveryTo')">{{ (gr.delivery_to || '').slice(0, 10) || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="$t('gr.isCancellation')">{{ gr.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.remark')" :span="2">{{ gr.remark || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.confirmedAt')">{{ formatDate(gr.confirmed_at) }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.created')">{{ formatDateTime(gr.created_at) }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.submittedDate')">{{ (gr.submitted_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.pendingDate')">{{ (gr.pending_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="$t('gr.approvedDate')">{{ (gr.approved_date || '').slice(0, 10) || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="$t('gr.createdBy')">{{ gr.created_by || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
+
+      <ProcessSummaryCard
+        v-if="gr.gr_id"
+        :record="gr"
+        :fields="grProcessSummaryFields"
+      />
 
       <div class="section-card">
         <div class="section-header">
@@ -107,13 +107,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSc } from '@/composables/useSc.js'
 import { useGr } from '@/composables/useGr.js'
 import { callApi, loadingState } from '@/api/bridge.js'
-import { formatDateTime, formatDate } from '@/utils/format.js'
+import { formatDateTime } from '@/utils/format.js'
 import { Message } from '@element-plus/icons-vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import GrFormDialog from '@/components/po/GrFormDialog.vue'
+import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -140,12 +142,30 @@ const grOperationRecords = computed(() => {
 })
 const isRequester = computed(() => window.__currentUser?.user_id === scDetail.value?.sc?.requester_id)
 
+const grProcessSummaryFields = computed(() => [
+  { key: 'created_at', label: t('timestampLabel.created') },
+  { key: 'submitted_date', label: t('timestampLabel.submitted') },
+  { key: 'confirmed_at', label: t('timestampLabel.confirmed') },
+  { key: 'pending_date', label: t('timestampLabel.pending') },
+  { key: 'approved_date', label: t('timestampLabel.approved') },
+  { key: 'finished_at', label: t('timestampLabel.finished') },
+  { key: 'updated_at', label: t('timestampLabel.updated') }
+])
+
 const confirmBtn = ref(null)
 const editDialogVisible = ref(false)
 const attachRefreshKey = ref(0)
 const activeUsers = ref([])
 
 function openEditDialog() { editDialogVisible.value = true }
+
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+
+function listReturnPath(fallback) {
+  return sanitizeRedirectTarget(route.query.returnTo, fallback)
+}
 
 async function handleSubmit() {
   try {
@@ -222,8 +242,23 @@ async function handleDeny() {
 async function handleFinish() {
   try {
     await ElMessageBox.confirm(t('gr.finishGrConfirm'), t('gr.finishGr'), { type: 'warning' })
-    await finishGr(grId.value)
-    ElMessage.success(t('gr.grFinished'))
+    const result = await finishGr(grId.value, false)
+
+    if (result.needs_cascade) {
+      const grsToFinish = result.grs_to_finish || []
+      const message = grsToFinish.length > 0
+        ? t('gr.lastDeliveryCascadeMessage', { list: grsToFinish.join(', ') })
+        : t('gr.lastDeliveryNoCascadeMessage')
+      await ElMessageBox.confirm(message, t('gr.lastDeliveryCascadeTitle'), {
+        type: 'warning',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+      })
+      await finishGr(grId.value, true)
+      ElMessage.success(t('gr.grAndPoFinished'))
+    } else {
+      ElMessage.success(t('gr.grFinished'))
+    }
     await fetchDetail(scId.value)
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
@@ -254,7 +289,7 @@ async function handleDelete() {
     await ElMessageBox.confirm(t('gr.confirmDeleteGr'), t('common.confirm'), { type: 'error' })
     await callApi('delete_gr', { gr_id: grId.value })
     ElMessage.success(t('gr.grDeleted'))
-    router.replace(`/sc/${scId.value}/po/${poId.value}`)
+    router.replace(listReturnPath(`/sc/${scId.value}/po/${poId.value}`))
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }

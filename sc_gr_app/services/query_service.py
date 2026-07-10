@@ -44,6 +44,20 @@ def _normalize_offset(offset: int) -> int:
     return normalized
 
 
+def _escape_like(value) -> str:
+    text = str(value)
+    return (
+        text
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def _contains_param(value) -> str:
+    return f"%{_escape_like(value).lower()}%"
+
+
 def _append_text_search(
     clauses: list[str],
     params: list,
@@ -52,13 +66,12 @@ def _append_text_search(
 ) -> None:
     if not text:
         return
-    like_text = f"%{text.lower()}%"
     search_clauses = (
-        f"lower(coalesce({column}, '')) like ?"
+        f"lower(coalesce({column}, '')) like ? escape '\\'"
         for column in columns
     )
     clauses.append("(" + " or ".join(search_clauses) + ")")
-    params.extend([like_text] * len(columns))
+    params.extend([_contains_param(text)] * len(columns))
 
 
 def _append_filters(
@@ -106,8 +119,8 @@ def _append_filters(
             column = allowed_filters.get(field)
             if column is None:
                 raise ValidationError("filter field is invalid")
-            clauses.append(f"{column} like ?")
-            params.append(f"%{value}%")
+            clauses.append(f"lower(coalesce({column}, '')) like ? escape '\\'")
+            params.append(_contains_param(value))
         else:
             column = allowed_filters.get(field)
             if column is None:
@@ -130,11 +143,13 @@ def _sc_visibility_clauses(
         return [], []
     if role == "requester":
         if include_own_drafts:
-            return [f"{sc_alias}.requester_id = ?"], [current_user["user_id"]]
+            return [
+                f"({sc_alias}.requester_id = ? OR {sc_alias}.sc_id IN (SELECT sa.sc_id FROM sc_assignees sa WHERE sa.user_id = ?))"
+            ], [current_user["user_id"], current_user["user_id"]]
         return [
             f"{sc_alias}.status != 'draft'",
-            f"{sc_alias}.requester_id = ?",
-        ], [current_user["user_id"]]
+            f"({sc_alias}.requester_id = ? OR {sc_alias}.sc_id IN (SELECT sa.sc_id FROM sc_assignees sa WHERE sa.user_id = ?))",
+        ], [current_user["user_id"], current_user["user_id"]]
     raise ValidationError("current_user is invalid")
 
 
@@ -197,6 +212,13 @@ def search_scs(
         include_own_drafts=True,
     )
 
+    if filters and "is_calloff" in filters:
+        if filters["is_calloff"] == "1":
+            base_clauses.append("sc.calloff_po_id IS NOT NULL")
+        elif filters["is_calloff"] == "0":
+            base_clauses.append("sc.calloff_po_id IS NULL")
+        filters = {k: v for k, v in filters.items() if k != "is_calloff"}
+
     return _search(
         config,
         select_sql="""
@@ -213,6 +235,7 @@ def search_scs(
         text_columns=(
             "sc.sc_no",
             "sc.description",
+            "sc.service_scope",
             "sc.request_type",
             "cast(sc.cost_center as text)",
             "requester.user_name",
@@ -236,6 +259,7 @@ def search_scs(
             "sc_no": "sc.sc_no",
             "requester_id": "sc.requester_id",
             "request_type": "sc.request_type",
+            "service_scope": "sc.service_scope",
             "cost_center": "sc.cost_center",
             "status": "sc.status",
             "created_by": "sc.created_by",
@@ -271,6 +295,7 @@ def search_scs(
             "deadline": "sc.service_period_end",
             "deadline_from": "sc.service_period_end",
             "deadline_to": "sc.service_period_end",
+            "calloff_po_id": "sc.calloff_po_id",
         },
         sort=sort,
         allowed_sorts={
@@ -279,6 +304,7 @@ def search_scs(
             "requester_id": "sc.requester_id",
             "requester_name": "requester.user_name",
             "request_type": "sc.request_type",
+            "service_scope": "sc.service_scope",
             "cost_center": "sc.cost_center",
             "sc_amount": "sc.sc_amount",
             "status": "sc.status",
@@ -288,13 +314,18 @@ def search_scs(
             "pending_date": "sc.pending_date",
             "approved_date": "sc.approved_date",
             "confirmed_at": "sc.confirmed_at",
+            "calloff_po_id": "sc.calloff_po_id",
         },
         direction=direction,
         limit=limit,
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
-        like_fields={"requester_id", "created_by", "requester_name", "created_by_name"},
+        like_fields={
+            "sc_id", "sc_no", "requester_id", "requester_name",
+            "created_by", "created_by_name", "cost_center",
+            "description",
+        },
     )
 
 
@@ -353,7 +384,11 @@ def search_vendors(
         offset=offset,
         base_clauses=["(status IS NULL OR status != 'disabled')"],
         base_params=[],
-        like_fields={"vendor_id", "vendor_name", "ksrm_vendor_code", "company_name_cn", "service_scope", "contact_person", "email"},
+        like_fields={
+            "vendor_id", "vendor_name", "ksrm_vendor_code",
+            "company_name_cn", "service_scope", "created_by",
+            "contact_person", "email", "phone", "description",
+        },
     )
 
 
@@ -369,22 +404,48 @@ def search_pos(
 ) -> list[dict]:
     base_clauses, base_params = _sc_visibility_clauses(current_user)
 
+    if current_user and current_user.get("role") == "requester":
+        base_clauses = [
+            f"({c} OR (po.sc_id IS NULL AND po.requester_id = ?))"
+            for c in base_clauses
+        ]
+        total_placeholders = sum(c.count("?") for c in base_clauses)
+        base_params = [current_user["user_id"]] * total_placeholders
+
+    if filters and "is_fc_po" in filters:
+        if filters["is_fc_po"] == "1":
+            base_clauses.append("(po.request_type IS 'FC' OR sc.request_type IS 'FC')")
+        elif filters["is_fc_po"] == "0":
+            base_clauses.append("(po.request_type IS NOT 'FC' AND sc.request_type IS NOT 'FC')")
+        filters = {k: v for k, v in filters.items() if k != "is_fc_po"}
+
+    if filters and "is_independent" in filters:
+        if filters["is_independent"] == "1":
+            base_clauses.append("po.sc_id IS NULL")
+        elif filters["is_independent"] == "0":
+            base_clauses.append("po.sc_id IS NOT NULL")
+        filters = {k: v for k, v in filters.items() if k != "is_independent"}
+
     return _search(
         config,
         select_sql="""
         select
           po.*,
           sc.sc_no,
+          coalesce(po.request_type, sc.request_type) as sc_request_type,
           u.user_name as requester_name,
           vendor.vendor_name,
           vendor.ksrm_vendor_code,
-          po.po_amount - coalesce(gr_totals.pending_total, 0)
-            - coalesce(gr_totals.con_value_total, 0) as open_po_amount,
+          case when po.request_type = 'FC' or sc.request_type = 'FC'
+            then po.po_amount - coalesce(calloff_totals.allocated, 0)
+            else po.po_amount - coalesce(gr_totals.pending_total, 0)
+                 - coalesce(gr_totals.con_value_total, 0)
+          end as open_po_amount,
           coalesce(gr_totals.con_value_total, 0) as consumed_amount,
           coalesce(gr_totals.pending_total, 0) as po_pending_total,
           coalesce(gr_totals.pending_total_incl_tax, 0) as po_pending_total_incl_tax
         from pos po
-        join sc_records sc on sc.sc_id = po.sc_id
+        left join sc_records sc on sc.sc_id = po.sc_id
         join users u on u.user_id = po.requester_id
         join vendors vendor on vendor.vendor_id = po.vendor_id
         left join (
@@ -392,7 +453,7 @@ def search_pos(
             po_id,
             sum(case when status in ('pending', 'manager_confirm')
                       then estimated_amount else 0 end) as pending_total,
-            sum(case when status = 'approved'
+            sum(case when status IN ('approved', 'finished')
                       then con_value else 0 end) as con_value_total,
             sum(case when status in ('pending', 'manager_confirm')
                       then coalesce(gross_cost, estimated_amount)
@@ -400,6 +461,12 @@ def search_pos(
           from gr_requests
           group by po_id
         ) gr_totals on gr_totals.po_id = po.po_id
+        left join (
+          select calloff_po_id, coalesce(sum(sc_amount), 0) as allocated
+          from sc_records
+          where calloff_po_id is not null
+          group by calloff_po_id
+        ) calloff_totals on calloff_totals.calloff_po_id = po.po_id
         """,
         text=text,
         text_columns=(
@@ -474,6 +541,11 @@ def search_pos(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
+        like_fields={
+            "po_id", "po_no", "sc_id", "vendor_id", "vendor_name",
+            "requester_name", "contract_no", "payment_frequency",
+            "contract_pos", "cost_center", "purchaser",
+        },
     )
 
 
@@ -499,6 +571,7 @@ def search_grs(
           sc.sc_no,
           vendor.vendor_id,
           vendor.vendor_name,
+          vendor.ksrm_vendor_code,
           requester.user_name as requester_name
         from gr_requests gr
         join pos po on po.po_id = gr.po_id
@@ -514,14 +587,13 @@ def search_grs(
             "po.po_no",
             "sc.sc_no",
             "vendor.vendor_name",
+            "vendor.ksrm_vendor_code",
             "cast(gr.estimated_amount as text)",
             "cast(gr.con_value as text)",
             "cast(gr.gross_cost as text)",
             "cast(gr.tax_rate as text)",
             "gr.goods_service_description",
             "gr.confirmation_name",
-            "gr.delivery_from",
-            "gr.delivery_to",
             "gr.last_delivery",
             "gr.created_at",
             "gr.created_by",
@@ -551,12 +623,6 @@ def search_grs(
             "tax_rate": "gr.tax_rate",
             "goods_service_description": "gr.goods_service_description",
             "confirmation_name": "gr.confirmation_name",
-            "delivery_from": "gr.delivery_from",
-            "delivery_from_from": "gr.delivery_from",
-            "delivery_from_to": "gr.delivery_from",
-            "delivery_to": "gr.delivery_to",
-            "delivery_to_from": "gr.delivery_to",
-            "delivery_to_to": "gr.delivery_to",
             "last_delivery": "gr.last_delivery",
             "remark": "gr.remark",
             "created_by": "gr.created_by",
@@ -579,6 +645,7 @@ def search_grs(
             "deadline": "po.contract_to",
             "deadline_from": "po.contract_to",
             "deadline_to": "po.contract_to",
+            "is_cancellation": "gr.is_cancellation",
         },
         sort=sort,
         allowed_sorts={
@@ -587,17 +654,19 @@ def search_grs(
             "po_no": "po.po_no",
             "sc_no": "sc.sc_no",
             "vendor_name": "vendor.vendor_name",
+            "ksrm_vendor_code": "vendor.ksrm_vendor_code",
             "estimated_amount": "gr.estimated_amount",
             "con_value": "gr.con_value",
             "gross_cost": "gr.gross_cost",
             "tax_rate": "gr.tax_rate",
             "goods_service_description": "gr.goods_service_description",
             "confirmation_name": "gr.confirmation_name",
-            "delivery_from": "gr.delivery_from",
-            "delivery_to": "gr.delivery_to",
             "last_delivery": "gr.last_delivery",
             "status": "gr.status",
             "created_at": "gr.created_at",
+            "updated_at": "gr.updated_at",
+            "submitted_date": "gr.submitted_date",
+            "finished_at": "gr.finished_at",
             "approved_at": "gr.approved_at",
             "cancelled_at": "gr.denied_at",
             "pending_date": "gr.pending_date",
@@ -609,6 +678,11 @@ def search_grs(
         offset=offset,
         base_clauses=base_clauses,
         base_params=base_params,
+        like_fields={
+            "gr_id", "gr_no", "po_id", "sc_id", "requester_id",
+            "vendor_id", "goods_service_description",
+            "confirmation_name", "remark",
+        },
     )
 
 
@@ -624,9 +698,9 @@ def workbench_data(
       - Draft / Approved: own records only
       - Pending: all records
     """
-    sc_statuses = ["draft", "manager_confirm", "pending", "approved"]
+    sc_statuses = ["draft", "manager_confirm", "pending", "approved", "denied"]
     po_statuses = ["draft", "active"]
-    gr_statuses = ["draft", "manager_confirm", "pending", "approved"]
+    gr_statuses = ["draft", "manager_confirm", "pending", "approved", "denied"]
 
     def _is_own_only(status: str) -> bool:
         if current_user is None:
@@ -635,7 +709,7 @@ def workbench_data(
         if role == "requester":
             return True
         if role == "admin":
-            return status not in ("pending", "active", "manager_confirm", "approved")
+            return status not in ("pending", "active", "manager_confirm", "approved", "denied")
         return False
 
     user_id = current_user["user_id"] if current_user else None
@@ -645,9 +719,17 @@ def workbench_data(
         for st in sc_statuses:
             clauses = ["sc.status = ?"]
             params = [st]
-            if _is_own_only(st) and user_id:
+            if user_id:
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
+
+            # Own-only statuses: admin sees only their own drafts;
+            # requesters already scoped by _sc_visibility_clauses
+            if _is_own_only(st) and user_id and current_user.get("role") == "admin":
                 clauses.append("sc.requester_id = ?")
-                params.append(user_id)
+                params.append(current_user["user_id"])
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
@@ -657,6 +739,7 @@ def workbench_data(
                 f"SELECT sc.sc_id, sc.sc_no, sc.requester_id, "
                 f"sc.created_at, sc.pending_date, sc.submitted_date, "
                 f"sc.service_period_end AS deadline, "
+                f"sc.sc_amount, sc.request_type, sc.currency, "
                 f"u.user_name AS requester_name "
                 f"FROM sc_records sc "
                 f"JOIN users u ON u.user_id = sc.requester_id "
@@ -669,32 +752,46 @@ def workbench_data(
         for st in po_statuses:
             clauses = ["po.status = ?"]
             params = [st]
+            if user_id:
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
+
+            # _is_own_only restricts requester users to their own POs/GRs
             if _is_own_only(st) and user_id:
                 clauses.append("po.requester_id = ?")
                 params.append(user_id)
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
-                f"SELECT COUNT(*) FROM pos po {where}", params
+                f"SELECT COUNT(*) FROM pos po LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id {where}", params
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT po.po_id, po.po_no, po.sc_id, po.requester_id, "
                 f"po.created_at, po.contract_from, po.contract_to, "
-                f"sc.sc_no, "
+                f"sc.sc_no, sc.currency, "
                 f"u.user_name AS requester_name, "
-                f"po.po_amount - COALESCE(gr_sums.pending_total, 0) "
-                f"- COALESCE(gr_sums.con_value_total, 0) AS open_po_amount "
+                f"CASE WHEN po.request_type = 'FC' OR sc.request_type = 'FC' "
+                f"THEN po.po_amount - COALESCE(calloff_sums.allocated, 0) "
+                f"ELSE po.po_amount - COALESCE(gr_sums.pending_total, 0) "
+                f"- COALESCE(gr_sums.con_value_total, 0) END AS open_po_amount "
                 f"FROM pos po "
                 f"JOIN users u ON u.user_id = po.requester_id "
-                f"JOIN sc_records sc ON sc.sc_id = po.sc_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"LEFT JOIN ("
                 f"  SELECT po_id,"
                 f"    SUM(CASE WHEN status IN ('pending', 'manager_confirm') "
                 f"THEN estimated_amount ELSE 0 END) AS pending_total,"
-                f"    SUM(CASE WHEN status = 'approved' "
+                f"    SUM(CASE WHEN status IN ('approved', 'finished') "
                 f"THEN con_value ELSE 0 END) AS con_value_total"
                 f"  FROM gr_requests GROUP BY po_id"
                 f") gr_sums ON gr_sums.po_id = po.po_id "
+                f"LEFT JOIN ("
+                f"  SELECT calloff_po_id, SUM(sc_amount) AS allocated "
+                f"  FROM sc_records WHERE calloff_po_id IS NOT NULL "
+                f"  GROUP BY calloff_po_id"
+                f") calloff_sums ON calloff_sums.calloff_po_id = po.po_id "
                 f"{where} ORDER BY po.contract_to ASC LIMIT 6",
                 params,
             ).fetchall()
@@ -704,22 +801,32 @@ def workbench_data(
         for st in gr_statuses:
             clauses = ["gr.status = ?"]
             params = [st]
+            if user_id:
+                visibility_clause, visibility_params = _sc_visibility_clauses(current_user, sc_alias="sc")
+                clauses.extend(visibility_clause)
+                params.extend(visibility_params)
+
+            # _is_own_only restricts requester users to their own POs/GRs
             if _is_own_only(st) and user_id:
                 clauses.append("gr.requester_id = ?")
                 params.append(user_id)
+
             where = "WHERE " + " AND ".join(clauses)
 
             cnt = conn.execute(
                 f"SELECT COUNT(*) FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"{where}", params
             ).fetchone()[0]
             rows = conn.execute(
                 f"SELECT gr.gr_id, gr.po_id, po.sc_id, gr.requester_id, "
                 f"gr.created_at, gr.pending_date, gr.submitted_date, "
+                f"gr.denied_by, gr.denied_at, "
                 f"u.user_name AS requester_name "
                 f"FROM gr_requests gr "
                 f"JOIN pos po ON po.po_id = gr.po_id "
+                f"LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id "
                 f"JOIN users u ON u.user_id = gr.requester_id "
                 f"{where} ORDER BY gr.created_at ASC LIMIT 6",
                 params,

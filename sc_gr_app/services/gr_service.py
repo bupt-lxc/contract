@@ -15,7 +15,7 @@ from sc_gr_app.services.budget_service import (
 from sc_gr_app.services.lock_service import LeaseLock
 
 
-REQUIRED_FIELDS = ("po_id", "requester_id", "estimated_amount")
+REQUIRED_FIELDS = ("po_id", "requester_id")
 SUPPORTED_STATUSES = {"draft", "manager_confirm", "pending", "approved", "denied", "finished"}
 
 
@@ -65,6 +65,28 @@ def _non_negative_number(value, field: str) -> Decimal:
     return number
 
 
+def _negative_number(value, field: str) -> Decimal:
+    """Validate that a numeric value is strictly negative (for Cancellation GR)."""
+    try:
+        number = Decimal(str(value))
+    except Exception:
+        raise ValidationError(f"{field} must be negative") from None
+    if not number.is_finite() or number >= 0:
+        raise ValidationError(f"{field} must be negative")
+    return number
+
+
+def _non_positive_number(value, field: str) -> Decimal:
+    """Validate that a numeric value is non-positive (<= 0, for Cancellation GR con_value)."""
+    try:
+        number = Decimal(str(value))
+    except Exception:
+        raise ValidationError(f"{field} must be non-positive") from None
+    if not number.is_finite() or number > 0:
+        raise ValidationError(f"{field} must be non-positive")
+    return number
+
+
 def _row_to_dict(row) -> dict:
     return dict(row)
 
@@ -84,9 +106,12 @@ def _get_po_sc(conn, po_id: str):
         """
         select
           po.*,
+          po.request_type as po_request_type,
           sc.sc_no,
+          sc.request_type as sc_request_type,
           sc.status as sc_status,
           sc.sc_amount,
+          sc.request_type as sc_request_type,
           vendor.vendor_name
         from pos po
         join sc_records sc on sc.sc_id = po.sc_id
@@ -113,6 +138,39 @@ def _get_gr_sc_id(conn, gr_id: str) -> str:
     if lookup is None:
         raise NotFound(f"GR not found: {gr_id}")
     return lookup["sc_id"]
+
+
+def _is_fc_po(po_sc) -> bool:
+    return po_sc["request_type"] == "FC" or po_sc["sc_request_type"] == "FC"
+
+
+def _validate_last_delivery_value(value) -> None:
+    if value not in (None, "", "Y", "N"):
+        raise ValidationError("last_delivery must be 'Y' or 'N'")
+
+
+def _normalize_last_delivery(value) -> str:
+    _validate_last_delivery_value(value)
+    return "Y" if value == "Y" else "N"
+
+
+def _require_unique_last_delivery(conn, po_id: str, gr_id: str | None, value) -> None:
+    if _normalize_last_delivery(value) != "Y":
+        return
+    existing = conn.execute(
+        """
+        select gr_id
+        from gr_requests
+        where po_id = ?
+          and last_delivery = 'Y'
+          and status != 'denied'
+          and (? is null or gr_id != ?)
+        limit 1
+        """,
+        (po_id, gr_id, gr_id),
+    ).fetchone()
+    if existing:
+        raise ConflictError("A GR is already marked as Last Delivery")
 
 
 def _require_editable_parent_sc(conn, sc_id: str) -> None:
@@ -142,15 +200,20 @@ def _validate_gr_creation_context(
     po_sc,
     amount: Decimal,
     gr_status: str = "pending",
+    is_cancellation: str = "N",
 ) -> None:
     """Validate that a GR can be created in the given PO/SC context.
 
     - draft PO under draft SC → only draft GR allowed, no budget check
     - active PO under approved SC → only pending / manager_confirm GR allowed, full budget check
+    - Cancellation GR (is_cancellation='Y') skips budget checks
     - other combinations → rejected
     """
     sc_status = po_sc["sc_status"]
     po_status = po_sc["status"]
+
+    if po_sc["po_request_type"] == "FC" or po_sc["sc_request_type"] == "FC":
+        raise ConflictError("Cannot create GR under an FC PO. Create a call-off SC instead.")
 
     if po_status == "draft" and sc_status == "draft":
         if gr_status != "draft":
@@ -160,12 +223,13 @@ def _validate_gr_creation_context(
     if po_status == "active" and sc_status == "approved":
         if gr_status not in ("draft", "pending", "manager_confirm"):
             raise ConflictError("Active PO only allows draft, pending or manager_confirm GR")
-        sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
-        po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
-        if sc_budget["sc_available_amount"] < amount:
-            raise ConflictError("SC available amount is insufficient")
-        if po_budget["open_po_amount"] < amount:
-            raise ConflictError("PO open amount is insufficient")
+        if is_cancellation != "Y":
+            sc_budget = compute_sc_budget_decimal(config, po_sc["sc_id"])
+            po_budget = compute_po_budget_decimal(config, po_sc["po_id"])
+            if sc_budget["sc_available_amount"] < amount:
+                raise ConflictError("SC available amount is insufficient")
+            if po_budget["open_po_amount"] < amount:
+                raise ConflictError("PO open amount is insufficient")
         return
 
     raise ConflictError("SC must be draft or approved to add GR")
@@ -174,10 +238,15 @@ def _validate_gr_creation_context(
 def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
     require_requester_or_admin(current_user)
     _require_fields(data, REQUIRED_FIELDS)
-    estimated_amount = _positive_number(
-        data["estimated_amount"],
-        "estimated_amount",
-    )
+    is_cancellation = data.get("is_cancellation", "N")
+    estimated_amount_raw = data.get("estimated_amount")
+    if estimated_amount_raw is not None:
+        if is_cancellation == "Y":
+            estimated_amount = _negative_number(estimated_amount_raw, "estimated_amount")
+        else:
+            estimated_amount = _positive_number(estimated_amount_raw, "estimated_amount")
+    else:
+        estimated_amount = None
     po_id = data["po_id"]
     requester_id = data["requester_id"]
 
@@ -211,7 +280,11 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                 elif gr_status not in SUPPORTED_STATUSES:
                     raise ValidationError(f"Invalid GR status: {gr_status}")
 
-                _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status)
+                if _is_fc_po(po_sc):
+                    raise ConflictError("Cannot create GR under an FC PO")
+                last_delivery = _normalize_last_delivery(data.get("last_delivery"))
+                _require_unique_last_delivery(conn, po_id, None, last_delivery)
+                _validate_gr_creation_context(config, po_sc, estimated_amount, gr_status, is_cancellation)
 
                 is_draft = gr_status == "draft"
                 gross_cost = _compute_incl_tax(estimated_amount, data.get("tax_rate"))
@@ -238,17 +311,16 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                       approved_date,
                       goods_service_description,
                       confirmation_name,
-                      delivery_from,
-                      delivery_to,
-                      last_delivery
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      last_delivery,
+                      is_cancellation
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         gr_id,
                         data.get("gr_no"),
                         po_id,
                         requester_id,
-                        float(estimated_amount),
+                        float(estimated_amount) if estimated_amount is not None else None,
                         None,
                         float(gross_cost) if gross_cost is not None else None,
                         data.get("tax_rate"),
@@ -264,9 +336,8 @@ def create_gr(config: AppConfig, current_user: dict, data: dict) -> dict:
                         None,
                         data.get("goods_service_description"),
                         data.get("confirmation_name"),
-                        data.get("delivery_from"),
-                        data.get("delivery_to"),
-                        data.get("last_delivery"),
+                        last_delivery,
+                        is_cancellation,
                     ),
                 )
                 created = _get_gr(conn, gr_id)
@@ -435,14 +506,15 @@ def submit_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 if po["status"] != "active":
                     raise ConflictError("PO must be active before submitting GR")
 
-                # Budget check at submission time
+                # Budget check at submission time (skip for Cancellation GR)
                 estimated_amount = Decimal(str(before["estimated_amount"]))
-                sc_budget = compute_sc_budget_decimal(config, sc_id)
-                po_budget = compute_po_budget_decimal(config, before["po_id"])
-                if sc_budget["sc_available_amount"] < estimated_amount:
-                    raise ConflictError("SC available amount is insufficient")
-                if po_budget["open_po_amount"] < estimated_amount:
-                    raise ConflictError("PO open amount is insufficient")
+                if before.get("is_cancellation") != "Y":
+                    sc_budget = compute_sc_budget_decimal(config, sc_id)
+                    po_budget = compute_po_budget_decimal(config, before["po_id"])
+                    if sc_budget["sc_available_amount"] < estimated_amount:
+                        raise ConflictError("SC available amount is insufficient")
+                    if po_budget["open_po_amount"] < estimated_amount:
+                        raise ConflictError("PO open amount is insufficient")
 
                 timestamp = utc_now()
                 _submit_gr_drafts(conn, [gr_id], timestamp)
@@ -509,11 +581,9 @@ def confirm_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def _compute_incl_tax(estimated_amount: Decimal, tax_rate) -> Decimal:
-    """Calculate tax-included amount: amount_ex_tax × (1 + tax_rate/100).
-
-    Returns estimated_amount when tax_rate is None (gross = net).
-    """
+def _compute_incl_tax(estimated_amount: Decimal | None, tax_rate) -> Decimal | None:
+    if estimated_amount is None:
+        return None
     if tax_rate is None:
         return estimated_amount
     rate = Decimal(str(tax_rate))
@@ -551,9 +621,14 @@ def approve_gr(
                 if before["status"] != "pending":
                     raise ConflictError("GR must be pending")
 
+                is_canc = before.get("is_cancellation", "N")
+
                 # Resolve con_value: explicit value → auto-fill from gross_cost
                 if con_value is not None:
-                    con_value_amount = _non_negative_number(con_value, "con_value")
+                    if is_canc == "Y":
+                        con_value_amount = _non_positive_number(con_value, "con_value")
+                    else:
+                        con_value_amount = _non_negative_number(con_value, "con_value")
                 elif before.get("gross_cost") is not None:
                     con_value_amount = Decimal(str(before["gross_cost"]))
                 else:
@@ -562,9 +637,9 @@ def approve_gr(
                     )
 
                 extra_amount = con_value_amount - Decimal(
-                    str(before["estimated_amount"])
+                    str(before["estimated_amount"] or 0)
                 )
-                if extra_amount > 0:
+                if extra_amount > 0 and is_canc != "Y":
                     sc_budget = compute_sc_budget_decimal(config, sc_id)
                     po_budget = compute_po_budget_decimal(config, before["po_id"])
                     if sc_budget["sc_available_amount"] < extra_amount:
@@ -666,9 +741,8 @@ def update_gr(
                             "approved_date",
                             "goods_service_description",
                             "confirmation_name",
-                            "delivery_from",
-                            "delivery_to",
                             "last_delivery",
+                            "is_cancellation",
                         )
                         if key in updates
                     }
@@ -678,10 +752,15 @@ def update_gr(
                     merged = {**before, **allowed}
                     if "requester_id" in allowed:
                         _validate_user_exists(conn, merged["requester_id"])
-                    amount = _positive_number(
-                        merged["estimated_amount"],
-                        "estimated_amount",
-                    )
+                    is_canc = merged.get("is_cancellation", "N")
+                    est_amount_val = merged.get("estimated_amount")
+                    if est_amount_val is not None:
+                        if is_canc == "Y":
+                            amount = _negative_number(est_amount_val, "estimated_amount")
+                        else:
+                            amount = _positive_number(est_amount_val, "estimated_amount")
+                    else:
+                        amount = None
                     po_sc = _get_po_sc(conn, merged["po_id"])
                     is_draft_gr = before["status"] == "draft"
                     if is_draft_gr:
@@ -695,16 +774,27 @@ def update_gr(
                             raise ConflictError("SC must be approved")
                         if po_sc["status"] != "active":
                             raise ConflictError("PO must be active")
+                        if _is_fc_po(po_sc):
+                            raise ConflictError("Cannot create GR under an FC PO")
+
+                    merged["last_delivery"] = _normalize_last_delivery(merged.get("last_delivery"))
+                    _require_unique_last_delivery(
+                        conn, merged["po_id"], gr_id, merged["last_delivery"]
+                    )
 
                     # Recalculate gross_cost when estimated_amount or tax_rate changes
                     if "estimated_amount" in allowed or "tax_rate" in allowed:
-                        merged["gross_cost"] = _compute_incl_tax(
-                            Decimal(str(merged["estimated_amount"])),
-                            merged.get("tax_rate"),
-                        )
+                        est_val = merged.get("estimated_amount")
+                        if est_val is not None:
+                            merged["gross_cost"] = _compute_incl_tax(
+                                Decimal(str(est_val)),
+                                merged.get("tax_rate"),
+                            )
+                        else:
+                            merged["gross_cost"] = None
 
-                    if not is_draft_gr:
-                        old_amount = Decimal(str(before["estimated_amount"]))
+                    if not is_draft_gr and is_canc != "Y" and amount is not None:
+                        old_amount = Decimal(str(before["estimated_amount"] or 0))
                         if po_sc["sc_id"] == sc_id:
                             sc_budget_amount = amount - old_amount
                         else:
@@ -739,15 +829,14 @@ def update_gr(
                             approved_date = ?,
                             goods_service_description = ?,
                             confirmation_name = ?,
-                            delivery_from = ?,
-                            delivery_to = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            is_cancellation = ?
                         where gr_id = ?
                         """,
                         (
                             merged["po_id"],
                             merged["requester_id"],
-                            float(amount),
+                            float(amount) if amount is not None else None,
                             float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
                             merged.get("tax_rate"),
                             merged.get("remark"),
@@ -756,9 +845,8 @@ def update_gr(
                             merged.get("approved_date"),
                             merged.get("goods_service_description"),
                             merged.get("confirmation_name"),
-                            merged.get("delivery_from"),
-                            merged.get("delivery_to"),
                             merged.get("last_delivery"),
+                            is_canc,
                             gr_id,
                         ),
                     )
@@ -767,27 +855,32 @@ def update_gr(
                         key: updates[key]
                         for key in ("con_value", "tax_rate", "remark", "gr_no",
                                     "goods_service_description", "confirmation_name",
-                                    "delivery_from", "delivery_to", "last_delivery")
+                                    "last_delivery", "is_cancellation")
                         if key in updates
                     }
                     if not allowed:
                         raise ValidationError("No GR fields to update")
 
                     merged = {**before, **allowed}
+                    merged["last_delivery"] = _normalize_last_delivery(merged.get("last_delivery"))
+                    _require_unique_last_delivery(
+                        conn, before["po_id"], gr_id, merged["last_delivery"]
+                    )
                     # Recalculate gross_cost when tax_rate changes on approved GR
                     if "tax_rate" in allowed:
                         merged["gross_cost"] = _compute_incl_tax(
-                            Decimal(str(before["estimated_amount"])),
+                            Decimal(str(before["estimated_amount"] or 0)),
                             merged.get("tax_rate"),
                         )
                     if merged.get("con_value") is None:
                         raise ValidationError("con_value is required for approved GR")
-                    con_value = _non_negative_number(
-                        merged["con_value"],
-                        "con_value",
-                    )
+                    is_canc = merged.get("is_cancellation", before.get("is_cancellation", "N"))
+                    if is_canc == "Y":
+                        con_value = _non_positive_number(merged["con_value"], "con_value")
+                    else:
+                        con_value = _non_negative_number(merged["con_value"], "con_value")
                     extra_amount = con_value - Decimal(str(before["con_value"]))
-                    if extra_amount > 0:
+                    if extra_amount > 0 and is_canc != "Y":
                         sc_budget = compute_sc_budget_decimal(config, sc_id)
                         po_budget = compute_po_budget_decimal(config, before["po_id"])
                         if sc_budget["sc_available_amount"] < extra_amount:
@@ -807,16 +900,15 @@ def update_gr(
                             gr_no = ?,
                             goods_service_description = ?,
                             confirmation_name = ?,
-                            delivery_from = ?,
-                            delivery_to = ?,
-                            last_delivery = ?
+                            last_delivery = ?,
+                            is_cancellation = ?
                         where gr_id = ?
                         """,
                         (float(con_value),
                          float(merged["gross_cost"]) if merged.get("gross_cost") is not None else None,
                          merged.get("tax_rate"), merged.get("remark"), merged.get("gr_no"),
                          merged.get("goods_service_description"), merged.get("confirmation_name"),
-                         merged.get("delivery_from"), merged.get("delivery_to"), merged.get("last_delivery"),
+                         merged.get("last_delivery"), is_canc,
                          gr_id),
                     )
 
@@ -900,7 +992,12 @@ def deny_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
     return after
 
 
-def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
+def finish_gr(
+    config: AppConfig,
+    current_user: dict,
+    gr_id: str,
+    confirm_cascade: bool = False,
+) -> dict:
     """Mark an approved GR as finished (goods received / service completed)."""
     require_requester_or_admin(current_user)
 
@@ -917,6 +1014,98 @@ def finish_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                     raise ConflictError("GR must be approved")
 
                 timestamp = utc_now()
+                if before.get("last_delivery") == "Y":
+                    problematic = [
+                        dict(row)
+                        for row in conn.execute(
+                            """
+                            select gr_id, status
+                            from gr_requests
+                            where po_id = ?
+                              and gr_id != ?
+                              and status not in ('approved', 'finished')
+                            order by gr_id
+                            """,
+                            (before["po_id"], gr_id),
+                        ).fetchall()
+                    ]
+                    if problematic:
+                        raise ConflictError(
+                            "Cannot finish Last Delivery GR while other GRs are not approved or finished",
+                            conflicts=problematic,
+                        )
+
+                    grs_to_finish = [
+                        row["gr_id"]
+                        for row in conn.execute(
+                            """
+                            select gr_id
+                            from gr_requests
+                            where po_id = ?
+                              and gr_id != ?
+                              and status = 'approved'
+                            order by gr_id
+                            """,
+                            (before["po_id"], gr_id),
+                        ).fetchall()
+                    ]
+                    if not confirm_cascade:
+                        conn.rollback()
+                        return {
+                            "needs_cascade": True,
+                            "grs_to_finish": grs_to_finish,
+                        }
+
+                    all_gr_ids = [gr_id, *grs_to_finish]
+                    for cascade_gr_id in all_gr_ids:
+                        conn.execute(
+                            """
+                            update gr_requests
+                            set status = 'finished',
+                                finished_by = ?,
+                                finished_at = ?
+                            where gr_id = ?
+                            """,
+                            (current_user["user_id"], timestamp, cascade_gr_id),
+                        )
+                    conn.execute(
+                        """
+                        update pos
+                        set status = 'finished',
+                            finished_by = ?,
+                            finished_at = ?,
+                            updated_at = ?
+                        where po_id = ?
+                        """,
+                        (current_user["user_id"], timestamp, timestamp, before["po_id"]),
+                    )
+                    after = _get_gr(conn, gr_id)
+                    write_operation_record(
+                        conn,
+                        action_type="finish_gr",
+                        object_type="gr",
+                        object_id=gr_id,
+                        sc_id=sc_id,
+                        operator_id=current_user["user_id"],
+                        machine_id=current_user["machine_id"],
+                        before=before,
+                        after=after,
+                    )
+                    sc = conn.execute(
+                        "SELECT requester_id FROM sc_records WHERE sc_id = ?",
+                        (sc_id,),
+                    ).fetchone()
+                    notification_service.queue_status_change(
+                        conn, "gr", gr_id, "finish",
+                        {"requester_id": sc["requester_id"]} if sc else {}, current_user
+                    )
+                    conn.commit()
+                    return {
+                        "gr": after,
+                        "cascaded_grs": grs_to_finish,
+                        "po_finished": before["po_id"],
+                    }
+
                 conn.execute(
                     """
                     update gr_requests
@@ -1066,3 +1255,47 @@ def delete_gr(config: AppConfig, current_user: dict, gr_id: str) -> dict:
                 raise
 
     return before
+
+
+def _validate_annual_report_year(year: str) -> str:
+    import re
+
+    if not isinstance(year, str) or not re.fullmatch(r"\d{4}", year):
+        raise ValidationError("year must be a 4-digit string")
+    return year
+
+
+def get_annual_report_data(config: AppConfig, year: str, current_user: dict) -> list[dict]:
+    """Return approved/finished GR rows in the selected report year."""
+    require_admin(current_user)
+    year = _validate_annual_report_year(year)
+
+    with connect(config) as conn:
+        rows = conn.execute(
+            """
+            select
+              gr.*,
+              po.po_no,
+              po.sc_id,
+              sc.sc_no,
+              sc.cost_center,
+              vendor.vendor_name,
+              u.user_name as requester_name
+            from gr_requests gr
+            join pos po on po.po_id = gr.po_id
+            left join sc_records sc on sc.sc_id = po.sc_id
+            join vendors vendor on vendor.vendor_id = po.vendor_id
+            left join users u on u.user_id = gr.requester_id
+            where gr.status in ('approved', 'finished')
+              and (
+                (gr.status = 'finished' and substr(gr.finished_at, 1, 4) = ?)
+                or
+                (gr.status = 'approved' and substr(gr.approved_date, 1, 4) = ?)
+              )
+            order by coalesce(gr.finished_at, gr.approved_date, gr.created_at) desc,
+                     gr.gr_no
+            """,
+            (year, year),
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]

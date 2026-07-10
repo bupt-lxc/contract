@@ -2,7 +2,7 @@ import pytest
 
 from sc_gr_app.db.migrations import migrate
 from sc_gr_app.errors import ValidationError
-from sc_gr_app.services.gr_service import approve_gr, create_gr
+from sc_gr_app.services.gr_service import approve_gr, create_gr, deny_gr
 from sc_gr_app.services.po_service import create_po
 from sc_gr_app.services.query_service import (
     search_operation_records,
@@ -12,7 +12,7 @@ from sc_gr_app.services.query_service import (
     search_vendors,
     workbench_data,
 )
-from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft, add_sc_vendor
+from sc_gr_app.services.sc_service import approve_sc, create_sc, create_sc_draft, add_sc_vendor, deny_sc
 from sc_gr_app.services.vendor_service import create_vendor
 from tests.test_sc_po_gr_flow import ADMIN, OTHER_USER, USER, seed_other_user, seed_users
 
@@ -27,7 +27,7 @@ def seed_query_data(app_config):
         {
             "sc_no": "SC-ALPHA",
             "requester_id": "U1",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 1001,
             "sc_amount": 1000,
             "service_period_start": "2026-01-01",
@@ -140,7 +140,7 @@ def test_filters_and_pagination_work_for_scs(app_config):
         {
             "sc_no": "SC-BETA",
             "requester_id": "U1",
-            "request_type": "material",
+            "request_type": "new",
             "cost_center": 2002,
             "sc_amount": 500,
             "service_period_start": "2026-01-01",
@@ -336,7 +336,7 @@ def test_po_and_gr_search_scope_requesters_to_their_own_parent_scs(app_config):
         {
             "sc_no": "SC-BETA",
             "requester_id": "U2",
-            "request_type": "service",
+            "request_type": "new",
             "cost_center": 2002,
             "sc_amount": 500,
             "service_period_start": "2026-01-01",
@@ -409,7 +409,7 @@ def test_workbench_data_returns_per_status_counts(app_config):
     # Create an approved SC for USER1
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -422,8 +422,8 @@ def test_workbench_data_returns_per_status_counts(app_config):
     row = result["sc"]["approved"]["rows"][0]
     assert "sc_no" in row
     assert "requester_name" in row
-    # No amount fields
-    assert "sc_amount" not in row
+    assert "sc_amount" in row
+    assert "request_type" in row
 
 
 def test_workbench_data_scopes_requester_to_own_scs(app_config):
@@ -433,7 +433,7 @@ def test_workbench_data_scopes_requester_to_own_scs(app_config):
     # USER1 creates and approves an SC
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -456,14 +456,14 @@ def test_workbench_data_admin_pending_shows_all(app_config):
     # USER1 creates a pending SC
     create_sc(
         app_config, USER,
-        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
     # USER2 creates a pending SC
     create_sc(
         app_config, OTHER_USER,
-        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "service",
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
          "cost_center": 1002, "sc_amount": 500,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -492,7 +492,7 @@ def test_workbench_data_po_has_requester_name(app_config):
     })
     sc = create_sc(
         app_config, USER,
-        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "service",
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
          "cost_center": 1001, "sc_amount": 1000,
          "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
     )
@@ -509,3 +509,335 @@ def test_workbench_data_po_has_requester_name(app_config):
     assert po_row["requester_name"] == "Requester"
     assert "vendor_name" not in po_row
     assert "po_amount" not in po_row
+
+
+class TestQueryServiceFcFilters:
+    """FC-related filter tests for search_scs and search_pos."""
+
+    def _setup_two_scs_one_fc(self, app_config):
+        """Create one regular SC + one FC SC with PO(FC). Returns (regular_sc, fc_sc, po_fc)."""
+        migrate(app_config)
+        seed_users(app_config)
+
+        # Create vendor
+        vendor = create_vendor(app_config, USER, {
+            "vendor_name": "Test Vendor",
+            "service_scope": "General Service",
+        })
+        vendor_id = vendor["vendor_id"]
+
+        # Regular SC
+        sc_regular = create_sc(app_config, USER, {
+            "sc_no": "SC-REG",
+            "requester_id": "U1",
+            "request_type": "new",
+            "cost_center": 1000,
+            "sc_amount": 10000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_regular = approve_sc(app_config, ADMIN, sc_regular["sc_id"])
+
+        # FC SC
+        sc_fc = create_sc(app_config, USER, {
+            "sc_no": "SC-FC",
+            "requester_id": "U1",
+            "request_type": "FC",
+            "cost_center": 2000,
+            "sc_amount": 100000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+        sc_fc = approve_sc(app_config, ADMIN, sc_fc["sc_id"])
+
+        # Link vendor to both
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        add_sc_vendor(app_config, ADMIN, sc_fc["sc_id"], vendor_id)
+
+        # PO(FC)
+        po_fc = create_po(app_config, ADMIN, {
+            "sc_id": sc_fc["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 80000,
+        })
+
+        # Call-off SC under PO(FC)
+        create_sc_draft(app_config, USER, {
+            "requester_id": "U1",
+            "request_type": "call_off",
+            "calloff_po_id": po_fc["po_id"],
+        })
+
+        return sc_regular, sc_fc, po_fc
+
+    def test_is_calloff_filter_1_returns_only_calloff_scs(self, app_config):
+        """is_calloff='1' returns only SCs with calloff_po_id IS NOT NULL."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(app_config, current_user=ADMIN, filters={"is_calloff": "1"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["calloff_po_id"] is not None
+
+    def test_is_calloff_filter_0_returns_only_top_level_scs(self, app_config):
+        """is_calloff='0' returns only SCs with calloff_po_id IS NULL."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(app_config, current_user=ADMIN, filters={"is_calloff": "0"})
+
+        rows = result["rows"]
+        assert len(rows) >= 2  # regular SC + FC SC
+        for row in rows:
+            assert row["calloff_po_id"] is None
+
+    def test_calloff_po_id_filter_returns_children(self, app_config):
+        """calloff_po_id filter returns only SCs under that specific PO(FC)."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(
+            app_config, current_user=ADMIN,
+            filters={"calloff_po_id": po_fc["po_id"]},
+        )
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["calloff_po_id"] == po_fc["po_id"]
+
+    def test_is_fc_po_filter_1_returns_only_fc_pos(self, app_config):
+        """is_fc_po='1' returns only POs under FC-type SCs."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Create regular PO under regular SC (uses vendor already linked in setup)
+        vendor_id = create_vendor(app_config, USER, {
+            "vendor_name": "Regular PO Vendor",
+            "service_scope": "General Service",
+        })["vendor_id"]
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        create_po(app_config, ADMIN, {
+            "sc_id": sc_regular["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 5000,
+        })
+
+        result = search_pos(app_config, current_user=ADMIN, filters={"is_fc_po": "1"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["sc_request_type"] == "FC"
+
+    def test_is_fc_po_filter_0_returns_only_non_fc_pos(self, app_config):
+        """is_fc_po='0' returns only POs under non-FC SCs."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Create regular PO under regular SC (uses vendor already linked in setup)
+        vendor_id = create_vendor(app_config, USER, {
+            "vendor_name": "Regular PO Vendor",
+            "service_scope": "General Service",
+        })["vendor_id"]
+        add_sc_vendor(app_config, ADMIN, sc_regular["sc_id"], vendor_id)
+        create_po(app_config, ADMIN, {
+            "sc_id": sc_regular["sc_id"],
+            "vendor_id": vendor_id,
+            "po_amount": 5000,
+        })
+
+        result = search_pos(app_config, current_user=ADMIN, filters={"is_fc_po": "0"})
+
+        rows = result["rows"]
+        assert len(rows) >= 1
+        for row in rows:
+            assert row["sc_request_type"] != "FC"
+
+    def test_fc_po_open_amount_uses_calloff_total(self, app_config):
+        """PO(FC) open_po_amount = po_amount - sum(call-off SC sc_amount)."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        # Submit the call-off SC created in setup (sc_amount defaults to None in draft)
+        # Find the draft call-off SC
+        calloff_rows = search_scs(
+            app_config, current_user=ADMIN,
+            filters={"calloff_po_id": po_fc["po_id"]},
+        )["rows"]
+        calloff_sc_id = calloff_rows[0]["sc_id"]
+
+        from sc_gr_app.services.sc_service import submit_sc
+        submit_sc(app_config, USER, calloff_sc_id, {
+            "sc_no": "SC-CO-001",
+            "request_type": "call_off",
+            "cost_center": 1000,
+            "sc_amount": 30000,
+            "service_period_start": "2026-01-01",
+            "service_period_end": "2026-12-31",
+        })
+
+        rows = search_pos(app_config, current_user=ADMIN, filters={"po_id": po_fc["po_id"]})["rows"]
+        assert len(rows) == 1
+        assert rows[0]["open_po_amount"] == 50000  # 80000 - 30000
+
+    def test_sc_sort_by_calloff_po_id(self, app_config):
+        """search_scs can sort by calloff_po_id."""
+        sc_regular, sc_fc, po_fc = self._setup_two_scs_one_fc(app_config)
+
+        result = search_scs(
+            app_config, current_user=ADMIN,
+            sort="calloff_po_id", direction="asc",
+        )
+        # Non-calloff SCs have NULL calloff_po_id → sorted first (ASC)
+        rows = result["rows"]
+        assert len(rows) >= 2
+        # First rows should have NULL calloff_po_id
+        assert rows[0]["calloff_po_id"] is None
+
+def test_workbench_denied_sc_visibility(app_config):
+    """Requester sees own denied SCs; admin sees all denied SCs."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # USER1 creates an SC
+    sc1 = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-U1", "requester_id": "U1", "request_type": "new",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc1["sc_id"])
+
+    # USER2 creates an SC
+    sc2 = create_sc(
+        app_config, OTHER_USER,
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
+         "cost_center": 1002, "sc_amount": 500,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc2["sc_id"])
+
+    # USER1 sees only own denied SC
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["sc"]["denied"]["count"] == 1
+
+    # Admin sees both denied SCs
+    admin_data = workbench_data(app_config, ADMIN)
+    assert admin_data["sc"]["denied"]["count"] == 2
+
+    # USER2 sees only own denied SC
+    user2_data = workbench_data(app_config, OTHER_USER)
+    assert user2_data["sc"]["denied"]["count"] == 1
+
+
+def test_workbench_denied_sc_hidden_from_other_requester(app_config):
+    """A requester should NOT see another requester's denied SC."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # USER2 creates and denies an SC
+    sc = create_sc(
+        app_config, OTHER_USER,
+        {"sc_no": "SC-U2", "requester_id": "U2", "request_type": "new",
+         "cost_center": 1002, "sc_amount": 500,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    deny_sc(app_config, ADMIN, sc["sc_id"])
+
+    # USER1 should see zero denied SCs (they belong to USER2)
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["sc"]["denied"]["count"] == 0
+
+
+def test_workbench_denied_gr_visibility(app_config):
+    """Requester sees own denied GRs; admin sees all denied GRs."""
+    migrate(app_config)
+    seed_users(app_config)
+    seed_other_user(app_config)
+
+    # Create and approve SC + PO so GRs can be created
+    sc = create_sc(
+        app_config, USER,
+        {"sc_no": "SC-1", "requester_id": "U1", "request_type": "new",
+         "cost_center": 1001, "sc_amount": 1000,
+         "service_period_start": "2026-01-01", "service_period_end": "2026-12-31"},
+    )
+    approve_sc(app_config, ADMIN, sc["sc_id"])
+    vendor = create_vendor(app_config, USER, {
+        "vendor_name": "Vendor A", "ksrm_vendor_code": "VA-1",
+        "service_scope": "General Service",
+    })
+    add_sc_vendor(app_config, ADMIN, sc["sc_id"], vendor["vendor_id"])
+    po = create_po(app_config, ADMIN, {
+        "sc_id": sc["sc_id"], "vendor_id": vendor["vendor_id"],
+        "po_no": "PO-1", "po_amount": 800, "status": "active",
+    })
+
+    # USER1 creates and denies a GR
+    gr1 = create_gr(
+        app_config, USER,
+        {"po_id": po["po_id"], "requester_id": "U1",
+         "estimated_amount": 100, "status": "pending"},
+    )
+    deny_gr(app_config, ADMIN, gr1["gr_id"])
+
+    # Create and deny a GR for USER2 (by ADMIN, since only SC owner/admin can create GRs)
+    gr2 = create_gr(
+        app_config, ADMIN,
+        {"po_id": po["po_id"], "requester_id": "U2",
+         "estimated_amount": 200, "status": "pending"},
+    )
+    deny_gr(app_config, ADMIN, gr2["gr_id"])
+
+    # USER1 sees only own denied GR
+    user1_data = workbench_data(app_config, USER)
+    assert user1_data["gr"]["denied"]["count"] == 1
+    assert len(user1_data["gr"]["denied"]["rows"]) == 1
+    assert "denied_at" in user1_data["gr"]["denied"]["rows"][0]
+
+    # Admin sees both denied GRs
+    admin_data = workbench_data(app_config, ADMIN)
+    assert admin_data["gr"]["denied"]["count"] == 2
+
+
+def test_po_advanced_text_filters_are_case_insensitive_contains(app_config):
+    seed_query_data(app_config)
+
+    assert search_pos(app_config, filters={"po_no": "alpha"}, current_user=ADMIN)["rows"][0]["po_no"] == "PO-ALPHA"
+    assert search_pos(app_config, filters={"vendor_name": "vendor"}, current_user=ADMIN)["rows"][0]["vendor_name"] == "Alpha Vendor"
+    assert search_pos(app_config, filters={"cost_center": "10"}, current_user=ADMIN)["rows"][0]["po_no"] == "PO-ALPHA"
+
+
+def test_sc_advanced_text_filters_are_case_insensitive_contains(app_config):
+    sc_id, _po_id, _gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_scs(app_config, filters={"sc_no": "alpha"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+    assert search_scs(app_config, filters={"description": "SERVICE"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+    assert search_scs(app_config, filters={"cost_center": "10"}, current_user=ADMIN)["rows"][0]["sc_id"] == sc_id
+
+
+def test_gr_advanced_text_filters_are_case_insensitive_contains(app_config):
+    _sc_id, _po_id, gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_grs(app_config, filters={"gr_id": gr_id[-6:]}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id
+    assert search_grs(app_config, filters={"remark": "REMARK"}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id
+
+
+def test_vendor_advanced_text_filters_are_case_insensitive_contains(app_config):
+    seed_query_data(app_config)
+
+    assert search_vendors(app_config, filters={"vendor_name": "vendor"})["rows"][0]["vendor_name"] == "Alpha Vendor"
+    assert search_vendors(app_config, filters={"ksrm_vendor_code": "kv"})["rows"][0]["ksrm_vendor_code"] == "KV-1"
+
+
+def test_advanced_like_filters_treat_sql_wildcards_as_literals(app_config):
+    seed_query_data(app_config)
+
+    assert search_pos(app_config, filters={"po_no": "%"}, current_user=ADMIN)["rows"] == []
+    assert search_vendors(app_config, filters={"vendor_name": "_"})["rows"] == []
+
+
+def test_gr_is_cancellation_filter_is_supported(app_config):
+    _sc_id, _po_id, gr_id, _vendor_id = seed_query_data(app_config)
+
+    assert search_grs(app_config, filters={"is_cancellation": "N"}, current_user=ADMIN)["rows"][0]["gr_id"] == gr_id

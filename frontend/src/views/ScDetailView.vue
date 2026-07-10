@@ -44,7 +44,29 @@
           </el-button>
         </div>
         <ScDetailCard :sc="detail.sc" />
+        <ScBudgetCard
+          v-if="detail.budget"
+          :budget="detail.budget"
+          :is-fc="detail.sc.request_type === 'FC'"
+        />
+        <ProcessSummaryCard
+          v-if="detail.sc"
+          :record="detail.sc"
+          :fields="scProcessSummaryFields"
+        />
       </div>
+
+      <el-card v-if="detail.parent_po" class="calloff-context-card section-card">
+        <template #header>{{ $t('sc.calloffPoId') }}</template>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="$t('po.poId')">
+            {{ detail.parent_po.po_id }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="$t('po.openPoAmountFc')">
+            <AmountDisplay :value="detail.parent_po.fc_budget?.open_po_amount" />
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-card>
 
       <div class="section-card">
         <ScVendorSection
@@ -66,8 +88,8 @@
         <PoTable
           :rows="detail.pos || []"
           hide-sc-info
-          @row-click="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
-          @detail="row => $router.push(`/sc/${scId}/po/${row.po_id}`)"
+          @row-click="goToPoDetail"
+          @detail="goToPoDetail"
           @edit="row => { poDialogRecord = { ...row, sc_id: scId }; poDialogMode = 'edit'; poDialogVisible = true }"
           @finish="row => handlePoFinish(row)"
           @submit="row => handlePoSubmit(row)"
@@ -111,7 +133,7 @@
     <ScFormDialog
       v-model:visible="editDialogVisible"
       mode="edit"
-      :record="{ ...detail.sc, vendors: detail.vendors }"
+      :record="{ ...detail.sc, vendors: detail.vendors, assignees: detail.assignees }"
       :users="activeUsers"
       :vendors="vendors"
       @save-submit="handleEditSave"
@@ -138,6 +160,9 @@
                    :value="u.user_id"
                    :disabled="u.user_id === detail.sc?.requester_id" />
       </el-select>
+      <p style="color: #909399; font-size: 13px; margin-top: 8px;">
+        {{ $t('sc.transferAssigneesNote') }}
+      </p>
       <template #footer>
         <el-button @click="transferDialogVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" :disabled="!selectedNewOwner" @click="handleTransferOwner">
@@ -160,13 +185,17 @@ import { useExport } from '@/composables/useExport.js'
 import { formatDateTime } from '@/utils/format.js'
 import { callApi, loadingState } from '@/api/bridge.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import AmountDisplay from '@/components/common/AmountDisplay.vue'
 import ScDetailCard from '@/components/sc/ScDetailCard.vue'
+import ScBudgetCard from '@/components/sc/ScBudgetCard.vue'
 import ScFormDialog from '@/components/sc/ScFormDialog.vue'
 import PoTable from '@/components/po/PoTable.vue'
 import PoFormDialog from '@/components/po/PoFormDialog.vue'
 import AttachmentList from '@/components/common/AttachmentList.vue'
 import ScVendorSection from '@/components/sc/ScVendorSection.vue'
+import ProcessSummaryCard from '@/components/common/ProcessSummaryCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeRedirectTarget } from '@/utils/listQuery.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -184,6 +213,16 @@ const scVendors = computed(() => detail.value?.vendors || [])
 const activeUsers = ref([])
 const confirmBtn = ref(null)
 
+const scProcessSummaryFields = computed(() => [
+  { key: 'created_at', label: t('timestampLabel.created') },
+  { key: 'submitted_date', label: t('timestampLabel.submitted') },
+  { key: 'confirmed_at', label: t('timestampLabel.confirmed') },
+  { key: 'pending_date', label: t('timestampLabel.pending') },
+  { key: 'approved_date', label: t('timestampLabel.approved') },
+  { key: 'finished_at', label: t('timestampLabel.finished') },
+  { key: 'updated_at', label: t('timestampLabel.updated') }
+])
+
 const editDialogVisible = ref(false)
 const poDialogVisible = ref(false)
 const poDialogMode = ref('create')
@@ -191,6 +230,18 @@ const poDialogRecord = ref(null)
 const attachRefreshKey = ref(0)
 
 function openEditDialog() { editDialogVisible.value = true }
+
+function childReturnQuery() {
+  return route.query.returnTo ? { returnTo: route.query.returnTo } : {}
+}
+
+function listReturnPath(fallback) {
+  return sanitizeRedirectTarget(route.query.returnTo, fallback)
+}
+
+function goToPoDetail(row) {
+  router.push({ name: 'po-detail', params: { scId: scId.value, poId: row.po_id }, query: childReturnQuery() })
+}
 
 async function handleEditSave(data) {
   try {
@@ -250,21 +301,7 @@ async function handleApprove() {
 
     await ElMessageBox.confirm(t('sc.approveConfirm'), t('common.confirm'), { type: 'warning' })
 
-    // Check for draft POs — offer cascade
-    const draftPos = (detail.value.pos || []).filter(p => p.status === 'draft')
-    let cascadePos = false
-    if (draftPos.length > 0) {
-      try {
-        await ElMessageBox.confirm(
-          `${draftPos.length} draft PO(s) exist. Also submit them?`,
-          t('common.confirm'),
-          { confirmButtonText: 'Yes, cascade submit', cancelButtonText: 'No, leave as draft', type: 'warning' }
-        )
-        cascadePos = true
-      } catch { /* user chose No */ }
-    }
-
-    await approveSc(scId.value, cascadePos)
+    await approveSc(scId.value)
     ElMessage.success(t('sc.scApproved'))
     await fetchDetail(scId.value)
   } catch (e) {
@@ -316,7 +353,7 @@ async function handleDelete() {
     await ElMessageBox.confirm(t('sc.confirmDelete'), t('common.confirm'), { type: 'error' })
     await callApi('delete_sc', { sc_id: scId.value })
     ElMessage.success(t('sc.deleted'))
-    router.replace('/sc')
+    router.replace(listReturnPath('/sc'))
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') ElMessage.error(e.message || String(e))
   }

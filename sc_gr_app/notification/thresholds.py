@@ -17,9 +17,25 @@ def _utc_now() -> str:
 def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
     """Check all active POs for threshold breaches. Returns (date_events, amount_events)."""
     rows = conn.execute(
-        """SELECT po.*, sc.requester_id
+        """SELECT po.*, COALESCE(sc.requester_id, po.requester_id) as requester_id, sc.request_type as sc_request_type,
+                  po.po_amount - COALESCE(
+                    CASE WHEN po.request_type = 'FC' OR sc.request_type = 'FC'
+                      THEN calloff_totals.allocated
+                      ELSE gr_totals.con_value_total
+                    END, 0
+                  ) as remaining
            FROM pos po
-           JOIN sc_records sc ON sc.sc_id = po.sc_id
+           LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
+           LEFT JOIN (
+             SELECT po_id, SUM(con_value) as con_value_total
+             FROM gr_requests WHERE status IN ('approved', 'finished')
+             GROUP BY po_id
+           ) gr_totals ON gr_totals.po_id = po.po_id
+           LEFT JOIN (
+             SELECT calloff_po_id, SUM(sc_amount) as allocated
+             FROM sc_records WHERE calloff_po_id IS NOT NULL
+             GROUP BY calloff_po_id
+           ) calloff_totals ON calloff_totals.calloff_po_id = po.po_id
            WHERE po.status IN ('active', 'finished')
              AND po.contract_to IS NOT NULL
              AND po.po_amount IS NOT NULL"""
@@ -76,18 +92,12 @@ def check_all_active_pos(conn: sqlite3.Connection) -> tuple[int, int]:
             except (ValueError, TypeError):
                 pass
 
-        # Amount check — use po_amount / open_po_amount
+        # Amount check — use po_amount / remaining
         po_amount = po["po_amount"]
         if po_amount and po_amount > 0:
             try:
-                approved_gr_total_row = conn.execute(
-                    """SELECT COALESCE(SUM(gr.con_value), 0) as total
-                       FROM gr_requests gr
-                       WHERE gr.po_id = ? AND gr.status = 'approved'""",
-                    (po_id,),
-                ).fetchone()
-                spent = float(approved_gr_total_row["total"]) if approved_gr_total_row else 0.0
-                remaining_pct = ((float(po_amount) - spent) / float(po_amount)) * 100
+                remaining = float(po["remaining"]) if po["remaining"] is not None else float(po_amount)
+                remaining_pct = (remaining / float(po_amount)) * 100
 
                 for threshold_pct in sorted(amount_thresholds):
                     if remaining_pct < threshold_pct:

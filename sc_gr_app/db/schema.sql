@@ -20,12 +20,12 @@ CREATE TABLE IF NOT EXISTS sc_records (
   sc_id TEXT PRIMARY KEY,
   sc_no TEXT,
   requester_id TEXT NOT NULL REFERENCES users(user_id),
-  request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC')),
+  request_type TEXT CHECK (request_type IN ('material', 'service', 'fixed_asset', 'FC', 'call_off', 'new')),
   cost_center INTEGER,
   sc_amount REAL CHECK (sc_amount IS NULL OR sc_amount > 0),
   service_period_start TEXT,
   service_period_end TEXT,
-  status TEXT NOT NULL CHECK (status IN ('draft', 'pending', 'approved', 'denied', 'finished')),
+  status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
   description TEXT,
   created_by TEXT NOT NULL REFERENCES users(user_id),
   created_at TEXT NOT NULL,
@@ -33,12 +33,17 @@ CREATE TABLE IF NOT EXISTS sc_records (
   approved_by TEXT REFERENCES users(user_id),
   approved_at TEXT,
   finished_at TEXT,
+  confirmed_at TEXT,
   asset TEXT NOT NULL DEFAULT 'N',
   asset_nums TEXT,
   pending_date TEXT,
   approved_date TEXT,
+  currency TEXT NOT NULL DEFAULT 'CNY',
+  internal_system_number TEXT,
+  service_scope TEXT,
   CHECK (
     status = 'draft'
+    OR status = 'manager_confirm'
     OR (
       request_type IS NOT NULL
       AND cost_center IS NOT NULL
@@ -66,11 +71,12 @@ CREATE TABLE IF NOT EXISTS vendors (
 
 CREATE TABLE IF NOT EXISTS pos (
   po_id TEXT PRIMARY KEY,
-  sc_id TEXT NOT NULL REFERENCES sc_records(sc_id),
+  sc_id TEXT REFERENCES sc_records(sc_id),
   vendor_id TEXT NOT NULL REFERENCES vendors(vendor_id),
   po_no TEXT,
+  requester_id TEXT,
   po_amount REAL NOT NULL CHECK (po_amount > 0),
-  status TEXT NOT NULL CHECK (status IN ('po_pending', 'po_approved', 'finished')),
+  status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'finished')),
   contract_from TEXT,
   contract_to TEXT,
   contract_no TEXT,
@@ -79,22 +85,45 @@ CREATE TABLE IF NOT EXISTS pos (
   contract_type TEXT,
   cost_center TEXT,
   purchaser TEXT,
-  pending_date TEXT,
-  approved_date TEXT,
+  active_date TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  finished_at TEXT,
+  finished_by TEXT REFERENCES users(user_id),
+  request_type TEXT CHECK (request_type IN ('FC'))
 );
+
+CREATE TABLE IF NOT EXISTS po_manual_amounts (
+  manual_amount_id TEXT PRIMARY KEY,
+  po_id TEXT NOT NULL REFERENCES pos(po_id),
+  year TEXT NOT NULL CHECK (year GLOB '[0-9][0-9][0-9][0-9]'),
+  type TEXT NOT NULL CHECK (type IN ('provision', 'to_be_gr')),
+  amount REAL NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(user_id),
+  created_at TEXT NOT NULL,
+  UNIQUE(po_id, year, type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_po_manual_amounts_po_id ON po_manual_amounts(po_id);
 
 CREATE TABLE IF NOT EXISTS gr_requests (
   gr_id TEXT PRIMARY KEY,
   gr_no TEXT,
   po_id TEXT NOT NULL REFERENCES pos(po_id),
   requester_id TEXT NOT NULL REFERENCES users(user_id),
-  estimated_amount REAL NOT NULL CHECK (estimated_amount > 0),
-  con_value REAL CHECK (con_value >= 0),
+  estimated_amount REAL CHECK (
+    estimated_amount IS NULL OR
+    (is_cancellation = 'N' AND estimated_amount > 0) OR
+    (is_cancellation = 'Y' AND estimated_amount < 0)
+  ),
+  con_value REAL CHECK (
+    con_value IS NULL OR
+    (is_cancellation = 'N' AND con_value >= 0) OR
+    (is_cancellation = 'Y' AND con_value <= 0)
+  ),
   gross_cost REAL,
   tax_rate REAL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied', 'finished')),
+  status TEXT NOT NULL CHECK (status IN ('draft', 'manager_confirm', 'pending', 'approved', 'denied', 'finished')),
   remark TEXT,
   created_by TEXT NOT NULL REFERENCES users(user_id),
   created_at TEXT NOT NULL,
@@ -107,11 +136,12 @@ CREATE TABLE IF NOT EXISTS gr_requests (
   pending_date TEXT,
   approved_date TEXT,
   confirmed_at TEXT,
+  submitted_date TEXT,
   goods_service_description TEXT,
   confirmation_name TEXT,
-  delivery_from TEXT,
-  delivery_to TEXT,
-  last_delivery TEXT
+  last_delivery TEXT,
+  updated_at TEXT,
+  is_cancellation TEXT NOT NULL DEFAULT 'N' CHECK (is_cancellation IN ('N', 'Y'))
 );
 
 CREATE TABLE IF NOT EXISTS operation_records (

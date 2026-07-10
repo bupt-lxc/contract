@@ -96,9 +96,9 @@ const formRef = ref()
 const submitting = ref(false)
 
 const serviceScopes = [
-  'Transportation', 'engineering Service', 'Equipment', 'Parts', 'Driver',
+  'Transportation', 'Engineering Service', 'Equipment', 'Parts', 'Driver',
   'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
-  'Insurance', 'Harness', 'Maintenance', 'Security', 'Testing support', 'Others'
+  'Insurance', 'Harness', 'Maintenance&Calibration', 'Security', 'Testing support', 'Others'
 ]
 
 const emptyForm = () => ({

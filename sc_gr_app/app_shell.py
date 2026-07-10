@@ -5,8 +5,12 @@ import sys
 import threading
 from pathlib import Path
 
-import webview
-from webview.platforms.edgechromium import EdgeChrome
+try:
+    import webview
+    from webview.platforms.edgechromium import EdgeChrome
+except ModuleNotFoundError:
+    webview = None
+    EdgeChrome = None
 
 from sc_gr_app import __version__
 from sc_gr_app.api.bridge import ApiBridge
@@ -127,6 +131,8 @@ def _send_to_existing_window(hwnd, url):
 
 
 def _patch_webview2():
+    if EdgeChrome is None:
+        return
     _original = EdgeChrome.on_webview_ready
     def _patched(self, sender, args):
         _original(self, sender, args)

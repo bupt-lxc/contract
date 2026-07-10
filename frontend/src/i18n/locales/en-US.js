@@ -85,7 +85,7 @@ export default {
     importFile: 'File',
     importSelectFile: 'Select file',
     importDropHint: 'Drop file here or click to upload',
-    importFormatHint: 'Only .xlsx/.xls files',
+    importFormatHint: 'Only .xlsx/.xls/.csv files',
     importRecords: 'Import {entity}',
     importValidation: 'Validation',
     template: 'Template'
@@ -108,6 +108,19 @@ export default {
     requester: 'requester',
     Admin: 'Admin',
     Requester: 'Requester'
+  },
+
+  processSummary: 'Process Summary',
+
+  timestampLabel: {
+    confirmed: 'Confirmed',
+    created: 'Created',
+    finished: 'Finished',
+    submitted: 'Submitted',
+    pending: 'Pending',
+    approved: 'Approved',
+    updated: 'Updated',
+    active: 'Active'
   },
 
   login: {
@@ -152,7 +165,10 @@ home: {
     colStartDay: 'Start Day',
     colEndDay: 'End Day',
     colOpenPoAmount: 'Open PO Amt',
+    colAmount: 'Amount',
+    colType: 'Type',
     viewAllOfType: 'View all of this type',
+    denied: 'Denied',
   },
 
   sc: {
@@ -246,6 +262,18 @@ home: {
     ownerTransferred: 'Owner transferred',
     currency: 'Currency',
     importRules: 'Only SC records with status "Approved" or "Finished" can be imported. Required fields: SC NO, SC Amount, Status. Leave SC ID empty to auto-generate.',
+    topLevel: 'Top Level',
+    calloffBadge: 'Call-off',
+    newCalloffSc: 'New Call-off SC',
+    calloffPoId: 'Call-off Source PO',
+    scAmountExceedsOpenPoAmount: 'SC amount exceeds the open PO amount of the selected FC PO.',
+    allocatedPo: 'Allocated (POs)',
+    unallocated: 'Unallocated',
+    downstreamCalloff: 'Downstream Call-off SCs',
+    pendingCalloff: 'Pending Call-off SCs',
+    assignees: 'Assignees',
+    assigneesPlaceholder: 'Select assignees',
+    transferAssigneesNote: 'Assignees will remain unchanged',
   },
 
   po: {
@@ -264,6 +292,12 @@ home: {
     vendorName: 'Vendor Name',
     poAmount: 'PO Amount',
     openPoAmount: 'Open PO Amount',
+    budgetSummary: 'Budget Summary',
+    allocatedCalloff: 'Allocated Call-off',
+    pendingCalloff: 'Pending Call-off',
+    downstreamConsumed: 'Downstream Consumed',
+    downstreamPendingGr: 'Downstream Pending GR (excl)',
+    downstreamPendingGrIncl: 'Downstream Pending GR (incl)',
     startDate: 'Start Date',
     contractEndDate: 'Contract End Date',
     consumedAmount: 'Consumed Amount',
@@ -308,6 +342,33 @@ home: {
     poNotFound: 'PO not found.',
     draftSaved: 'Draft saved',
     importRules: 'Only PO records with status "Active" or "Finished" can be imported. Required fields: SC ID, PO NO, PO Amount, Status. Leave PO ID empty to auto-generate.',
+    annualReport: 'Annual Report',
+    annualReportTitle: 'Export Annual Report',
+    selectYear: 'Select Year',
+    openPoAmountFc: 'Open PO Amount',
+    allocatedCalloff: 'Allocated (Call-off SCs)',
+    pendingCalloff: 'Pending Call-off SCs',
+    downstreamConsumed: 'Downstream Consumed',
+    downstreamPendingGr: 'Downstream Pending GR',
+    newCalloffSc: 'New Call-off SC',
+    newRegularPo: 'New Regular PO',
+    newFcPo: 'New FC PO',
+    manualAnnualAmounts: 'Manual Annual Amounts',
+    addManualAmount: 'Add Record',
+    manualAmountYear: 'Year',
+    manualAmountType: 'Type',
+    manualAmountAmount: 'Amount',
+    manualAmountCreatedBy: 'Created By',
+    manualAmountCreatedAt: 'Created At',
+    manualAmountProvision: 'Provision',
+    manualAmountToBeGr: 'To be GR',
+    deleteManualAmountConfirm: 'Delete {year} {type} manual amount {amount}?',
+    manualAmountSaved: 'Manual annual amount saved',
+    manualAmountDeleted: 'Manual annual amount deleted',
+    manualAmountNoRecords: 'No manual annual amount records',
+    manualAmountInvalidYear: 'Year must be four digits',
+    manualAmountAmountRequired: 'Amount is required',
+    manualAmountRefreshFailed: 'Saved, but refresh failed. Refresh the detail page to see the latest records.',
   },
 
   gr: {
@@ -355,6 +416,10 @@ home: {
     grFinished: 'GR finished',
     finishGr: 'Finish GR',
     finishGrConfirm: 'Mark this GR as finished? Goods received / service completed.',
+    lastDeliveryCascadeTitle: 'Last Delivery Confirmation',
+    lastDeliveryCascadeMessage: 'This GR is the last delivery. The following GRs will also be finished: {list}. The PO will be finished afterwards. Continue?',
+    lastDeliveryNoCascadeMessage: 'This GR is the last delivery. The PO will be finished afterwards. Continue?',
+    grAndPoFinished: 'GR finished, PO auto-finished',
     approveGr: 'Approve GR',
     enterConValue: 'Enter GR Value (leave empty to auto-calculate from Net cost and VAT(%)):',
     enterValidNumber: 'Enter a valid positive number',
@@ -382,12 +447,15 @@ home: {
     activeDate: 'Active Date',
     goodsServiceDescription: 'Goods/Service Description',
     confirmationName: 'Confirmation Name',
-    deliveryFrom: 'Delivery From',
-    deliveryTo: 'Delivery To',
     lastDelivery: 'Last Delivery',
+    isCancellation: 'Cancellation GR',
     confirmSubmit: 'Submit this GR for confirmation?',
     grSubmitted: 'GR submitted',
     importRules: 'Only GR records with status "Approved" or "Finished" can be imported. Required fields: PO ID, GR NO, Estimated Amount, Con Value, Delivery From, Delivery To, Status. Leave GR ID empty to auto-generate.',
+    annualReport: 'Annual Report',
+    annualReportTitle: 'Export Annual Report',
+    selectYear: 'Select Year',
+    exportingAnnual: 'Exporting...',
   },
 
   vendor: {
@@ -617,6 +685,10 @@ home: {
     allRows: 'All data ({count} total)',
     filename: 'Filename',
     dialogTitle: 'Export {type} Data',
+    format: 'Format',
+    xlsx: 'Excel (.xlsx)',
+    csv: 'CSV (.csv)',
+    formatCSVHint: 'CSV exports only the data sheet (no statistics)',
     entryType: 'Entry Type',
     sheetData: 'Data',
     sheetOverview: 'Overview',
@@ -692,12 +764,16 @@ home: {
     within4Months: 'Within 4 Months',
     within3Months: 'Within 3 Months',
     within2Months: 'Within 2 Months',
-    within1Month: 'Within 1 Month'
+    within1Month: 'Within 1 Month',
+    isCalloff: 'Call-off SC',
+    isFcPo: 'FC PO',
   },
 
   settings: {
     attachmentsDir: 'Attachments Directory',
-    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.'
+    attachmentsDirHint: 'Existing attachments stay in the old location. Only new attachments will be saved to the new path.',
+    senderEmail: 'Sender Email',
+    senderEmailHint: 'Notification emails will be sent from this Outlook account. Leave empty to use the default account.'
   },
 
   confirm: {
@@ -797,6 +873,7 @@ home: {
     contractPos: 'Contract Pos.',
     contractType: 'Contract Type',
     costCenter: 'Cost Center',
+    calloffPoId: 'Call-off PO ID',
     purchaser: 'Purchaser'
   }
 }

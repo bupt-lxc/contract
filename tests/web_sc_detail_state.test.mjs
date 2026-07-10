@@ -153,7 +153,7 @@ test("resolveScAction does not map edit to update_sc before save", () => {
 test("collectFormData omits empty optional fields and preserves numeric strings", () => {
   const controls = [
     { name: "sc_id", value: "SC1" },
-    { name: "request_type", value: "service" },
+    { name: "request_type", value: "new" },
     { name: "cost_center", value: "1001" },
     { name: "description", value: "" },
   ];
@@ -162,7 +162,7 @@ test("collectFormData omits empty optional fields and preserves numeric strings"
 
   assert.deepEqual(data, {
     sc_id: "SC1",
-    request_type: "service",
+    request_type: "new",
     cost_center: "1001",
   });
   assert.equal(Object.hasOwn(data, "description"), false);

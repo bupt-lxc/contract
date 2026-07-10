@@ -31,10 +31,10 @@ def check_custom_schedules(conn: sqlite3.Connection) -> int:
     count = 0
 
     rows = conn.execute(
-        """SELECT ncs.*, po.sc_id, sc.requester_id
+        """SELECT ncs.*, po.sc_id, COALESCE(sc.requester_id, po.requester_id) as requester_id
            FROM notification_custom_schedule ncs
            JOIN pos po ON po.po_id = ncs.entity_id
-           JOIN sc_records sc ON sc.sc_id = po.sc_id
+           LEFT JOIN sc_records sc ON sc.sc_id = po.sc_id
            WHERE ncs.entity_type = 'po'
              AND ncs.enabled = 1
              AND po.status IN ('active', 'finished')

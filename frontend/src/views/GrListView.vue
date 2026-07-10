@@ -2,6 +2,8 @@
   <div>
     <AdvancedFilterBar
       :filter-config="grFilterConfig"
+      v-model:text="state.text"
+      v-model:filters="state.filters"
       @filter="handleFilter"
       @reset="handleReset"
     />
@@ -19,6 +21,9 @@
       <el-button @click="handleExport" :loading="exporting">
         <el-icon><Download /></el-icon> {{ $t('common.export') }}
       </el-button>
+      <el-button v-if="isAdmin" @click="openAnnualReportDialog">
+        <el-icon><Download /></el-icon> {{ $t('gr.annualReport') }}
+      </el-button>
     </div>
 
     <div v-if="selectedRows.length" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f0f9ff;border-radius:4px">
@@ -27,7 +32,7 @@
       <el-button v-if="isAdmin && selectedRows.some(r => r.status === 'manager_confirm')" size="small" type="primary" @click="handleBatchConfirm">{{ $t('batch.confirm') }}</el-button>
     </div>
 
-    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val" @sort-change="onSortChange" :default-sort="{ prop: 'created_at', order: 'descending' }">
+    <el-table :data="state.rows" v-loading="state.loading" stripe border @selection-change="val => selectedRows = val" @sort-change="handleSortChange" :default-sort="{ prop: 'created_at', order: 'descending' }">
       <el-table-column type="selection" width="50" />
       <el-table-column :label="$t('common.status')" width="100" prop="status" sortable>
         <template #default="{ row }"><StatusBadge :status="row.status" /></template>
@@ -64,14 +69,11 @@
       <el-table-column prop="confirmation_name" :label="$t('gr.confirmationName')" width="130" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.confirmation_name || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="delivery_from" :label="$t('gr.deliveryFrom')" width="110" sortable>
-        <template #default="{ row }">{{ (row.delivery_from || '').slice(0, 10) || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="delivery_to" :label="$t('gr.deliveryTo')" width="110" sortable>
-        <template #default="{ row }">{{ (row.delivery_to || '').slice(0, 10) || '-' }}</template>
-      </el-table-column>
       <el-table-column prop="last_delivery" :label="$t('gr.lastDelivery')" width="100" sortable>
         <template #default="{ row }">{{ row.last_delivery || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="is_cancellation" :label="$t('gr.isCancellation')" width="100" sortable>
+        <template #default="{ row }">{{ row.is_cancellation === 'Y' ? $t('common.yes') : $t('common.no') }}</template>
       </el-table-column>
       <el-table-column prop="remark" :label="$t('gr.remark')" width="120" show-overflow-tooltip sortable>
         <template #default="{ row }">{{ row.remark || '-' }}</template>
@@ -94,8 +96,9 @@
     </el-table>
 
     <el-pagination
-      :current-page="state.currentPage"
-      :page-size="state.pageSize"
+      v-model:current-page="state.currentPage"
+      v-model:page-size="state.pageSize"
+      :page-sizes="[10, 25, 50, 100]"
       :total="state.total"
       layout="total, sizes, prev, pager, next, jumper"
       @current-change="handlePageChange"
@@ -153,7 +156,7 @@
       entity-type="GR"
       :columns="grImportColumns"
       :rules-text="$t('gr.importRules')"
-      @imported="searchGrs"
+      @imported="reload"
     />
 
     <BatchProgressModal
@@ -166,6 +169,7 @@
     <ExportDialog
       v-model:visible="exportDialogVisible"
       entity-type="gr"
+      :text="state.text"
       :filters="state.filters"
       :sort="state.sort"
       :direction="state.direction"
@@ -173,11 +177,37 @@
       :filtered-count="state.total"
       :total-count="state.total"
     />
+    <!-- Annual Report Export Dialog -->
+    <el-dialog
+      v-model="annualReportVisible"
+      :title="$t('gr.annualReportTitle')"
+      width="360px"
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('gr.selectYear')">
+          <el-date-picker
+            v-model="annualReportYear"
+            type="year"
+            placeholder="YYYY"
+            format="YYYY"
+            value-format="YYYY"
+            :clearable="false"
+            style="width:100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="annualReportVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="annualExporting" @click="handleAnnualExport">
+          {{ $t('common.export') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Plus, Download, Upload } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
@@ -198,10 +228,13 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const isAdmin = computed(() => window.__currentUser?.role === 'admin')
-const { state, searchGrs, setFilters, resetFilters, onSortChange, onPageChange, onPageSizeChange } = useGr()
-const { exportAll, exportMultiSheet } = useExport()
+const { state, searchGrs, initializeFromRoute, restoreFromRoute, applyFilter, changePage, changePageSize, changeSort, reset, reload, exportCriteria } = useGr()
+const { exportAll, exportMultiSheet, exportRows } = useExport()
 const exporting = ref(false)
 const exportDialogVisible = ref(false)
+const annualReportVisible = ref(false)
+const annualReportYear = ref(new Date().getFullYear().toString())
+const annualExporting = ref(false)
 
 const grStatuses = [
   { label: t('status.manager_confirm'), value: 'manager_confirm' },
@@ -249,9 +282,8 @@ const grFilterConfig = [
   { name: 'approved_date', label: t('filter.approvedDate'), type: 'date-range' },
   { name: 'goods_service_description', label: t('gr.goodsServiceDescription'), type: 'input' },
   { name: 'confirmation_name', label: t('gr.confirmationName'), type: 'input' },
-  { name: 'delivery_from', label: t('gr.deliveryFrom'), type: 'date-range' },
-  { name: 'delivery_to', label: t('gr.deliveryTo'), type: 'date-range' },
   { name: 'last_delivery', label: t('gr.lastDelivery'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
+  { name: 'is_cancellation', label: t('gr.isCancellation'), type: 'select', options: [{ label: t('common.yes'), value: 'Y' }, { label: t('common.no'), value: 'N' }] },
   { name: 'deadline', label: t('filter.deadline'), type: 'select', options: deadlineOptions },
 ]
 
@@ -265,20 +297,33 @@ function handleFilter({ text, filters }) {
     }
   }
   delete transformed.deadline
-  searchGrs(text, transformed)
+  selectedRows.value = []
+  applyFilter(text || null, Object.keys(transformed).length ? transformed : null)
 }
 
 function handleReset() {
-  resetFilters()
-  searchGrs()
+  selectedRows.value = []
+  reset()
+}
+
+function handleSortChange(sort) {
+  changeSort(sort)
+  reload()
+}
+
+function handlePageChange(page) {
+  selectedRows.value = []
+  changePage(page)
+}
+
+function handleSizeChange(size) {
+  selectedRows.value = []
+  changePageSize(size)
 }
 
 function goToDetail(row) {
-  router.push(`/sc/${row.sc_id}/po/${row.po_id}/gr/${row.gr_id}`)
+  router.push({ name: 'gr-detail', params: { scId: row.sc_id, poId: row.po_id, grId: row.gr_id }, query: { returnTo: route.fullPath } })
 }
-
-function handlePageChange(page) { onPageChange(page); searchGrs() }
-function handleSizeChange(size) { onPageSizeChange(size); searchGrs() }
 
 // ── Create GR with SC→PO selection ──
 const grSelectVisible = ref(false)
@@ -299,7 +344,7 @@ async function loadEligibleScs() {
       limit: 500, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
-    eligibleScs.value = result.rows || result || []
+    eligibleScs.value = (result.rows || result || []).filter(sc => sc.request_type !== 'FC')
   } catch { eligibleScs.value = [] }
 }
 
@@ -309,7 +354,7 @@ async function onGrScChange(scId) {
   if (!scId) return
   try {
     const result = await callApi('search_pos', {
-      filters: { sc_id: scId },
+      filters: { sc_id: scId, is_fc_po: '0' },
       limit: 200, offset: 0,
       sort: 'created_at', direction: 'desc'
     })
@@ -345,7 +390,7 @@ async function handleGrSave(data) {
     await callApi('create_gr', { data: payload })
     ElMessage.success(t('common.saved'))
     grDialogVisible.value = false
-    await searchGrs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -365,7 +410,7 @@ async function handleGrSaveDraft(data) {
     await callApi('create_gr', { data: payload })
     ElMessage.success(t('po.draftSaved'))
     grDialogVisible.value = false
-    await searchGrs()
+    await reload()
   } catch (e) {
     ElMessage.error(e.message)
     throw e
@@ -403,7 +448,7 @@ async function handleBatchSubmit() {
   const summary = await runBatch(selectedRows.value, 'submit', async (row) => {
     await callApi('submit_gr', { gr_id: row.gr_id })
   }, t)
-  if (summary) await searchGrs()
+  if (summary) await reload()
   showBatchResult(summary, 'submit')
 }
 
@@ -412,7 +457,7 @@ async function handleBatchConfirm() {
   const summary = await runBatch(selectedRows.value, 'confirm', async (row) => {
     await callApi('confirm_gr', { gr_id: row.gr_id })
   }, t)
-  if (summary) await searchGrs()
+  if (summary) await reload()
   showBatchResult(summary, 'confirm')
 }
 
@@ -420,12 +465,66 @@ function handleExport() {
   exportDialogVisible.value = true
 }
 
+function openAnnualReportDialog() {
+  annualReportYear.value = new Date().getFullYear().toString()
+  annualReportVisible.value = true
+}
+
+async function handleAnnualExport() {
+  annualExporting.value = true
+  try {
+    const year = annualReportYear.value || new Date().getFullYear().toString()
+    const result = await callApi('get_gr_annual_report', { year })
+    const rows = result.rows || []
+
+    // Build column definitions matching the spec
+    const templateColumns = [
+      { key: 'cost_center', label: 'cost center' },
+      { key: 'status', label: 'Status', getValue: (row) => row.status === 'finished' ? 'Finished' : 'Approved' },
+      { key: 'po_no', label: 'PO number' },
+      { key: 'confirmation_name', label: 'Confirmation number' },
+      { key: 'gr_no', label: 'GR NO' },
+      { key: 'con_value', label: 'GR Value' },
+      { key: 'goods_service_description', label: 'GR Description' },
+      { key: 'requester_name', label: 'GR Requester' },
+      { key: '__sending_gr_date', label: 'Sending GR date', getValue: () => '' },
+      { key: '__finished_date', label: 'Finished Date', getValue: () => '' },
+      { key: '__provision', label: 'provision', getValue: () => '' },
+      { key: '__provision_net', label: 'Provision amount NET', getValue: () => '' },
+    ]
+
+    // Collect remaining GR field names, excluding those already in templateColumns
+    const usedKeys = new Set([
+      'cost_center', 'status', 'po_no', 'confirmation_name', 'gr_no',
+      'con_value', 'goods_service_description', 'requester_name',
+      'sc_id',
+    ])
+    let remainingKeys = []
+    if (rows.length > 0) {
+      remainingKeys = Object.keys(rows[0]).filter(k => !usedKeys.has(k) && !k.startsWith('_'))
+    }
+
+    const allColumns = [
+      ...templateColumns,
+      ...remainingKeys.map(k => ({ key: k, label: k })),
+    ]
+
+    const saveResult = await exportRows(rows, allColumns, `GR_Annual_Report_${year}`)
+    if (saveResult?.cancelled) return
+    ElMessage.success(t('msg.exportedSuccessfully'))
+    annualReportVisible.value = false
+  } catch (e) {
+    ElMessage.error(e.message || t('msg.exportFailed'))
+  } finally {
+    annualExporting.value = false
+  }
+}
+
 // GR import
 const importVisible = ref(false)
 
 const grImportColumns = [
-  { prop: 'gr_id', label: 'GR ID', width: '160' },
-  { prop: 'po_id', label: 'PO ID', width: '160' },
+  { prop: 'po_no', label: t('po.poNo'), width: '120' },
   { prop: 'gr_no', label: t('gr.grNo'), width: '120' },
   { prop: 'requester_id', label: t('gr.requester'), width: '100' },
   { prop: 'estimated_amount', label: t('gr.estimatedAmount'), width: '110' },
@@ -436,8 +535,6 @@ const grImportColumns = [
   { prop: 'gross_cost', label: t('gr.grossCost'), width: '100' },
   { prop: 'goods_service_description', label: t('gr.goodsServiceDescription'), minWidth: '140' },
   { prop: 'confirmation_name', label: t('gr.confirmationName'), width: '120' },
-  { prop: 'delivery_from', label: t('gr.deliveryFrom'), width: '110' },
-  { prop: 'delivery_to', label: t('gr.deliveryTo'), width: '110' },
   { prop: 'last_delivery', label: t('gr.lastDelivery'), width: '110' },
 ]
 
@@ -452,13 +549,29 @@ async function downloadTemplate() {
   }
 }
 
+// Route state management
+let restoringFromRoute = false
+
+async function restoreListFromRoute() {
+  restoringFromRoute = true
+  try {
+    selectedRows.value = []
+    await restoreFromRoute(route)
+  } finally {
+    restoringFromRoute = false
+  }
+}
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (restoringFromRoute) return
+    await restoreListFromRoute()
+  },
+)
+
 onMounted(async () => {
   try { activeUsers.value = await callApi('list_users') } catch {}
-  const filters = {}
-  if (route.query.status) {
-    filters.status = route.query.status
-    setFilters(filters)
-  }
-  await Promise.all([searchGrs(null, Object.keys(filters).length ? filters : null), loadEligibleScs()])
+  await Promise.all([initializeFromRoute(route, router), loadEligibleScs()])
 })
 </script>

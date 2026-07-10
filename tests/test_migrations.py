@@ -1,7 +1,14 @@
 import sqlite3
+from pathlib import Path
 
 from sc_gr_app.db.connection import connect
-from sc_gr_app.db.migrations import migrate
+from sc_gr_app.db.migrations import SCHEMA_VERSION, migrate
+
+
+EXPECTED_MIGRATION_VERSIONS = [
+    *range(1, 6),
+    *range(7, SCHEMA_VERSION + 1),
+]
 
 
 def test_migration_creates_core_tables(app_config):
@@ -48,7 +55,7 @@ def test_migration_records_versions_once(app_config):
             "select version, applied_at from schema_migrations order by version"
         ).fetchall()
 
-    assert [row[0] for row in rows] == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    assert [row[0] for row in rows] == EXPECTED_MIGRATION_VERSIONS
     assert rows[0][1]
     assert rows[1][1]
 
@@ -64,7 +71,9 @@ def test_migration_records_version_two(app_config):
             )
         ]
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    assert versions == EXPECTED_MIGRATION_VERSIONS
+    assert max(versions) == SCHEMA_VERSION
+
 
 def test_sc_records_supports_draft_and_nullable_business_fields(app_config):
     migrate(app_config)
@@ -286,7 +295,7 @@ def test_migration_repairs_recorded_v2_without_business_field_check(app_config):
         else:
             raise AssertionError("repaired v2 should reject missing business fields")
 
-    assert versions == [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    assert versions == EXPECTED_MIGRATION_VERSIONS
 
 def test_migration_reports_invalid_recorded_v2_sc_rows_before_rebuild(app_config):
     with connect(app_config) as conn:
@@ -711,3 +720,200 @@ def test_migrate_skips_backup_when_no_pending_migrations(app_config):
 
     after_baks = set(db_path.parent.glob(f"{db_path.stem}_*.sqlite3.bak"))
     assert after_baks == existing_baks
+
+
+def test_migration_v35(fresh_db, app_config):
+    """v35: remaps request_type, renames service_scope values, adds service_scope column."""
+    conn = fresh_db
+    # Seed old-style data
+    conn.execute(
+        "INSERT INTO users (user_id, machine_id, user_name, role, created_at, updated_at) "
+        "VALUES ('U1', 'M1', 'Test', 'admin', '2026-01-01', '2026-01-01')"
+    )
+    conn.execute(
+        "INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) "
+        "VALUES ('V1', 'Test Vendor', 'engineering Service', 'U1', '2026-01-01', '2026-01-01')"
+    )
+    conn.execute(
+        "INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at) "
+        "VALUES ('V2', 'Test Vendor 2', 'Maintenance', 'U1', '2026-01-01', '2026-01-01')"
+    )
+
+    from sc_gr_app.db.migrations import _migrate_v35
+    # Manually set version
+    conn.execute("DELETE FROM schema_migrations WHERE version = 35")
+    _migrate_v35(conn)
+
+    # Verify vendor service_scope renamed
+    row = conn.execute("SELECT service_scope FROM vendors WHERE vendor_id = 'V1'").fetchone()
+    assert row["service_scope"] == "Engineering Service"
+    row = conn.execute("SELECT service_scope FROM vendors WHERE vendor_id = 'V2'").fetchone()
+    assert row["service_scope"] == "Maintenance&Calibration"
+
+    # Verify service_scope column exists on sc_records
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(sc_records)")}
+    assert "service_scope" in cols
+
+
+def test_migration_backfills_missing_old_versions_without_rebuilding_newer_gr_schema(fresh_db, app_config):
+    """Missing old migration records should not drop newer v38 cancellation data."""
+    conn = fresh_db
+    conn.execute("DELETE FROM schema_migrations WHERE version IN (34, 35)")
+    conn.execute(
+        """
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          status, created_by, created_at, is_cancellation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "GR-CANCEL",
+            "GR-CANCEL",
+            "PO-SEED",
+            "U000001",
+            -100,
+            -100,
+            "draft",
+            "U000001",
+            "2026-01-01",
+            "Y",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as verify_conn:
+        versions = [
+            row[0]
+            for row in verify_conn.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            )
+        ]
+        row = verify_conn.execute(
+            "SELECT is_cancellation FROM gr_requests WHERE gr_id = ?",
+            ("GR-CANCEL",),
+        ).fetchone()
+
+    assert versions == EXPECTED_MIGRATION_VERSIONS
+    assert row[0] == "Y"
+
+
+def test_migration_v38_preserves_existing_cancellation_values(fresh_db, app_config):
+    conn = fresh_db
+    conn.execute("DELETE FROM schema_migrations WHERE version = 38")
+    conn.execute(
+        """
+        INSERT INTO gr_requests (
+          gr_id, gr_no, po_id, requester_id, estimated_amount, con_value,
+          status, created_by, created_at, is_cancellation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "GR-CANCEL-V38",
+            "GR-CANCEL-V38",
+            "PO-SEED",
+            "U000001",
+            -100,
+            -100,
+            "draft",
+            "U000001",
+            "2026-01-01",
+            "Y",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as verify_conn:
+        row = verify_conn.execute(
+            "SELECT is_cancellation FROM gr_requests WHERE gr_id = ?",
+            ("GR-CANCEL-V38",),
+        ).fetchone()
+
+    assert row[0] == "Y"
+
+
+def test_migration_creates_po_manual_amounts_table(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        columns = {
+            row[1]: row[2]
+            for row in conn.execute("PRAGMA table_info(po_manual_amounts)")
+        }
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(po_manual_amounts)")
+        }
+
+    assert columns.items() >= {
+        "manual_amount_id": "TEXT",
+        "po_id": "TEXT",
+        "year": "TEXT",
+        "type": "TEXT",
+        "amount": "REAL",
+        "created_by": "TEXT",
+        "created_at": "TEXT",
+    }.items()
+    assert "idx_po_manual_amounts_po_id" in indexes
+
+
+def test_schema_sql_includes_po_manual_amounts():
+    schema_sql = Path("sc_gr_app/db/schema.sql").read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS po_manual_amounts" in schema_sql
+    assert "UNIQUE(po_id, year, type)" in schema_sql
+    assert "idx_po_manual_amounts_po_id" in schema_sql
+
+
+def test_po_manual_amounts_constraints(app_config):
+    migrate(app_config)
+
+    with sqlite3.connect(app_config.db_path) as conn:
+        conn.executescript(
+            """
+            INSERT INTO users (user_id, machine_id, user_name, role, email, status, created_at, updated_at)
+            VALUES ('U1', 'M1', 'Requester', 'requester', 'u1@test.local', 'active', '2026-01-01', '2026-01-01');
+
+            INSERT INTO vendors (vendor_id, vendor_name, service_scope, created_by, created_at, updated_at)
+            VALUES ('V1', 'Vendor', 'General', 'U1', '2026-01-01', '2026-01-01');
+
+            INSERT INTO pos (po_id, vendor_id, requester_id, po_amount, status, created_at, updated_at)
+            VALUES ('PO1', 'V1', 'U1', 100, 'active', '2026-01-01', '2026-01-01');
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO po_manual_amounts (
+              manual_amount_id, po_id, year, type, amount, created_by, created_at
+            ) VALUES ('PMA-1', 'PO1', '2025', 'provision', -10, 'U1', '2026-01-01')
+            """
+        )
+        try:
+            conn.execute(
+                """
+                INSERT INTO po_manual_amounts (
+                  manual_amount_id, po_id, year, type, amount, created_by, created_at
+                ) VALUES ('PMA-2', 'PO1', '2025', 'provision', 20, 'U1', '2026-01-01')
+                """
+            )
+        except sqlite3.IntegrityError as exc:
+            assert "UNIQUE" in str(exc)
+        else:
+            raise AssertionError("duplicate manual amount was accepted")
+        try:
+            conn.execute(
+                """
+                INSERT INTO po_manual_amounts (
+                  manual_amount_id, po_id, year, type, amount, created_by, created_at
+                ) VALUES ('PMA-3', 'PO1', '25', 'provision', 20, 'U1', '2026-01-01')
+                """
+            )
+        except sqlite3.IntegrityError as exc:
+            assert "CHECK" in str(exc)
+        else:
+            raise AssertionError("invalid year was accepted")

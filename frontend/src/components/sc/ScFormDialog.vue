@@ -5,6 +5,12 @@
     width="640px"
     @update:model-value="$emit('update:visible', $event)"
   >
+    <el-alert v-if="calloffPoId" type="info" :closable="false" style="margin-bottom: 16px">
+      <template #title>
+        {{ $t('sc.calloffPoId') }}: {{ calloffPoInfo?.po_id || calloffPoId }}
+        ({{ $t('po.openPoAmountFc') }}: {{ calloffPoInfo?.open_po_amount }})
+      </template>
+    </el-alert>
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-row :gutter="16">
         <el-col :span="24">
@@ -24,7 +30,29 @@
         <el-col :span="12">
           <el-form-item :label="$t('sc.requestType')" prop="request_type">
             <el-select v-model="form.request_type">
-              <el-option v-for="t in requestTypes" :key="t" :label="t" :value="t" />
+              <el-option v-for="t in requestTypes" :key="t" :label="requestTypeLabel(t) || t" :value="t" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('sc.assignees')" prop="assignee_ids">
+            <el-select v-model="form.assignee_ids" multiple filterable
+                       :placeholder="$t('sc.assigneesPlaceholder')"
+                       style="width: 100%">
+              <el-option v-for="user in availableAssignees" :key="user.user_id"
+                         :label="user.user_name" :value="user.user_id"
+                         :disabled="user.user_id === form.requester_id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item :label="$t('vendor.serviceScope')">
+            <el-select v-model="form.service_scope" clearable>
+              <el-option v-for="s in serviceScopes" :key="s" :label="s" :value="s" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -148,6 +176,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Paperclip } from '@element-plus/icons-vue'
 import { callApi } from '@/api/bridge.js'
+import { requestTypeLabel } from '@/composables/useRequestType.js'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
@@ -157,12 +186,29 @@ const props = defineProps({
   mode: { type: String, default: 'create' },
   record: { type: Object, default: null },
   users: { type: Array, default: () => [] },
-  vendors: { type: Array, default: () => [] }
+  vendors: { type: Array, default: () => [] },
+  calloffPoId: { type: String, default: null },
+  calloffPoInfo: { type: Object, default: null }
 })
 
 const emit = defineEmits(['update:visible', 'save-draft', 'save-submit'])
 
-const requestTypes = ['material', 'service', 'fixed_asset', 'FC']
+const requestTypes = computed(() => {
+  const types = ['FC', 'call_off', 'new']
+  if (props.calloffPoId) return types.filter(t => t !== 'FC')
+  return types
+})
+
+const serviceScopes = [
+  'Transportation', 'Engineering Service', 'Equipment', 'Parts', 'Driver',
+  'Test car rental', 'General Service', 'Dealers', 'Import&Export&cusoms clearance',
+  'Insurance', 'Harness', 'Maintenance&Calibration', 'Security', 'Testing support', 'Others'
+]
+
+const availableAssignees = computed(() => {
+  return (props.users || []).filter(u => u.user_id !== form.requester_id)
+})
+
 const formRef = ref()
 const submitting = ref(false)
 const pickedFiles = ref([])
@@ -177,10 +223,12 @@ const emptyForm = () => ({
   service_period_end: null,
   description: '',
   vendor_ids: [],
+  assignee_ids: [],
   asset: 'N',
   asset_nums: '',
   internal_system_number: '',
-  currency: 'CNY'
+  currency: 'CNY',
+  service_scope: ''
 })
 
 const form = reactive(emptyForm())
@@ -217,9 +265,17 @@ watch(() => props.visible, (val) => {
       if (props.record.vendors?.length) {
         form.vendor_ids = props.record.vendors.map(v => v.vendor_id)
       }
+      // Populate assignee_ids from the assignees array in detail
+      form.assignee_ids = (props.record.assignees || []).map(a => a.user_id)
+      if (props.calloffPoId) {
+        form.request_type = 'call_off'
+      }
     } else {
       Object.assign(form, emptyForm())
       form.requester_id = currentUser.value?.user_id || ''
+      if (props.calloffPoId) {
+        form.request_type = 'call_off'
+      }
     }
     _setRules(draftRules)
   }
@@ -235,7 +291,23 @@ async function handlePickFiles() {
 }
 
 function _savePayload() {
-  return { ...form, vendor_ids: form.vendor_ids || [], _attachments: pickedFiles.value.map(f => f.path) }
+  const data = { ...form, vendor_ids: form.vendor_ids || [], _attachments: pickedFiles.value.map(f => f.path) }
+  if (props.calloffPoId) {
+    data.calloff_po_id = props.calloffPoId
+  }
+  return data
+}
+
+function _validateCalloffAmount() {
+  if (props.calloffPoId && props.calloffPoInfo?.open_po_amount != null) {
+    const openAmount = Number(props.calloffPoInfo.open_po_amount)
+    const scAmount = Number(form.sc_amount)
+    if (!isNaN(openAmount) && !isNaN(scAmount) && scAmount > openAmount) {
+      ElMessage.error(t('sc.scAmountExceedsOpenPoAmount'))
+      return false
+    }
+  }
+  return true
 }
 
 async function saveDraft() {
@@ -245,9 +317,9 @@ async function saveDraft() {
   try {
     await formRef.value.validate()
   } catch (err) {
-    console.log('saveDraft validation failed:', err)
     return
   }
+  if (!_validateCalloffAmount()) return
   submitting.value = true
   try {
     emit('save-draft', _savePayload())
@@ -266,10 +338,10 @@ async function saveSubmit() {
     try {
       await formRef.value.validate()
     } catch (err) {
-      console.log('saveSubmit validation failed:', err)
       return
     }
   }
+  if (!_validateCalloffAmount()) return
   submitting.value = true
   try {
     emit('save-submit', _savePayload())

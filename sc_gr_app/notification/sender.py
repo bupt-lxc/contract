@@ -53,11 +53,11 @@ def _attach_budget_info(
             """
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN status = 'approved'
+                                 THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
+              COALESCE(SUM(CASE WHEN status IN ('approved', 'finished')
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN COALESCE(gross_cost, estimated_amount)
+                                 THEN COALESCE(gross_cost, estimated_amount, 0)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
@@ -69,6 +69,22 @@ def _attach_budget_info(
         approved = gr_totals["con_value_total"] or 0
         pending_incl_tax = gr_totals["pending_total_incl_tax"] or 0
         entity_info["open_po_amount"] = po_amount - pending - approved
+
+        # Deduct call-off SC amounts for FC-type POs
+        is_fc = entity_info.get("request_type") == "FC"
+        if not is_fc and entity_info.get("sc_id"):
+            sc_row = conn.execute(
+                "SELECT request_type FROM sc_records WHERE sc_id = ?",
+                (entity_info["sc_id"],),
+            ).fetchone()
+            is_fc = sc_row and sc_row["request_type"] == "FC"
+        if is_fc:
+            calloff_allocated = conn.execute(
+                "SELECT COALESCE(SUM(sc_amount), 0) FROM sc_records WHERE calloff_po_id = ?",
+                (entity_id,),
+            ).fetchone()[0]
+            entity_info["open_po_amount"] = max(0, po_amount - calloff_allocated)
+
         entity_info["consumed_amount"] = approved
         entity_info["pending_total"] = pending
         entity_info["pending_total_incl_tax"] = pending_incl_tax
@@ -79,7 +95,7 @@ def _attach_budget_info(
             SELECT
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gr.con_value, gr.estimated_amount) ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN gr.status = 'approved'
+              COALESCE(SUM(CASE WHEN gr.status IN ('approved', 'finished')
                                  THEN gr.con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN gr.status IN ('pending', 'manager_confirm')
                                  THEN COALESCE(gr.gross_cost, gr.estimated_amount)
@@ -136,11 +152,11 @@ def _attach_child_pos(
             """
             SELECT
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN estimated_amount ELSE 0 END), 0) AS pending_total,
-              COALESCE(SUM(CASE WHEN status = 'approved'
+                                 THEN coalesce(estimated_amount, 0) ELSE 0 END), 0) AS pending_total,
+              COALESCE(SUM(CASE WHEN status IN ('approved', 'finished')
                                  THEN con_value ELSE 0 END), 0) AS con_value_total,
               COALESCE(SUM(CASE WHEN status IN ('pending', 'manager_confirm')
-                                 THEN COALESCE(gross_cost, estimated_amount)
+                                 THEN COALESCE(gross_cost, estimated_amount, 0)
                                  ELSE 0 END), 0) AS pending_total_incl_tax
             FROM gr_requests
             WHERE po_id = ?
@@ -169,7 +185,7 @@ def _attach_child_grs(
     rows = conn.execute(
         """
         SELECT gr_id, gr_no, estimated_amount, con_value, gross_cost, status,
-               goods_service_description, delivery_from, delivery_to
+               goods_service_description
         FROM gr_requests
         WHERE po_id = ?
         ORDER BY gr_no
@@ -368,6 +384,21 @@ def send_entry(conn: sqlite3.Connection, entry: dict) -> bool:
     try:
         outlook = win32com.client.Dispatch("Outlook.Application")
         mail = outlook.CreateItem(0)  # 0 = olMailItem
+
+        # Use configured sender account, defaulting to pomp@audi.com.cn
+        sender_email = conn.execute(
+            "SELECT setting_value FROM app_settings WHERE setting_key = 'notify.sender_email'"
+        ).fetchone()
+        target = (
+            sender_email["setting_value"]
+            if sender_email and sender_email["setting_value"]
+            else "pomp@audi.com.cn"
+        ).strip().lower()
+        for acc in outlook.Session.Accounts:
+            if acc.SmtpAddress and acc.SmtpAddress.lower() == target:
+                mail.SendUsingAccount = acc
+                break
+
         mail.Subject = subject
         mail.HTMLBody = body
         mail.To = "; ".join(to_addresses)
