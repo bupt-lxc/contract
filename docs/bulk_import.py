@@ -109,8 +109,9 @@ if po_rows:
         r["po_id"] = ""          # let import service auto-generate
         r["sc_id"] = ""           # let _resolve_po_sc_id resolve by sc_no
         sc_no = (r.get("sc_no") or "").strip()
-        # FC-type POs don't need a parent SC — leave sc_no empty
+        # FC-type POs don't need a parent SC — leave sc_id null
         if (r.get("request_type") or "").strip() == "FC":
+            r["sc_id"] = None
             continue
         if not sc_no:
             po_no = (r.get("po_no") or "").strip()

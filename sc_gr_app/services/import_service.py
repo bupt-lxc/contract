@@ -227,7 +227,7 @@ def _validate_po_rows(conn, rows: list[dict]) -> list[dict]:
         if _is_template_meta_row(row, "po_id"):
             continue
         sc_error = _resolve_po_sc_id(conn, row)
-        if not row.get("sc_id") and not row.get("sc_no"):
+        if not row.get("sc_id") and not row.get("sc_no") and row.get("request_type") != "FC":
             errors.append({"row": i, "field": "sc_no", "message": "sc_no is required"})
         elif sc_error:
             errors.append({"row": i, "field": "sc_no", "message": sc_error})
@@ -569,7 +569,7 @@ def preview_po_import(config: AppConfig, rows: list[dict]) -> list[dict]:
                 continue
             errors_list = []
             sc_error = _resolve_po_sc_id(conn, row)
-            if not row.get("sc_id") and not row.get("sc_no"):
+            if not row.get("sc_id") and not row.get("sc_no") and row.get("request_type") != "FC":
                 errors_list.append("sc_no is required")
             elif sc_error:
                 errors_list.append(sc_error)
