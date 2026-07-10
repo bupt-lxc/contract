@@ -109,6 +109,9 @@ if po_rows:
         r["po_id"] = ""          # let import service auto-generate
         r["sc_id"] = ""           # let _resolve_po_sc_id resolve by sc_no
         sc_no = (r.get("sc_no") or "").strip()
+        # FC-type POs don't need a parent SC — leave sc_no empty
+        if (r.get("request_type") or "").strip() == "FC":
+            continue
         if not sc_no:
             po_no = (r.get("po_no") or "").strip()
             if po_no and po_no in sc_lookup:
@@ -116,12 +119,16 @@ if po_rows:
                 print(f"  [RESOLVE] PO {po_no} -> SC {sc_lookup[po_no]}")
                 po_resolved += 1
 
-    # Filter out rows that still don't have sc_no (can't be linked to any SC)
-    valid_po_rows = [r for r in po_rows if (r.get("sc_no") or "").strip()]
+    # Filter out rows that still don't have sc_no (FC POs don't need one)
+    def _has_sc_no_or_is_fc(r):
+        if (r.get("request_type") or "").strip() == "FC":
+            return True
+        return bool((r.get("sc_no") or "").strip())
+    valid_po_rows = [r for r in po_rows if _has_sc_no_or_is_fc(r)]
     po_skipped = len(po_rows) - len(valid_po_rows)
 
     if po_skipped:
-        skipped_nos = [r.get("po_no", "?") for r in po_rows if not (r.get("sc_no") or "").strip()]
+        skipped_nos = [r.get("po_no", "?") for r in po_rows if not _has_sc_no_or_is_fc(r)]
         print(f"  [SKIP] {po_skipped} PO rows with no sc_no match: {skipped_nos}")
 
     if valid_po_rows:

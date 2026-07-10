@@ -105,7 +105,7 @@ def compute_po_fc_budget_decimal(config: AppConfig, po_id: str) -> dict[str, Dec
             ).fetchone()
             if sc is None:
                 raise NotFound(f"PO references non-existent SC: {po['sc_id']}")
-            if sc["request_type"] != "FC":
+            if sc["request_type"] != "FC" and po["request_type"] != "FC":
                 raise ValidationError("PO is not under an FC-type SC")
         elif po["request_type"] != "FC":
             raise ValidationError("PO is not an FC-type PO")

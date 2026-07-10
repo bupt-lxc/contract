@@ -55,8 +55,13 @@
     <el-table-column prop="service_period_end" :label="$t('sc.endDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.service_period_end) }}</template>
     </el-table-column>
-    <el-table-column prop="internal_system_number" :label="$t('sc.internalSystemNumber')" width="130" show-overflow-tooltip>
-      <template #default="{ row }">{{ row.internal_system_number || '-' }}</template>
+    <el-table-column prop="internal_system_number" :label="$t('sc.internalSystemNumber')" width="130">
+      <template #default="{ row }">
+        <el-button v-if="row.calloff_po_id && row.internal_system_number" type="primary" link size="small" @click.stop="$router.push({ name: 'po-detail-independent', params: { poId: row.calloff_po_id } })">
+          {{ row.internal_system_number }}
+        </el-button>
+        <span v-else>{{ row.internal_system_number || '-' }}</span>
+      </template>
     </el-table-column>
     <el-table-column prop="asset" :label="$t('sc.asset')" sortable="custom" width="55" align="center" />
     <el-table-column prop="asset_nums" :label="$t('sc.assetNums')" width="85" show-overflow-tooltip>

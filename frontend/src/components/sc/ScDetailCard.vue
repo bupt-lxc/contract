@@ -17,7 +17,12 @@
     <el-descriptions-item :label="$t('sc.servicePeriodEnd')">{{ formatDate(sc.service_period_end) }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.asset')">{{ sc.asset || '-' }}</el-descriptions-item>
     <el-descriptions-item :label="$t('sc.assetNums')">{{ sc.asset_nums || '-' }}</el-descriptions-item>
-    <el-descriptions-item :label="$t('sc.internalSystemNumber')">{{ sc.internal_system_number || '-' }}</el-descriptions-item>
+    <el-descriptions-item :label="$t('sc.internalSystemNumber')">
+      <el-button v-if="sc.calloff_po_id && sc.internal_system_number" type="primary" link size="small" @click="$router.push({ name: 'po-detail-independent', params: { poId: sc.calloff_po_id } })">
+        {{ sc.internal_system_number }}
+      </el-button>
+      <span v-else>{{ sc.internal_system_number || '-' }}</span>
+    </el-descriptions-item>
     <el-descriptions-item :label="$t('sc.description')" :span="2">{{ sc.description || '-' }}</el-descriptions-item>
   </el-descriptions>
 </template>
