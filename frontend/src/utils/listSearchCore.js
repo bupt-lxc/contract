@@ -8,20 +8,22 @@ function sameQuery(a, b) {
   return JSON.stringify(a || {}) === JSON.stringify(b || {});
 }
 
-export function createListSearchCore(config, callApi) {
+export function createListSearchCore(config, callApi, state) {
   let requestSeq = 0;
-  const state = {
-    rows: [],
-    total: 0,
-    loading: false,
-    error: null,
-    text: null,
-    filters: {},
-    sort: config.defaultSort,
-    direction: config.defaultDirection,
-    pageSize: config.defaultPageSize,
-    currentPage: 1,
-  };
+  if (!state) {
+    state = {
+      rows: [],
+      total: 0,
+      loading: false,
+      error: null,
+      text: null,
+      filters: {},
+      sort: config.defaultSort,
+      direction: config.defaultDirection,
+      pageSize: config.defaultPageSize,
+      currentPage: 1,
+    };
+  }
 
   function assignListState(next) {
     state.text = next.text || null;
