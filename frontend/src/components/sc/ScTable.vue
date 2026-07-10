@@ -49,10 +49,10 @@
         <AmountDisplay :value="row.sc_amount" :currency="row.currency" />
       </template>
     </el-table-column>
-    <el-table-column prop="service_period_start" :label="$t('sc.startDate')" width="100">
+    <el-table-column prop="service_period_start" :label="$t('sc.startDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.service_period_start) }}</template>
     </el-table-column>
-    <el-table-column prop="service_period_end" :label="$t('sc.endDate')" width="100">
+    <el-table-column prop="service_period_end" :label="$t('sc.endDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.service_period_end) }}</template>
     </el-table-column>
     <el-table-column prop="asset" :label="$t('sc.asset')" sortable="custom" width="55" align="center" />
@@ -62,7 +62,7 @@
     <el-table-column prop="created_at" :label="$t('sc.created')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
     </el-table-column>
-    <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" width="100">
+    <el-table-column prop="submitted_date" :label="$t('sc.submittedDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.submitted_date) }}</template>
     </el-table-column>
     <el-table-column prop="confirmed_at" :label="$t('timestampLabel.confirmed')" sortable="custom" width="100">
@@ -74,7 +74,7 @@
     <el-table-column prop="approved_date" :label="$t('sc.approvedDate')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.approved_date) }}</template>
     </el-table-column>
-    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" width="100">
+    <el-table-column prop="finished_at" :label="$t('timestampLabel.finished')" sortable="custom" width="100">
       <template #default="{ row }">{{ formatDate(row.finished_at) }}</template>
     </el-table-column>
     <el-table-column prop="updated_at" :label="$t('timestampLabel.updated')" sortable="custom" width="100">
